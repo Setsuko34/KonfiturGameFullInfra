@@ -1,0 +1,188 @@
+networks:
+  konfitur-net:
+    driver: bridge
+  appwrite-net:
+    driver: bridge
+
+volumes:
+  appwrite-uploads:
+  appwrite-config:
+  appwrite-certificates:
+  appwrite-functions:
+  traefik-acme:
+  redis-data:
+  mariadb-data:
+
+services:
+  # ════════════════════════════════════════
+  # TRAEFIK — Reverse Proxy + TLS
+  # ════════════════════════════════════════
+  traefik:
+    image: traefik:v3.6.7
+    container_name: konfitur-traefik
+    restart: unless-stopped
+    environment:
+      - ADMIN_EMAIL=${ADMIN_EMAIL}   # Requis par traefik.yml pour ACME/Let's Encrypt
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - traefik-acme:/etc/traefik/acme
+    networks:
+      - konfitur-net
+      - appwrite-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.middlewares=auth-dashboard,security-headers"
+
+  # ════════════════════════════════════════
+  # FRONTEND — Next.js
+  # ════════════════════════════════════════
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APPWRITE_ENDPOINT: https://api.${DOMAIN}/v1
+        NEXT_PUBLIC_APPWRITE_PROJECT_ID: ${APPWRITE_PROJECT_ID}
+    container_name: konfitur-frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_APPWRITE_ENDPOINT=https://api.${DOMAIN}/v1
+      - NEXT_PUBLIC_APPWRITE_PROJECT_ID=${APPWRITE_PROJECT_ID}
+      - NEXT_PUBLIC_SITE_URL=https://${DOMAIN}
+      - APPWRITE_INTERNAL_ENDPOINT=http://appwrite/v1   # Appels Server Actions sans passer par l'URL publique
+      - APPWRITE_API_KEY=${APPWRITE_API_KEY}
+    networks:
+      - konfitur-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend.middlewares=security-headers,rate-limit,compress-response"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+    depends_on:
+      - appwrite
+
+  # ════════════════════════════════════════
+  # APPWRITE — Backend (self-hosted)
+  # ════════════════════════════════════════
+  appwrite:
+    image: appwrite/appwrite:1.5
+    container_name: konfitur-appwrite
+    restart: unless-stopped
+    volumes:
+      - appwrite-uploads:/storage/uploads
+      - appwrite-config:/storage/config
+      - appwrite-certificates:/storage/certificates
+      - appwrite-functions:/storage/functions
+    environment:
+      - _APP_ENV=production
+      - _APP_DOMAIN=api.${DOMAIN}
+      - _APP_DOMAIN_TARGET=api.${DOMAIN}
+      - _APP_DOMAIN_FUNCTIONS=functions.${DOMAIN}
+      - _APP_CONSOLE_WHITELIST_ROOT=enabled
+      - _APP_CONSOLE_WHITELIST_EMAILS=${ADMIN_EMAIL}
+      - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
+      - _APP_DB_HOST=mariadb
+      - _APP_DB_PORT=3306
+      - _APP_DB_SCHEMA=appwrite
+      - _APP_DB_USER=appwrite
+      - _APP_DB_PASS=${MARIADB_PASSWORD}
+      - _APP_REDIS_HOST=redis
+      - _APP_REDIS_PORT=6379
+      - _APP_REDIS_PASS=${REDIS_PASSWORD}
+      - _APP_SMTP_HOST=${SMTP_HOST}
+      - _APP_SMTP_PORT=${SMTP_PORT}
+      - _APP_SMTP_USERNAME=${SMTP_USER}
+      - _APP_SMTP_PASSWORD=${SMTP_PASS}
+      - _APP_SMTP_SECURE=tls
+    networks:
+      - konfitur-net
+      - appwrite-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.appwrite.rule=Host(`api.${DOMAIN}`)"
+      - "traefik.http.routers.appwrite.entrypoints=websecure"
+      - "traefik.http.routers.appwrite.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.appwrite.middlewares=security-headers,appwrite-rate-limit"
+      - "traefik.http.services.appwrite.loadbalancer.server.port=80"
+    depends_on:
+      - mariadb
+      - redis
+
+  # ════════════════════════════════════════
+  # APPWRITE WORKER — Realtime
+  # ════════════════════════════════════════
+  appwrite-realtime:
+    image: appwrite/appwrite:1.5
+    container_name: konfitur-appwrite-realtime
+    restart: unless-stopped
+    entrypoint: realtime
+    environment:
+      - _APP_ENV=production
+      - _APP_DB_HOST=mariadb
+      - _APP_DB_PORT=3306
+      - _APP_DB_SCHEMA=appwrite
+      - _APP_DB_USER=appwrite
+      - _APP_DB_PASS=${MARIADB_PASSWORD}
+      - _APP_REDIS_HOST=redis
+      - _APP_REDIS_PORT=6379
+      - _APP_REDIS_PASS=${REDIS_PASSWORD}
+      - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
+    networks:
+      - konfitur-net
+      - appwrite-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.appwrite-realtime.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/v1/realtime`)"
+      - "traefik.http.routers.appwrite-realtime.entrypoints=websecure"
+      - "traefik.http.routers.appwrite-realtime.tls.certresolver=letsencrypt"
+      - "traefik.http.services.appwrite-realtime.loadbalancer.server.port=80"
+    depends_on:
+      - mariadb
+      - redis
+
+  # ════════════════════════════════════════
+  # MARIADB — Base de données Appwrite
+  # ════════════════════════════════════════
+  mariadb:
+    image: mariadb:10.11
+    container_name: konfitur-mariadb
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MARIADB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=appwrite
+      - MYSQL_USER=appwrite
+      - MYSQL_PASSWORD=${MARIADB_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    networks:
+      - appwrite-net
+    command: >
+      --innodb-flush-method=O_DSYNC
+      --innodb-use-native-aio=0
+      --max-connections=250
+
+  # ════════════════════════════════════════
+  # REDIS — Cache & Realtime Appwrite
+  # ════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: konfitur-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    networks:
+      - appwrite-net
+

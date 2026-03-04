@@ -1,0 +1,24 @@
+# Config Traefik — environnement de développement local
+# PAS de TLS, PAS d'ACME, dashboard en accès libre sur :8081
+# Ce fichier est monté via docker-compose.override.yml
+
+api:
+  dashboard: true
+  insecure: true      # Dashboard accessible sans auth sur http://localhost:8081/dashboard/
+
+entryPoints:
+  web:
+    address: ":80"    # Pas de redirection HTTPS en dev
+
+providers:
+  docker:
+    exposedByDefault: false
+    network: konfitur-net
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+log:
+  level: DEBUG        # Verbose en dev pour diagnostiquer facilement
+
+accessLog: {}         # Log tous les accès en dev

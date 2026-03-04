@@ -1,0 +1,74 @@
+# ═══════════════════════════════════════════════
+# SECRETS & DONNÉES SENSIBLES — NE JAMAIS COMMITER
+# ═══════════════════════════════════════════════
+
+# Variables d'environnement
+.env
+.env.local
+.env.*.local
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+
+# Certificats TLS Let's Encrypt (contient clés privées)
+traefik/acme/acme.json
+traefik/acme/*.json
+
+# Clés & certificats génériques
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ═══════════════════════════════════════════════
+# NODE / PNPM
+# ═══════════════════════════════════════════════
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/.pnpm-store/
+frontend/out/
+.pnpm-store/
+
+# ═══════════════════════════════════════════════
+# BUILD
+# ═══════════════════════════════════════════════
+dist/
+build/
+
+# ═══════════════════════════════════════════════
+# IDE
+# ═══════════════════════════════════════════════
+.idea/
+.vscode/
+*.swp
+*.swo
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+
+# ═══════════════════════════════════════════════
+# OS
+# ═══════════════════════════════════════════════
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ═══════════════════════════════════════════════
+# LOGS & TEMPORAIRES
+# ═══════════════════════════════════════════════
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+tmp/
+temp/
+
+# ═══════════════════════════════════════════════
+# DOCKER VOLUMES (si montés localement)
+# ═══════════════════════════════════════════════
+volumes/
+data/

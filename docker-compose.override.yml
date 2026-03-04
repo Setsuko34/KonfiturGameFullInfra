@@ -1,0 +1,85 @@
+# Overrides pour l'environnement de développement local
+# Usage : docker compose up (utilise automatiquement ce fichier)
+
+services:
+  # ────────────────────────────────────────────────────────
+  # TRAEFIK — Config dev isolée (pas de TLS, pas d'ACME)
+  # ────────────────────────────────────────────────────────
+  traefik:
+    image: traefik:v3.6.7
+
+    # --configFile remplace ENTIÈREMENT /etc/traefik/traefik.yml
+    command:
+      - "--configFile=/etc/traefik/traefik.dev.yml"
+    volumes:
+      - ./traefik/traefik.dev.yml:/etc/traefik/traefik.dev.yml:ro
+    ports:
+      - "80:80"
+      - "8081:8080"   # Dashboard Traefik → http://localhost:8081/dashboard/
+    labels:
+      - "traefik.enable=false"   # Désactive les labels prod du dashboard
+
+  # ────────────────────────────────────────────────────────
+  # FRONTEND — Next.js en mode dev avec hot-reload
+  # ────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_SITE_URL=http://localhost:3000
+      # URL publique : résolue depuis le navigateur de la machine hôte
+      - NEXT_PUBLIC_APPWRITE_ENDPOINT=http://localhost:8080/v1
+      - NEXT_PUBLIC_APPWRITE_PROJECT_ID=${APPWRITE_PROJECT_ID}
+      # URL interne : résolue depuis le container frontend (Server Actions)
+      - APPWRITE_INTERNAL_ENDPOINT=http://appwrite/v1
+      - APPWRITE_API_KEY=${APPWRITE_API_KEY}
+    ports:
+      - "3000:3000"
+    labels:
+      - "traefik.enable=false"
+
+  # ────────────────────────────────────────────────────────
+  # APPWRITE — Accessible directement sur localhost:8080
+  # networks déclaré explicitement : Docker Compose n'hérite
+  # pas toujours les réseaux du fichier de base selon la version
+  # → sans ça, appwrite atterrit sur le bridge par défaut et
+  #   ne peut pas résoudre redis/mariadb par leur nom de service
+  # ────────────────────────────────────────────────────────
+  appwrite:
+    image: appwrite/appwrite:1.5
+    networks:
+      - konfitur-net
+      - appwrite-net
+    labels:
+      - "traefik.enable=false"
+    ports:
+      - "8080:80"     # Console → http://localhost:8080/console
+                      # API    → http://localhost:8080/v1
+
+  # ────────────────────────────────────────────────────────
+  # APPWRITE REALTIME — Désactivé dans Traefik dev
+  # Le router prod utilise entrypoints=websecure qui n'existe
+  # pas dans traefik.dev.yml → Traefik dev planterait sans ce fix
+  # Même besoin de networks explicites que appwrite ci-dessus
+  # ────────────────────────────────────────────────────────
+  appwrite-realtime:
+    image: appwrite/appwrite:1.5
+    networks:
+      - konfitur-net
+      - appwrite-net
+    labels:
+      - "traefik.enable=false"
+    ports:
+      - "9505:80"
+
+# Référence les réseaux définis dans docker-compose.yml pour que
+# Docker Compose les reconnaisse comme appartenant au même projet
+networks:
+  konfitur-net:
+  appwrite-net:

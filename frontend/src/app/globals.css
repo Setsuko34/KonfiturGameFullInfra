@@ -1,0 +1,290 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #0C1018;
+  --foreground: #F0EDE8;
+  --card: #131921;
+  --card-foreground: #F0EDE8;
+  --surface-elevated: #1A2130;
+  --primary: #4F6AFF;
+  --primary-foreground: #FFFFFF;
+  --primary-muted: #2A3A7A;
+  --secondary: #EF233C;
+  --secondary-foreground: #FFFFFF;
+  --success: #34D399;
+  --success-foreground: #0C1018;
+  --destructive: #EF233C;
+  --destructive-foreground: #FFFFFF;
+  --muted: #1A2130;
+  --muted-foreground: #8891A4;
+  --accent: #4F6AFF;
+  --accent-foreground: #FFFFFF;
+  --border: #1E2736;
+  --border-strong: #2A3546;
+  --input: #1E2736;
+  --input-background: #131921;
+  --ring: #4F6AFF;
+  --radius: 0px;
+  --sidebar: #0E1420;
+  --sidebar-foreground: #F0EDE8;
+  --sidebar-primary: #4F6AFF;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #1A2130;
+  --sidebar-accent-foreground: #F0EDE8;
+  --sidebar-border: #1E2736;
+  --sidebar-ring: #4F6AFF;
+  --font-weight-medium: 600;
+  --font-weight-normal: 400;
+}
+
+* {
+  border-color: var(--border);
+  box-sizing: border-box;
+}
+
+html {
+  font-size: var(--font-size);
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ═══ Skip Link ═══ */
+.skip-link {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.75rem 1.5rem;
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+  font-size: 0.875rem;
+  text-decoration: none;
+  border: 2px solid var(--primary-foreground);
+  border-top: none;
+  transition: top 0.1s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ═══ Focus Visible ═══ */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* ═══ Fonts ═══ */
+.font-sans {
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-mono), 'SF Mono', 'Cascadia Code', monospace;
+}
+
+.timer-font {
+  font-family: var(--font-mono), 'SF Mono', 'Cascadia Code', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+
+/* ═══ Labels techniques ═══ */
+.label-tech {
+  font-family: var(--font-mono), monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+/* ═══ Accent Line (barre colorée en haut des cartes) ═══ */
+.accent-line-red::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: var(--secondary);
+}
+
+.accent-line-blue::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: var(--primary);
+}
+
+.accent-line-gray::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background-color: var(--muted-foreground);
+}
+
+/* ═══ Grid Overlay ═══ */
+.grid-overlay {
+  position: relative;
+}
+
+.grid-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(79, 106, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 106, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══ Noise Texture ═══ */
+.noise::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+  opacity: 0.025;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ═══ Marquee ═══ */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: marquee 30s linear infinite;
+  display: flex;
+  width: max-content;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* ═══ Pulse Urgent ═══ */
+@keyframes pulse-urgent {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-pulse-urgent {
+  animation: pulse-urgent 1s ease-in-out infinite;
+}
+
+/* ═══ Fade In Up ═══ */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s ease-out forwards;
+}
+
+/* ═══ Reduced Motion ═══ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-marquee {
+    animation: none;
+    overflow: hidden;
+  }
+
+  [aria-hidden="true"].marquee-container {
+    display: none;
+  }
+}
+
+/* ═══ Touch Targets (mobile) ═══ */
+@media (pointer: coarse) {
+  button,
+  a,
+  [role="button"],
+  [role="tab"],
+  [role="checkbox"],
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ═══ Scrollbar ═══ */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+/* ═══ Selection ═══ */
+::selection {
+  background-color: var(--primary-muted);
+  color: var(--foreground);
+}
+
+/* ═══ Transitions globales ═══ */
+a,
+button {
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+/* ═══ Utilitaires CSS personnalisés ═══ */
+.text-balance {
+  text-wrap: balance;
+}
+
+.border-radius-0 {
+  border-radius: 0 !important;
+}
