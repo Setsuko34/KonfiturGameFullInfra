@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Qualité de code : ESLint + TypeScript + audit
+  # ─────────────────────────────────────────────
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (ESLint)
+        run: pnpm lint
+
+      - name: Type check (TypeScript)
+        run: pnpm type-check
+
+      - name: Dependency audit
+        run: pnpm audit --audit-level=high
+        # Advisory: continue même si des vulnérabilités mineures existent
+        # Retire --continue-on-error quand tu veux bloquer sur HIGH
+        continue-on-error: true
+
+  # ─────────────────────────────────────────────
+  # Tests unitaires (bloquant dès qu'il y en a)
+  # ─────────────────────────────────────────────
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: code-quality
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        # --if-present : ne fail pas si le script "test" n'existe pas encore
+        # Retire --if-present une fois tes tests en place pour bloquer le push
+        run: pnpm run --if-present test
+
+  # ─────────────────────────────────────────────
+  # Lint Dockerfiles + validation docker-compose
+  # ─────────────────────────────────────────────
+  docker-lint:
+    name: Docker Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint Dockerfile (production)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile
+          config: .hadolint.yaml
+
+      - name: Lint Dockerfile.dev
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: frontend/Dockerfile.dev
+          config: .hadolint.yaml
+          failure-threshold: warning
+
+      - name: Validate docker-compose.yml
+        run: |
+          # Génère un .env avec des valeurs factices pour la validation structurelle
+          sed 's/^\([A-Z_]*\)=$/\1=ci_dummy_value/g' .env.example > /tmp/.env.ci
+          docker compose --env-file /tmp/.env.ci -f docker-compose.yml config --quiet
+          echo "✓ docker-compose.yml is valid"
+
+      - name: Validate docker-compose.override.yml
+        run: |
+          sed 's/^\([A-Z_]*\)=$/\1=ci_dummy_value/g' .env.example > /tmp/.env.ci
+          docker compose --env-file /tmp/.env.ci \
+            -f docker-compose.yml \
+            -f docker-compose.override.yml \
+            config --quiet
+          echo "✓ docker-compose.override.yml is valid"
+
+  # ─────────────────────────────────────────────
+  # Scan de secrets dans le code (gitleaks)
+  # ─────────────────────────────────────────────
+  secret-scan:
+    name: Secret Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Scan for secrets (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

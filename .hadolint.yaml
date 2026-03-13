@@ -1,0 +1,16 @@
+# Configuration Hadolint — Linting Dockerfile
+# Docs: https://github.com/hadolint/hadolint
+
+failure-threshold: error
+
+ignore:
+  # DL3018: Pin versions in apk — acceptable car on utilise node:alpine officiel
+  - DL3018
+  # DL3016: Pin npm versions — géré par pnpm lockfile
+  - DL3016
+  # SC2046: Quote to prevent word splitting — faux positifs sur les ARG Docker
+  - SC2046
+
+trustedRegistries:
+  - docker.io
+  - node

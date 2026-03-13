@@ -1,0 +1,100 @@
+name: Appwrite Config
+
+on:
+  push:
+    paths:
+      - 'scripts/**'
+      - 'appwrite.json'
+  pull_request:
+    paths:
+      - 'scripts/**'
+      - 'appwrite.json'
+  workflow_dispatch:
+
+jobs:
+  # ─────────────────────────────────────────────
+  # Validation des scripts et config Appwrite
+  # ─────────────────────────────────────────────
+  validate:
+    name: Validate Appwrite Config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Lint le shell script init-appwrite.sh
+      - name: ShellCheck — init-appwrite.sh
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: './scripts'
+          severity: warning
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      # Type-check le script seed-data.ts
+      - name: Type-check seed-data.ts
+        working-directory: frontend
+        run: |
+          npx tsc --noEmit --skipLibCheck \
+            --esModuleInterop \
+            --module commonjs \
+            --target es2020 \
+            ../scripts/seed-data.ts
+        continue-on-error: false
+
+      # Valide appwrite.json s'il existe
+      - name: Validate appwrite.json
+        run: |
+          if [ -f appwrite.json ]; then
+            echo "Validating appwrite.json..."
+            python3 -m json.tool appwrite.json > /dev/null && echo "✓ appwrite.json is valid JSON"
+
+            # Vérifie les champs requis
+            PROJECT_ID=$(python3 -c "import json,sys; d=json.load(open('appwrite.json')); print(d.get('projectId','MISSING'))")
+            if [ "$PROJECT_ID" = "MISSING" ]; then
+              echo "✗ appwrite.json: missing 'projectId'" && exit 1
+            fi
+            echo "✓ projectId: $PROJECT_ID"
+          else
+            echo "⚠ appwrite.json not found"
+            echo "  Pour le générer : appwrite login && appwrite pull all"
+            echo "  Ce fichier doit être commité pour permettre le redéploiement."
+            # Ne bloque pas si le fichier n'existe pas encore
+          fi
+
+      # Vérifie que .env n'est pas commité accidentellement
+      - name: Check no secrets committed
+        run: |
+          SECRETS_FOUND=0
+          for f in .env frontend/.env traefik/acme/acme.json; do
+            if [ -f "$f" ]; then
+              echo "✗ DANGER: $f should not be committed!" && SECRETS_FOUND=1
+            fi
+          done
+          if [ $SECRETS_FOUND -eq 1 ]; then exit 1; fi
+          echo "✓ No secret files found in repository"
+
+      # Vérifie que .env.example est à jour (toutes les clés documentées)
+      - name: Validate .env.example completeness
+        run: |
+          echo "Checking .env.example has all required keys..."
+          REQUIRED_KEYS="DOMAIN APPWRITE_PROJECT_ID APPWRITE_API_KEY MARIADB_ROOT_PASSWORD MARIADB_PASSWORD REDIS_PASSWORD"
+          MISSING=0
+          for key in $REQUIRED_KEYS; do
+            if ! grep -q "^${key}=" .env.example 2>/dev/null; then
+              echo "✗ Missing key in .env.example: $key" && MISSING=1
+            fi
+          done
+          if [ $MISSING -eq 1 ]; then exit 1; fi
+          echo "✓ .env.example has all required keys"
