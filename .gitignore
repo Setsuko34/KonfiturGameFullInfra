@@ -72,3 +72,17 @@ temp/
 # ═══════════════════════════════════════════════
 volumes/
 data/
+
+# ═══════════════════════════════════════════════
+# APPWRITE CLI (cache local — ne jamais commiter)
+# appwrite.json doit être commité (config projet)
+# ═══════════════════════════════════════════════
+.appwrite/
+
+# ═══════════════════════════════════════════════
+# CI — fichiers temporaires générés localement
+# ═══════════════════════════════════════════════
+/tmp/
+.env.ci
+trivy-results.sarif
+trivy-fs-results.sarif
