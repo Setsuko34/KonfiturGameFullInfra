@@ -100,7 +100,6 @@ services:
       - _APP_DB_PASS=${MARIADB_PASSWORD}
       - _APP_REDIS_HOST=redis
       - _APP_REDIS_PORT=6379
-      - _APP_REDIS_PASS=${REDIS_PASSWORD}
       - _APP_SMTP_HOST=${SMTP_HOST}
       - _APP_SMTP_PORT=${SMTP_PORT}
       - _APP_SMTP_USERNAME=${SMTP_USER}
@@ -137,7 +136,6 @@ services:
       - _APP_DB_PASS=${MARIADB_PASSWORD}
       - _APP_REDIS_HOST=redis
       - _APP_REDIS_PORT=6379
-      - _APP_REDIS_PASS=${REDIS_PASSWORD}
       - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
     networks:
       - konfitur-net
@@ -175,14 +173,42 @@ services:
 
   # ════════════════════════════════════════
   # REDIS — Cache & Realtime Appwrite
+  # NOTE: pas de --requirepass car Appwrite 1.5 a un bug dans Queue\Connection\Redis
+  # qui n'envoie jamais AUTH → les jobs de queue ne sont jamais publiés.
+  # Redis est sur appwrite-net (réseau interne, non exposé à l'extérieur).
   # ════════════════════════════════════════
   redis:
     image: redis:7-alpine
     container_name: konfitur-redis
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
     networks:
       - appwrite-net
+
+  # ════════════════════════════════════════
+  # APPWRITE WORKER — Databases (attributs, indexes, collections)
+  # Requis pour que les attributs passent de "processing" à "available"
+  # ════════════════════════════════════════
+  appwrite-worker-databases:
+    image: appwrite/appwrite:1.5
+    container_name: konfitur-appwrite-worker-databases
+    restart: unless-stopped
+    entrypoint: worker-databases
+    environment:
+      - _APP_ENV=production
+      - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
+      - _APP_DB_HOST=mariadb
+      - _APP_DB_PORT=3306
+      - _APP_DB_SCHEMA=appwrite
+      - _APP_DB_USER=appwrite
+      - _APP_DB_PASS=${MARIADB_PASSWORD}
+      - _APP_REDIS_HOST=redis
+      - _APP_REDIS_PORT=6379
+    networks:
+      - appwrite-net
+    depends_on:
+      - mariadb
+      - redis
 

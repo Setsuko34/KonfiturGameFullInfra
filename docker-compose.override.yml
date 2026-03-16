@@ -57,10 +57,20 @@ services:
       - konfitur-net
       - appwrite-net
     labels:
-      - "traefik.enable=false"
+      - "traefik.enable=true"
+      - "traefik.http.routers.appwrite-dev.rule=Host(`localhost`)"
+      - "traefik.http.routers.appwrite-dev.entrypoints=web"
+      - "traefik.http.routers.appwrite-dev.service=appwrite-dev"
+      - "traefik.http.services.appwrite-dev.loadbalancer.server.port=80"
+      - "traefik.docker.network=konfitur-net"
     ports:
-      - "8080:80"     # Console → http://localhost:8080/console
-                      # API    → http://localhost:8080/v1
+      - "8080:80"     # Console → http://localhost:8080/console (accès direct)
+    environment:
+      # Appwrite v1.5 stripe le port de _APP_DOMAIN → hostname sans port obligatoire.
+      # Traefik route Host(`localhost`) → appwrite:80, donc le callback OAuth
+      # généré sera http://localhost/v1/... (port 80 implicite, accepté par Google/Discord).
+      _APP_DOMAIN: localhost
+      _APP_DOMAIN_TARGET: localhost
 
   # ────────────────────────────────────────────────────────
   # APPWRITE REALTIME — Désactivé dans Traefik dev
