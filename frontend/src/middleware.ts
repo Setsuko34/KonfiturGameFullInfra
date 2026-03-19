@@ -7,7 +7,7 @@ const authRoutes = ['/auth/login', '/auth/register']
 export function middleware(request: NextRequest) {
   const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID
   const sessionCookie = projectId
-    ? request.cookies.get(`a_session_${projectId}`)
+    ? (request.cookies.get(`a_session_${projectId}`) ?? request.cookies.get(`a_session_${projectId}_legacy`))
     : null
   const isAuthenticated = !!sessionCookie
 

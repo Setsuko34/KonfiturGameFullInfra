@@ -23,6 +23,8 @@ export function mapDocToGameJam(doc: Models.Document): GameJam {
     organizer: doc.organizer ?? '',
     organizerId: doc.organizer_id,
     coverImage: doc.cover_image_id,
+    featured: doc.featured ?? false,
+    featuredOrder: doc.featured_order,
   }
 }
 
@@ -64,6 +66,8 @@ export function mapDocToProject(doc: Models.Document): Project {
     votesCount: doc.votes_count ?? 0,
     coverImage: doc.cover_image_id,
     screenshotIds: doc.screenshot_ids ?? [],
+    reported: doc.reported ?? false,
+    winner: doc.winner ?? false,
   }
 }
 
@@ -77,6 +81,7 @@ export function mapDocToChatMessage(doc: Models.Document): ChatMessage {
     content: doc.content,
     role: doc.role,
     pinned: doc.pinned ?? false,
+    reported: doc.reported ?? false,
     createdAt: new Date(doc.$createdAt),
   }
 }
