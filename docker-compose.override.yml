@@ -88,6 +88,9 @@ services:
     ports:
       - "9505:80"
 
+  mariadb:
+    ports:
+      - "3306:3306"
 # Référence les réseaux définis dans docker-compose.yml pour que
 # Docker Compose les reconnaisse comme appartenant au même projet
 networks:
