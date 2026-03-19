@@ -1,8 +1,17 @@
 #!/usr/bin/env bash
 # =============================================================================
-# backup.sh — Sauvegarde des volumes critiques Konfitur Game
+# backup.sh — Sauvegarde complète Konfitur Game
 # Usage : ./scripts/backup.sh [dossier-de-sortie]
 # Par défaut, crée ./backups/YYYY-MM-DD_HH-MM/
+#
+# Contenu du backup :
+#   mariadb.sql              — dump SQL complet (schéma + données internes Appwrite)
+#   appwrite-*.tar.gz        — volumes Docker (uploads, config, functions, certificates)
+#   project-config.tar.gz   — fichiers du projet hors secrets
+#   appwrite-schema.json     — schéma Appwrite via API (databases, collections, attributs, indexes)
+#   appwrite-teams.json      — teams et memberships via API
+#   appwrite-data.json       — documents de toutes les collections via API
+#   MANIFEST.txt             — inventaire du backup
 # =============================================================================
 set -euo pipefail
 
@@ -40,7 +49,9 @@ mkdir -p "$BACKUP_DIR"
 echo "📦 Backup démarré → $BACKUP_DIR"
 echo "────────────────────────────────────────"
 
-# --- MariaDB : dump SQL propre ---
+# =============================================================================
+# 1. MariaDB : dump SQL complet
+# =============================================================================
 echo "🗄️  Dump MariaDB..."
 docker exec konfitur-mariadb \
   mysqldump \
@@ -53,7 +64,9 @@ docker exec konfitur-mariadb \
   > "$BACKUP_DIR/mariadb.sql"
 echo "   ✅ mariadb.sql ($(du -sh "$BACKUP_DIR/mariadb.sql" | cut -f1))"
 
-# --- Volumes Appwrite : tar via container temporaire ---
+# =============================================================================
+# 2. Volumes Appwrite : tar via container temporaire
+# =============================================================================
 backup_volume() {
   local volume_name="$1"
   local archive_name="$2"
@@ -68,8 +81,7 @@ backup_volume() {
   echo "   ✅ ${archive_name}.tar.gz ($(du -sh "$BACKUP_DIR/${archive_name}.tar.gz" | cut -f1))"
 }
 
-# Nom des volumes = <nom_projet>_<nom_volume> selon docker compose
-# On détecte le préfixe du projet
+# Détecter le préfixe du projet Docker Compose
 PROJECT_NAME=$(docker inspect konfitur-mariadb --format '{{ index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || echo "konfiturga mefullinfra")
 
 backup_volume "${PROJECT_NAME}_appwrite-uploads"      "appwrite-uploads"      /storage/uploads
@@ -77,7 +89,9 @@ backup_volume "${PROJECT_NAME}_appwrite-config"       "appwrite-config"       /s
 backup_volume "${PROJECT_NAME}_appwrite-functions"    "appwrite-functions"    /storage/functions
 backup_volume "${PROJECT_NAME}_appwrite-certificates" "appwrite-certificates" /storage/certificates
 
-# --- Fichiers de config du projet (hors secrets) ---
+# =============================================================================
+# 3. Fichiers de config du projet (hors secrets)
+# =============================================================================
 echo "⚙️  Config projet..."
 tar -czf "$BACKUP_DIR/project-config.tar.gz" \
   -C "$PROJECT_DIR" \
@@ -89,7 +103,184 @@ tar -czf "$BACKUP_DIR/project-config.tar.gz" \
   .
 echo "   ✅ project-config.tar.gz"
 
-# --- Manifeste ---
+# =============================================================================
+# 4. Appwrite API Export : schéma, teams, documents
+#    (non-bloquant si Appwrite est inaccessible)
+# =============================================================================
+AW_ENDPOINT="${NEXT_PUBLIC_APPWRITE_ENDPOINT:-http://localhost:8080/v1}"
+AW_PROJECT="${NEXT_PUBLIC_APPWRITE_PROJECT_ID:-}"
+AW_KEY="${APPWRITE_API_KEY:-}"
+
+aw_get() {
+  # Appelle l'API Appwrite et retourne le JSON, ou "null" en cas d'erreur
+  curl -sf \
+    -H "X-Appwrite-Project: $AW_PROJECT" \
+    -H "X-Appwrite-Key: $AW_KEY" \
+    "${AW_ENDPOINT}${1}" 2>/dev/null || echo "null"
+}
+
+backup_appwrite_api() {
+  if [[ -z "$AW_PROJECT" || -z "$AW_KEY" ]]; then
+    echo "   ⚠️  NEXT_PUBLIC_APPWRITE_PROJECT_ID ou APPWRITE_API_KEY manquant"
+    return 0
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    echo "   ⚠️  jq requis pour l'export API (sudo apt install jq)"
+    return 0
+  fi
+
+  # Test de connectivité — /health est public et stable (sans -f pour tolérer les 5xx internes)
+  local health
+  health=$(curl -s \
+    -H "X-Appwrite-Project: $AW_PROJECT" \
+    -H "X-Appwrite-Key: $AW_KEY" \
+    "${AW_ENDPOINT}/health" 2>/dev/null || echo "null")
+  if [[ "$health" == "null" ]] || ! echo "$health" | jq -e '.status' &>/dev/null; then
+    echo "   ⚠️  Appwrite API inaccessible depuis $AW_ENDPOINT — export API ignoré"
+    echo "   💡 Lance le stack avec 'docker compose up' avant le backup pour inclure l'export API"
+    return 1
+  fi
+
+  # ── 4a. Schéma (databases → collections → attributs + indexes) ──────────────
+  echo "📐 Schéma Appwrite (collections, attributs, indexes)..."
+
+  local dbs
+  dbs=$(aw_get "/databases?limit=100")
+
+  local schema_json
+  schema_json=$(echo "$dbs" | jq \
+    --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{version: "1.0", exportedAt: $date, databases: [.databases[] | {
+      "$id": ."$id",
+      name: .name
+    }]}')
+
+  while IFS= read -r db_id; do
+    # listCollections inclut déjà les attributs et indexes dans Appwrite 1.5
+    local cols_response
+    cols_response=$(aw_get "/databases/${db_id}/collections?limit=100")
+
+    schema_json=$(echo "$schema_json" | jq \
+      --arg db_id "$db_id" \
+      --argjson cols "$cols_response" \
+      '.databases = [.databases[] | if ."$id" == $db_id then . + {collections: ($cols.collections // [])} else . end]')
+
+    local col_count
+    col_count=$(echo "$cols_response" | jq '.total // 0')
+    echo "   DB $db_id : $col_count collection(s)"
+  done < <(echo "$dbs" | jq -r '.databases[]."$id"')
+
+  echo "$schema_json" > "$BACKUP_DIR/appwrite-schema.json"
+  echo "   ✅ appwrite-schema.json"
+
+  # ── 4b. Teams et memberships ─────────────────────────────────────────────────
+  echo "👥 Teams Appwrite..."
+
+  local teams_raw
+  teams_raw=$(aw_get "/teams?limit=100")
+
+  local teams_json
+  teams_json=$(echo "$teams_raw" | jq \
+    --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{version: "1.0", exportedAt: $date, teams: [.teams[] | {
+      "$id": ."$id",
+      name: .name,
+      total: .total
+    }]}')
+
+  while IFS= read -r team_id; do
+    local team_name memberships_raw
+    team_name=$(echo "$teams_raw" | jq -r --arg id "$team_id" '.teams[] | select(."$id" == $id) | .name')
+    memberships_raw=$(aw_get "/teams/${team_id}/memberships?limit=100")
+
+    teams_json=$(echo "$teams_json" | jq \
+      --arg team_id "$team_id" \
+      --argjson members "$memberships_raw" \
+      '.teams = [.teams[] | if ."$id" == $team_id then . + {
+        memberships: [($members.memberships // [])[] | {
+          userId: .userId,
+          userName: .userName,
+          userEmail: .userEmail,
+          roles: .roles,
+          confirm: .confirm
+        }]
+      } else . end]')
+
+    local member_count
+    member_count=$(echo "$memberships_raw" | jq '.total // 0')
+    echo "   Team \"$team_name\" : $member_count membre(s)"
+  done < <(echo "$teams_raw" | jq -r '.teams[]."$id"')
+
+  echo "$teams_json" > "$BACKUP_DIR/appwrite-teams.json"
+  echo "   ✅ appwrite-teams.json"
+
+  # ── 4c. Documents (toutes les collections, paginé) ───────────────────────────
+  echo "📄 Documents Appwrite (toutes collections)..."
+
+  local data_json
+  data_json=$(jq -n \
+    --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{version: "1.0", exportedAt: $date, databases: {}}')
+
+  local total_docs=0
+
+  while IFS= read -r db_id; do
+    data_json=$(echo "$data_json" | jq --arg db "$db_id" '.databases[$db] = {}')
+
+    while IFS= read -r col_id; do
+      # Pagination : récupère tous les documents par tranches de 100
+      local all_docs="[]"
+      local offset=0
+      local limit=100
+      local total=0
+
+      # Premier appel pour connaître le total
+      local first_page
+      first_page=$(aw_get "/databases/${db_id}/collections/${col_id}/documents?limit=${limit}&offset=0")
+      total=$(echo "$first_page" | jq '.total // 0')
+      all_docs=$(echo "$first_page" | jq '.documents // []')
+      offset=$limit
+
+      # Pages suivantes si nécessaire
+      while [ "$offset" -lt "$total" ]; do
+        local page
+        page=$(aw_get "/databases/${db_id}/collections/${col_id}/documents?limit=${limit}&offset=${offset}")
+        local page_docs
+        page_docs=$(echo "$page" | jq '.documents // []')
+        all_docs=$(jq -n --argjson a "$all_docs" --argjson b "$page_docs" '$a + $b')
+        offset=$((offset + limit))
+      done
+
+      local doc_count
+      doc_count=$(echo "$all_docs" | jq 'length')
+      total_docs=$((total_docs + doc_count))
+
+      data_json=$(echo "$data_json" | jq \
+        --arg db "$db_id" \
+        --arg col "$col_id" \
+        --argjson docs "$all_docs" \
+        --argjson count "$doc_count" \
+        '.databases[$db][$col] = {total: $count, documents: $docs}')
+
+      echo "   ${db_id}/${col_id} : $doc_count document(s)"
+    done < <(echo "$schema_json" | jq -r --arg db "$db_id" '.databases[] | select(."$id" == $db) | .collections[]."$id"')
+
+  done < <(echo "$schema_json" | jq -r '.databases[]."$id"')
+
+  echo "$data_json" > "$BACKUP_DIR/appwrite-data.json"
+  echo "   ✅ appwrite-data.json ($total_docs document(s) au total)"
+}
+
+echo ""
+echo "🔌 Export API Appwrite..."
+( backup_appwrite_api ) \
+  && echo "   ✅ Export API terminé" \
+  || echo "   ⚠️  Export API partiel ou échoué (le backup MariaDB reste valide)"
+
+# =============================================================================
+# 5. Manifeste
+# =============================================================================
 cat > "$BACKUP_DIR/MANIFEST.txt" <<EOF
 Backup Konfitur Game
 Date     : $BACKUP_DATE
@@ -100,6 +291,7 @@ Fichiers :
 $(ls -lh "$BACKUP_DIR")
 EOF
 
+echo ""
 echo "────────────────────────────────────────"
 echo "✅ Backup terminé : $BACKUP_DIR"
 echo ""
