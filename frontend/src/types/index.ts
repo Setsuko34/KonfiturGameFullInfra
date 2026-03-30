@@ -114,3 +114,11 @@ export interface SiteStats {
   projectsSubmitted: number
   countriesRepresented: number
 }
+
+export interface UpdateJamData {
+  description?: string
+  rules?: string[]
+  prizes?: string[]
+  maxParticipants?: number
+  tags?: string[]
+}

@@ -1,22 +1,48 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Users, Clock, Trophy, MessageSquare, Info, Megaphone } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import CountdownTimer from '@/components/CountdownTimer'
 import JamChat from '@/components/JamChat'
-import { mockJams, mockAnnouncements, mockChatMessages } from '@/lib/mockData'
+import { getJamById, getAnnouncementsByJam } from '@/lib/actions/jams'
+import { generateJamJsonLd, truncateDescription } from '@/lib/seo'
+import { getTeamsByJam } from '@/lib/actions/teams'
+import { getProjectsByJam } from '@/lib/actions/projects'
+import { getChatMessages } from '@/lib/actions/chat'
 
 interface Props {
   params: { jamId: string }
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const jam = mockJams.find(j => j.id === params.jamId)
-  if (!jam) return { title: 'Jam introuvable' }
+  const jam = await getJamById(params.jamId)
+  if (!jam) return { title: 'Jam introuvable', robots: { index: false } }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr'
+  const ogUrl = `/og?type=jam&title=${encodeURIComponent(jam.title)}&theme=${encodeURIComponent(jam.theme)}&status=${jam.status}`
+
   return {
     title: jam.title,
-    description: `${jam.theme} — ${jam.description.slice(0, 160)}`,
+    description: truncateDescription(jam.description),
+    keywords: jam.tags ?? [],
+    openGraph: {
+      title: jam.title,
+      description: truncateDescription(jam.description),
+      type: 'website',
+      url: `${siteUrl}/jam/${jam.id}`,
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: jam.title }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: jam.title,
+      description: truncateDescription(jam.description),
+      images: [ogUrl],
+    },
+    alternates: {
+      canonical: `/jam/${jam.id}`,
+    },
   }
 }
 
@@ -26,13 +52,18 @@ const statusConfig = {
   ended: { label: 'TERMINÉ', color: 'var(--muted-foreground)' },
 }
 
-export default function JamPage({ params }: Props) {
-  const jam = mockJams.find(j => j.id === params.jamId)
+export default async function JamPage({ params }: Props) {
+  const [jam, announcements, teams, projects, chatMessages] = await Promise.all([
+    getJamById(params.jamId),
+    getAnnouncementsByJam(params.jamId),
+    getTeamsByJam(params.jamId),
+    getProjectsByJam(params.jamId),
+    getChatMessages(params.jamId, 'general'),
+  ])
+
   if (!jam) notFound()
 
   const status = statusConfig[jam.status]
-  const announcements = mockAnnouncements.filter(a => a.jamId === jam.id)
-  const chatMessages = mockChatMessages.filter(m => m.jamId === jam.id)
 
   const tabs = [
     { id: 'info', label: 'Informations', icon: Info },
@@ -45,6 +76,12 @@ export default function JamPage({ params }: Props) {
   return (
     <>
       <Header />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(generateJamJsonLd(jam, process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr')),
+        }}
+      />
       <main id="main-content">
         {/* Hero de la jam */}
         <div
@@ -205,6 +242,87 @@ export default function JamPage({ params }: Props) {
                     </div>
                   )}
                 </div>
+              </section>
+
+              {/* Section Équipes */}
+              <section id="teams" aria-labelledby="teams-heading">
+                <h2 id="teams-heading" className="text-xl font-bold mb-4">
+                  Équipes ({teams.length})
+                </h2>
+                {teams.length > 0 ? (
+                  <div className="space-y-3">
+                    {teams.map(team => (
+                      <div
+                        key={team.id}
+                        className="p-4 border flex items-center justify-between"
+                        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                      >
+                        <div>
+                          <p className="font-semibold">{team.name}</p>
+                          <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                            {team.members.length} membre{team.members.length !== 1 ? 's' : ''}
+                          </p>
+                        </div>
+                        <Link
+                          href={`/team/${team.id}`}
+                          className="text-xs font-semibold px-3 py-1.5"
+                          style={{
+                            background: 'var(--surface-elevated)',
+                            color: 'var(--primary)',
+                            border: '1px solid var(--border)',
+                          }}
+                        >
+                          Voir l&apos;équipe
+                        </Link>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                    Aucune équipe inscrite pour l&apos;instant.
+                  </p>
+                )}
+              </section>
+
+              {/* Section Projets */}
+              <section id="projects" aria-labelledby="projects-heading">
+                <h2 id="projects-heading" className="text-xl font-bold mb-4">
+                  Projets soumis ({projects.length})
+                </h2>
+                {projects.length > 0 ? (
+                  <div className="grid sm:grid-cols-2 gap-4">
+                    {projects.map(project => (
+                      <Link
+                        key={project.id}
+                        href={`/project/${project.id}`}
+                        className="p-4 border block"
+                        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                      >
+                        <p className="font-semibold mb-1">{project.title}</p>
+                        <p
+                          className="text-sm mb-3 line-clamp-2"
+                          style={{ color: 'var(--muted-foreground)' }}
+                        >
+                          {project.description}
+                        </p>
+                        <div className="flex items-center gap-3">
+                          <span className="label-tech" style={{ color: 'var(--primary)' }}>
+                            {project.votesCount} vote{project.votesCount !== 1 ? 's' : ''}
+                          </span>
+                          {project.winner && (
+                            <span className="label-tech" style={{ color: 'var(--success)' }}>
+                              ★ GAGNANT
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                    Aucun projet soumis pour l&apos;instant.
+                  </p>
+                )}
               </section>
 
               {/* Section Annonces */}

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "appwrite": "^14.0.1",
@@ -25,8 +27,10 @@
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.20",
     "tailwindcss": "^4.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
   },
   "packageManager": "pnpm@9.15.0"
 }

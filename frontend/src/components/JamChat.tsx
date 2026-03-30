@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Pin, Send, Wifi, WifiOff } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback, useTransition } from 'react'
+import { Pin, Send, Wifi, WifiOff, Flag } from 'lucide-react'
 import { client, databases } from '@/lib/appwrite/client'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'appwrite'
 import { mapDocToChatMessage } from '@/lib/appwrite/types'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { reportMessage } from '@/lib/actions/chat'
 import type { ChatMessage, ChatChannel } from '@/types'
 
 interface JamChatProps {
@@ -106,6 +107,17 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
     } finally {
       setSending(false)
     }
+  }
+
+  const [, startReportTransition] = useTransition()
+
+  const handleReportMessage = (messageId: string) => {
+    startReportTransition(async () => {
+      await reportMessage(messageId)
+      setMessages(prev =>
+        prev.map(m => m.id === messageId ? { ...m, reported: true } : m)
+      )
+    })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -211,7 +223,7 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
             {msgs.map(msg => {
               const roleInfo = roleConfig[msg.role]
               return (
-                <article key={msg.id} className="flex gap-3" aria-label={`Message de ${msg.authorName}`}>
+                <article key={msg.id} className="flex gap-3 group" aria-label={`Message de ${msg.authorName}`}>
                   {/* Avatar initiales */}
                   <div
                     className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-xs font-bold"
@@ -243,6 +255,27 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
                     <p className="text-sm break-words" style={{ color: 'var(--foreground)' }}>
                       {msg.content}
                     </p>
+                    {user && (
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-1">
+                        <button
+                          onClick={() => handleReportMessage(msg.id)}
+                          disabled={msg.reported}
+                          className="flex items-center gap-1 text-xs px-2 py-1 disabled:opacity-40"
+                          style={{
+                            color: 'var(--muted-foreground)',
+                            background: 'var(--surface-elevated)',
+                          }}
+                          aria-label={
+                            msg.reported
+                              ? 'Message déjà signalé'
+                              : `Signaler le message de ${msg.authorName}`
+                          }
+                        >
+                          <Flag size={11} aria-hidden="true" />
+                          {msg.reported ? 'Signalé' : 'Signaler'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </article>
               )

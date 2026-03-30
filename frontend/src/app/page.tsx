@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
 import { Users, Trophy, Gamepad2, Globe, ArrowRight, Zap } from 'lucide-react'
+import { generateOrganizationJsonLd } from '@/lib/seo'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import JamCard from '@/components/JamCard'
@@ -8,20 +9,33 @@ import MarqueeStats from '@/components/MarqueeStats'
 import WinnerCard from '@/components/WinnerCard'
 import StatBlock from '@/components/StatBlock'
 import CountdownTimer from '@/components/CountdownTimer'
-import { mockJams, mockWinners, mockStats } from '@/lib/mockData'
+import { getHomePageData } from '@/lib/actions/home'
 
 export const metadata: Metadata = {
   title: 'KonfiturGame — Plateforme Game Jam',
   description: 'La plateforme française de game jams. Crée, jam, ship.',
+  openGraph: {
+    title: 'KonfiturGame — Plateforme Game Jam',
+    description: 'La plateforme française de game jams. Crée, jam, ship.',
+    images: [{ url: '/og?title=CRÉE.+JAM.+SHIP_', width: 1200, height: 630, alt: 'KonfiturGame' }],
+  },
+  alternates: { canonical: '/' },
 }
 
-export default function HomePage() {
-  const ongoingJam = mockJams.find(j => j.status === 'ongoing')
-  const upcomingJams = mockJams.filter(j => j.status === 'upcoming')
+export default async function HomePage() {
+  const { ongoingJam, upcomingJams, winners, stats } = await getHomePageData()
 
   return (
     <>
       <Header />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(generateOrganizationJsonLd(
+            process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr'
+          )),
+        }}
+      />
       <main id="main-content" className="grid-overlay noise">
         {/* ═══ HERO ═══ */}
         <section
@@ -76,7 +90,7 @@ export default function HomePage() {
         </section>
 
         {/* ═══ MARQUEE ═══ */}
-        <MarqueeStats stats={mockStats} />
+        <MarqueeStats stats={stats} />
 
         {/* ═══ JAM EN COURS (live widget) ═══ */}
         {ongoingJam && (
@@ -204,27 +218,27 @@ export default function HomePage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatBlock
                 icon={Gamepad2}
-                value={mockStats.jamsOrganized}
+                value={stats.jamsOrganized}
                 label="JAMS ORGANISÉES"
                 trend="+12%"
               />
               <StatBlock
                 icon={Users}
-                value={mockStats.participants}
+                value={stats.participants}
                 label="PARTICIPANTS"
                 trend="+24%"
                 accentColor="var(--secondary)"
               />
               <StatBlock
                 icon={Trophy}
-                value={mockStats.projectsSubmitted}
+                value={stats.projectsSubmitted}
                 label="PROJETS SOUMIS"
                 trend="+18%"
                 accentColor="var(--success)"
               />
               <StatBlock
                 icon={Globe}
-                value={mockStats.countriesRepresented}
+                value={stats.countriesRepresented}
                 label="PAYS REPRÉSENTÉS"
                 trend="+3"
                 accentColor="var(--primary)"
@@ -247,7 +261,7 @@ export default function HomePage() {
               Gagnants des dernières jams
             </h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {mockWinners.map(winner => (
+              {winners.map(winner => (
                 <WinnerCard key={winner.id} winner={winner} />
               ))}
             </div>

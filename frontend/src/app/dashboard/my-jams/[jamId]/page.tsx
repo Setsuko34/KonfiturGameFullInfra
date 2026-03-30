@@ -1,8 +1,11 @@
 import { getOrganizedJamDetails } from '@/lib/actions/dashboard'
+import { getAnnouncementsByJam } from '@/lib/actions/jams'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Users, Send } from 'lucide-react'
 import type { Metadata } from 'next'
+import EditJamForm from './EditJamForm'
+import AnnouncementForm from './AnnouncementForm'
 
 interface Props { params: { jamId: string } }
 
@@ -12,8 +15,12 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ManageJamPage({ params }: Props) {
   let data: Awaited<ReturnType<typeof getOrganizedJamDetails>>
+  let announcements: Awaited<ReturnType<typeof getAnnouncementsByJam>>
   try {
-    data = await getOrganizedJamDetails(params.jamId)
+    ;[data, announcements] = await Promise.all([
+      getOrganizedJamDetails(params.jamId),
+      getAnnouncementsByJam(params.jamId),
+    ])
   } catch {
     notFound()
   }
@@ -51,6 +58,9 @@ export default async function ManageJamPage({ params }: Props) {
           </div>
         </div>
       </div>
+
+      {jam.status !== 'ended' && <EditJamForm jam={jam} />}
+      <AnnouncementForm jamId={jam.id} announcements={announcements!} />
 
       {/* Équipes */}
       <div className="mb-8">

@@ -24,14 +24,27 @@ export const metadata: Metadata = {
   },
   description: 'La plateforme française de game jams. Crée, jam, ship.',
   metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'),
+  keywords: ['game jam', 'jeu vidéo', 'développement jeu', 'indie game', 'france', 'création jeux'],
+  authors: [{ name: 'KonfiturGame' }],
+  creator: 'KonfiturGame',
   openGraph: {
     type: 'website',
     locale: 'fr_FR',
     siteName: 'KonfiturGame',
+    images: [{ url: '/og', width: 1200, height: 630, alt: 'KonfiturGame' }],
   },
   twitter: {
     card: 'summary_large_image',
     site: '@KonfiturGame',
+    images: ['/og'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
+  alternates: {
+    canonical: '/',
   },
 }
 

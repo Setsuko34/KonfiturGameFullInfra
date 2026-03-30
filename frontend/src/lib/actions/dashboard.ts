@@ -1,11 +1,13 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { ID, Query } from 'node-appwrite'
 import { createSessionClient } from '@/lib/appwrite/session'
 import { serverDatabases } from '@/lib/appwrite/server'
 import { DATABASE_ID, COLLECTIONS, BUCKETS } from '@/lib/appwrite/config'
 import { mapDocToGameJam, mapDocToTeam, mapDocToTeamMember, mapDocToProject } from '@/lib/appwrite/types'
 import type { GameJam, Team, TeamMember, Project } from '@/types'
+import { validateUpdateJamData, type UpdateJamData } from '@/lib/validators'
 
 // ── Lecture session utilisateur ────────────────────────────────────────────
 
@@ -224,3 +226,40 @@ export async function getDashboardOverview(): Promise<{
   }
 }
 
+// ── Édition jam (corrections mineures, owner only) ─────────────────────────
+
+export async function updateJam(
+  jamId: string,
+  data: UpdateJamData
+): Promise<{ success: boolean; error?: string }> {
+  const validation = validateUpdateJamData(data)
+  if (!validation.valid) return { success: false, error: validation.error }
+
+  try {
+    const user = await getCurrentUser()
+    const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
+
+    if (jamDoc.organizer_id !== user.$id) {
+      return { success: false, error: 'Seul l\'organisateur peut modifier cette jam' }
+    }
+    if (jamDoc.status === 'ended') {
+      return { success: false, error: 'Impossible de modifier une jam terminée' }
+    }
+
+    const patch: Record<string, unknown> = {}
+    if (data.description !== undefined) patch.description = data.description.trim()
+    if (data.rules !== undefined) patch.rules = data.rules
+    if (data.prizes !== undefined) patch.prizes = data.prizes
+    if (data.maxParticipants !== undefined) patch.max_participants = data.maxParticipants
+    if (data.tags !== undefined) patch.tags = data.tags
+
+    await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId, patch)
+
+    revalidatePath(`/dashboard/my-jams/${jamId}`)
+    revalidatePath(`/jam/${jamId}`)
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
+    return { success: false, error: msg }
+  }
+}

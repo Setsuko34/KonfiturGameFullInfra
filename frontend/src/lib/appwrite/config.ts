@@ -13,6 +13,8 @@ export const COLLECTIONS = {
   ANNOUNCEMENTS: 'announcements',
   COMMENTS: 'comments',
   VOTES: 'votes',
+  AUDIT_LOGS: 'audit_logs',
+  BANNED_IPS: 'banned_ips',
 } as const
 
 export const BUCKETS = {

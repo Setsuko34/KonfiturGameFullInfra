@@ -32,7 +32,10 @@ interface Props {
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  return { title: `Équipe — ${params.teamId}` }
+  return {
+    title: 'Équipe',
+    alternates: { canonical: `/team/${params.teamId}` },
+  }
 }
 
 export default function TeamPage({ params }: Props) {

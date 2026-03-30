@@ -122,3 +122,26 @@ export async function voteForProject(
     return { success: false, error: msg }
   }
 }
+
+export async function getProjectById(projectId: string): Promise<Project | null> {
+  try {
+    const doc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId)
+    return mapDocToProject(doc)
+  } catch {
+    return null
+  }
+}
+
+export async function reportProject(
+  projectId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId, {
+      reported: true,
+    })
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
+    return { success: false, error: msg }
+  }
+}

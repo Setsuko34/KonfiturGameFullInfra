@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Gamepad2, LayoutDashboard, Users, List,
-  AlertTriangle, Megaphone, Star, LogOut, Home,
+  AlertTriangle, Megaphone, Star, LogOut, Home, Activity,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 
@@ -102,6 +102,7 @@ export default function AdminSidebar() {
           <NavLink href="/admin/moderation" icon={AlertTriangle} label="Modération" />
           <NavLink href="/admin/announcements" icon={Megaphone} label="Annonces" />
           <NavLink href="/admin/featured" icon={Star} label="Mise en avant" />
+          <NavLink href="/admin/logs" icon={Activity} label="Logs & Monitoring" />
         </div>
 
         {/* Bas de sidebar */}

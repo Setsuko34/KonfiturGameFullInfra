@@ -1,6 +1,8 @@
 import { getUserActiveTeam } from '@/lib/actions/dashboard'
+import { getProjectById } from '@/lib/actions/projects'
 import { Users } from 'lucide-react'
 import type { Metadata } from 'next'
+import SubmitProjectForm from './SubmitProjectForm'
 
 export const metadata: Metadata = { title: 'Mon équipe' }
 
@@ -14,6 +16,9 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default async function TeamPage() {
   const { team, members } = await getUserActiveTeam()
+  const existingProject = team?.projectId
+    ? await getProjectById(team.projectId)
+    : null
 
   return (
     <section aria-labelledby="team-heading">
@@ -87,6 +92,13 @@ export default async function TeamPage() {
               ))}
             </ul>
           </div>
+
+          {/* Soumission de projet */}
+          <SubmitProjectForm
+            jamId={team.jamId}
+            teamId={team.id}
+            existingProject={existingProject}
+          />
         </div>
       )}
     </section>

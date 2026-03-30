@@ -1,78 +1,61 @@
-'use client'
-
-import { useState } from 'react'
 import { notFound } from 'next/navigation'
-import { ExternalLink, Github, Download, ThumbsUp, Send } from 'lucide-react'
+import type { Metadata } from 'next'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { useAuth } from '@/components/providers/AuthProvider'
-
-const mockProject = {
-  id: 'project-001',
-  jamId: 'jam-001',
-  teamId: 'team-001',
-  title: 'Cozy Hearth',
-  description: 'Un jeu de puzzle-platformer sur une plante qui renaît après chaque mort. La mort n\'est pas une fin — c\'est un mécanisme de progression. Chaque cycle apporte de nouvelles capacités et révèle de nouveaux passages.',
-  technologies: ['Godot 4', 'GDScript', 'Aseprite', 'FMOD'],
-  downloadUrl: '#',
-  repoUrl: '#',
-  submitted: true,
-  submissionDate: new Date(Date.now() - 12 * 60 * 60 * 1000),
-  votesCount: 42,
-  coverImage: undefined as string | undefined,
-  screenshotIds: [] as string[],
-}
-
-const mockComments = [
-  {
-    id: 'c1',
-    authorName: 'GameDev42',
-    content: 'Super concept ! La mécanique de renaissance est vraiment bien implémentée.',
-    createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-  },
-  {
-    id: 'c2',
-    authorName: 'IndiePlayer',
-    content: 'Très bon jeu pour une jam de 72h. Les sprites sont magnifiques !',
-    createdAt: new Date(Date.now() - 60 * 60 * 1000),
-  },
-]
+import { getProjectById } from '@/lib/actions/projects'
+import { generateProjectJsonLd, truncateDescription } from '@/lib/seo'
+import { getCommentsByProject } from '@/lib/actions/comments'
+import ProjectInteractions from './ProjectInteractions'
 
 interface Props {
   params: { projectId: string }
 }
 
-export default function ProjectPage({ params }: Props) {
-  const project = params.projectId === mockProject.id ? mockProject : null
-  const { user } = useAuth()
-  const [voted, setVoted] = useState(false)
-  const [votes, setVotes] = useState(mockProject.votesCount)
-  const [comment, setComment] = useState('')
-  const [comments, setComments] = useState(mockComments)
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const project = await getProjectById(params.projectId)
+  if (!project) return { title: 'Projet introuvable', robots: { index: false } }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr'
+  const ogUrl = `/og?type=project&title=${encodeURIComponent(project.title)}`
+
+  return {
+    title: project.title,
+    description: truncateDescription(project.description),
+    keywords: project.technologies,
+    openGraph: {
+      title: project.title,
+      description: truncateDescription(project.description),
+      type: 'website',
+      url: `${siteUrl}/project/${project.id}`,
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: project.title }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: project.title,
+      description: truncateDescription(project.description),
+      images: [ogUrl],
+    },
+    alternates: { canonical: `/project/${project.id}` },
+  }
+}
+
+export default async function ProjectPage({ params }: Props) {
+  const [project, initialComments] = await Promise.all([
+    getProjectById(params.projectId),
+    getCommentsByProject(params.projectId),
+  ])
 
   if (!project) notFound()
-
-  const handleVote = () => {
-    if (!user || voted) return
-    setVoted(true)
-    setVotes(v => v + 1)
-  }
-
-  const handleComment = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!comment.trim() || !user) return
-    setComments(prev => [...prev, {
-      id: `c${Date.now()}`,
-      authorName: user.name,
-      content: comment.trim(),
-      createdAt: new Date(),
-    }])
-    setComment('')
-  }
 
   return (
     <>
       <Header />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(generateProjectJsonLd(project, process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr')),
+        }}
+      />
       <main id="main-content">
         {/* Hero projet */}
         <div
@@ -87,60 +70,14 @@ export default function ProjectPage({ params }: Props) {
             <p className="text-base mb-6" style={{ color: 'var(--muted-foreground)' }}>
               {project.description}
             </p>
-
-            {/* Actions */}
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={handleVote}
-                disabled={!user || voted}
-                className="flex items-center gap-2 px-5 py-2.5 font-semibold text-sm transition-opacity disabled:opacity-50"
-                style={{
-                  background: voted ? 'var(--success)' : 'var(--primary)',
-                  color: 'white',
-                }}
-                aria-label={voted ? `Vote enregistré — ${votes} votes` : `Voter pour ce projet — ${votes} votes actuels`}
-                aria-pressed={voted}
-              >
-                <ThumbsUp size={15} aria-hidden="true" />
-                {votes} vote{votes !== 1 ? 's' : ''}
-                {voted && ' ✓'}
-              </button>
-
-              {project.downloadUrl && (
-                <a
-                  href={project.downloadUrl}
-                  className="flex items-center gap-2 px-5 py-2.5 font-semibold text-sm"
-                  style={{
-                    border: '1px solid var(--border)',
-                    color: 'var(--foreground)',
-                    background: 'var(--surface-elevated)',
-                  }}
-                  aria-label="Télécharger le jeu"
-                >
-                  <Download size={15} aria-hidden="true" />
-                  Télécharger
-                </a>
-              )}
-
-              {project.repoUrl && (
-                <a
-                  href={project.repoUrl}
-                  className="flex items-center gap-2 px-5 py-2.5 font-semibold text-sm"
-                  style={{
-                    border: '1px solid var(--border)',
-                    color: 'var(--foreground)',
-                    background: 'var(--surface-elevated)',
-                  }}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Voir le code source (s'ouvre dans un nouvel onglet)"
-                >
-                  <Github size={15} aria-hidden="true" />
-                  Code source
-                  <ExternalLink size={12} aria-hidden="true" />
-                </a>
-              )}
-            </div>
+            <ProjectInteractions
+              projectId={project.id}
+              initialVotesCount={project.votesCount}
+              downloadUrl={project.downloadUrl}
+              repoUrl={project.repoUrl}
+              initialComments={initialComments}
+              initialReported={project.reported ?? false}
+            />
           </div>
         </div>
 
@@ -148,11 +85,13 @@ export default function ProjectPage({ params }: Props) {
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
               {/* Screenshots */}
-              {project.screenshotIds.length > 0 && (
+              {(project.screenshotIds ?? []).length > 0 && (
                 <section aria-labelledby="screenshots-heading">
-                  <h2 id="screenshots-heading" className="text-xl font-bold mb-4">Screenshots</h2>
+                  <h2 id="screenshots-heading" className="text-xl font-bold mb-4">
+                    Screenshots
+                  </h2>
                   <div className="grid grid-cols-2 gap-3">
-                    {project.screenshotIds.map((id, i) => (
+                    {(project.screenshotIds ?? []).map((id, i) => (
                       <div
                         key={id}
                         className="aspect-video"
@@ -164,84 +103,6 @@ export default function ProjectPage({ params }: Props) {
                   </div>
                 </section>
               )}
-
-              {/* Commentaires */}
-              <section aria-labelledby="comments-heading">
-                <h2 id="comments-heading" className="text-xl font-bold mb-4">
-                  Commentaires ({comments.length})
-                </h2>
-
-                <div className="space-y-4 mb-6">
-                  {comments.map(c => (
-                    <article
-                      key={c.id}
-                      className="p-4 border"
-                      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-                      aria-label={`Commentaire de ${c.authorName}`}
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        <div
-                          className="w-7 h-7 flex items-center justify-center text-xs font-bold"
-                          style={{ background: 'var(--surface-elevated)' }}
-                          aria-hidden="true"
-                        >
-                          {c.authorName.charAt(0)}
-                        </div>
-                        <span className="font-semibold text-sm">{c.authorName}</span>
-                        <time
-                          className="label-tech"
-                          style={{ color: 'var(--muted-foreground)' }}
-                          dateTime={c.createdAt.toISOString()}
-                        >
-                          {c.createdAt.toLocaleDateString('fr-FR')}
-                        </time>
-                      </div>
-                      <p className="text-sm" style={{ color: 'var(--foreground)' }}>
-                        {c.content}
-                      </p>
-                    </article>
-                  ))}
-                </div>
-
-                {/* Formulaire commentaire */}
-                {user ? (
-                  <form onSubmit={handleComment} aria-label="Ajouter un commentaire">
-                    <label htmlFor="comment-input" className="sr-only">
-                      Votre commentaire
-                    </label>
-                    <textarea
-                      id="comment-input"
-                      value={comment}
-                      onChange={e => setComment(e.target.value)}
-                      placeholder="Laissez un commentaire sur ce projet..."
-                      rows={3}
-                      maxLength={2048}
-                      className="w-full px-4 py-3 text-sm mb-3 resize-y"
-                      style={{
-                        background: 'var(--input-background)',
-                        border: '1px solid var(--border)',
-                        color: 'var(--foreground)',
-                      }}
-                    />
-                    <button
-                      type="submit"
-                      disabled={!comment.trim()}
-                      className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold disabled:opacity-40"
-                      style={{
-                        background: 'var(--primary)',
-                        color: 'var(--primary-foreground)',
-                      }}
-                    >
-                      <Send size={14} aria-hidden="true" />
-                      Commenter
-                    </button>
-                  </form>
-                ) : (
-                  <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    <a href="/auth/login" style={{ color: 'var(--primary)' }}>Connectez-vous</a> pour laisser un commentaire.
-                  </p>
-                )}
-              </section>
             </div>
 
             {/* Sidebar */}
@@ -284,7 +145,10 @@ export default function ProjectPage({ params }: Props) {
                         dateTime={project.submissionDate.toISOString()}
                       >
                         {project.submissionDate.toLocaleDateString('fr-FR', {
-                          day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit',
+                          day: 'numeric',
+                          month: 'long',
+                          hour: '2-digit',
+                          minute: '2-digit',
                         })}
                       </time>
                     )}

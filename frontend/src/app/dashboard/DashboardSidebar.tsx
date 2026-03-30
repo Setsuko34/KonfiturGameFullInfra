@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Gamepad2, LayoutDashboard, Trophy, Users, Send,
-  List, Plus, LogOut, Menu, X, Home,
+  List, Plus, LogOut, Menu, X, Home, User,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 
@@ -67,6 +67,7 @@ export default function DashboardSidebar() {
         </p>
         <NavLink href="/dashboard/participations" icon={Trophy} label="Mes participations" />
         <NavLink href="/dashboard/team" icon={Users} label="Mon équipe" />
+        <NavLink href="/dashboard/profile" icon={User} label="Mon profil" />
         {/* "Mes soumissions" est une sous-section de participations — déférée Phase 1.5.
             Pour l'instant, les soumissions sont visibles dans /dashboard/participations. */}
 

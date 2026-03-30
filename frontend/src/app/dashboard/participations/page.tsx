@@ -2,11 +2,33 @@ import { getUserParticipations } from '@/lib/actions/dashboard'
 import Link from 'next/link'
 import { ArrowRight, Trophy } from 'lucide-react'
 import type { Metadata } from 'next'
+import type { GameJam } from '@/types'
 
 export const metadata: Metadata = { title: 'Mes participations' }
 
-export default async function ParticipationsPage() {
+type StatusFilter = 'all' | 'ongoing' | 'upcoming' | 'ended'
+
+const STATUS_LABELS: Record<StatusFilter, string> = {
+  all: 'Toutes',
+  ongoing: 'En cours',
+  upcoming: 'À venir',
+  ended: 'Terminées',
+}
+
+interface Props {
+  searchParams: { status?: string }
+}
+
+export default async function ParticipationsPage({ searchParams }: Props) {
   const { jams } = await getUserParticipations()
+
+  const validFilters: StatusFilter[] = ['all', 'ongoing', 'upcoming', 'ended']
+  const activeFilter: StatusFilter = validFilters.includes(searchParams.status as StatusFilter)
+    ? (searchParams.status as StatusFilter)
+    : 'all'
+
+  const filteredJams: GameJam[] =
+    activeFilter === 'all' ? jams : jams.filter(j => j.status === activeFilter)
 
   return (
     <section aria-labelledby="participations-heading">
@@ -15,29 +37,48 @@ export default async function ParticipationsPage() {
       </p>
       <h1 id="participations-heading" className="text-2xl font-bold mb-6">Mes participations</h1>
 
-      {/* Filtre En cours / Terminées — déféré Phase 1.5 (nécessite searchParams + Server Component).
-          Phase 1 affiche toutes les participations sans filtre. */}
+      {/* Filtres de statut */}
+      <div className="flex flex-wrap gap-2 mb-6" role="group" aria-label="Filtrer par statut">
+        {(Object.keys(STATUS_LABELS) as StatusFilter[]).map(s => (
+          <Link
+            key={s}
+            href={s === 'all' ? '/dashboard/participations' : `/dashboard/participations?status=${s}`}
+            className="px-3 py-1.5 text-xs font-semibold"
+            style={{
+              background: activeFilter === s ? 'var(--primary)' : 'var(--muted)',
+              color: activeFilter === s ? 'var(--primary-foreground)' : 'var(--muted-foreground)',
+            }}
+            aria-current={activeFilter === s ? 'page' : undefined}
+          >
+            {STATUS_LABELS[s]}
+          </Link>
+        ))}
+      </div>
 
-      {jams.length === 0 ? (
+      {filteredJams.length === 0 ? (
         <div
           className="p-8 border text-center"
           style={{ background: 'var(--card)', borderColor: 'var(--border)', borderStyle: 'dashed' }}
         >
           <Trophy size={32} className="mx-auto mb-3" style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
           <p className="text-sm mb-4" style={{ color: 'var(--muted-foreground)' }}>
-            Tu n&apos;as pas encore rejoint de jam.
+            {jams.length === 0
+              ? 'Tu n\'as pas encore rejoint de jam.'
+              : 'Aucune jam pour ce filtre.'}
           </p>
-          <Link
-            href="/explore"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
-            style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
-          >
-            Explorer les jams <ArrowRight size={14} aria-hidden="true" />
-          </Link>
+          {jams.length === 0 && (
+            <Link
+              href="/explore"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+              style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
+            >
+              Explorer les jams <ArrowRight size={14} aria-hidden="true" />
+            </Link>
+          )}
         </div>
       ) : (
         <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4" role="list">
-          {jams.map(jam => (
+          {filteredJams.map(jam => (
             <li key={jam.id}>
               <div
                 className="p-5 border h-full flex flex-col justify-between"
@@ -76,4 +117,3 @@ export default async function ParticipationsPage() {
     </section>
   )
 }
-

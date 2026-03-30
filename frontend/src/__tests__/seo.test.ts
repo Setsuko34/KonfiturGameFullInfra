@@ -1,0 +1,82 @@
+import { describe, it, expect } from 'vitest'
+import { generateJamJsonLd, generateProjectJsonLd, generateOrganizationJsonLd } from '@/lib/seo'
+import type { GameJam, Project } from '@/types'
+
+const mockJam: GameJam = {
+  id: 'jam-1',
+  title: 'Spring Jam 2026',
+  slug: 'spring-jam-2026',
+  theme: 'Printemps',
+  description: 'Une jam printanière',
+  status: 'upcoming',
+  type: 'team',
+  startDate: new Date('2026-04-01'),
+  endDate: new Date('2026-04-07'),
+  duration: '7 jours',
+  participants: 42,
+  rules: ['Règle 1'],
+  organizer: 'KonfiturTeam',
+  organizerId: 'org-1',
+}
+
+const mockProject: Project = {
+  id: 'proj-1',
+  jamId: 'jam-1',
+  teamId: 'team-1',
+  title: 'Pixel Garden',
+  description: 'Un jeu de jardinage pixelisé',
+  technologies: ['Unity', 'C#'],
+  submitted: true,
+  votesCount: 15,
+}
+
+describe('generateJamJsonLd', () => {
+  it('retourne un objet avec @type Event', () => {
+    const ld = generateJamJsonLd(mockJam, 'https://konfiturgame.fr')
+    expect(ld['@type']).toBe('Event')
+  })
+
+  it('inclut le nom et la description', () => {
+    const ld = generateJamJsonLd(mockJam, 'https://konfiturgame.fr')
+    expect(ld.name).toBe(mockJam.title)
+    expect(ld.description).toBe(mockJam.description)
+  })
+
+  it('inclut les dates ISO', () => {
+    const ld = generateJamJsonLd(mockJam, 'https://konfiturgame.fr')
+    expect(ld.startDate).toBe('2026-04-01T00:00:00.000Z')
+    expect(ld.endDate).toBe('2026-04-07T00:00:00.000Z')
+  })
+
+  it("inclut l'URL canonique", () => {
+    const ld = generateJamJsonLd(mockJam, 'https://konfiturgame.fr')
+    expect(ld.url).toBe(`https://konfiturgame.fr/jam/${mockJam.id}`)
+  })
+
+  it('indique eventStatus online pour une jam à venir', () => {
+    const ld = generateJamJsonLd(mockJam, 'https://konfiturgame.fr')
+    expect(ld.eventStatus).toContain('EventScheduled')
+  })
+})
+
+describe('generateProjectJsonLd', () => {
+  it('retourne un objet avec @type SoftwareApplication', () => {
+    const ld = generateProjectJsonLd(mockProject, 'https://konfiturgame.fr')
+    expect(ld['@type']).toBe('SoftwareApplication')
+  })
+
+  it('inclut le nom et la description', () => {
+    const ld = generateProjectJsonLd(mockProject, 'https://konfiturgame.fr')
+    expect(ld.name).toBe(mockProject.title)
+    expect(ld.description).toBe(mockProject.description)
+  })
+})
+
+describe('generateOrganizationJsonLd', () => {
+  it('retourne un objet Organization', () => {
+    const ld = generateOrganizationJsonLd('https://konfiturgame.fr')
+    expect(ld['@type']).toBe('Organization')
+    expect(ld.name).toBe('KonfiturGame')
+    expect(ld.url).toBe('https://konfiturgame.fr')
+  })
+})
