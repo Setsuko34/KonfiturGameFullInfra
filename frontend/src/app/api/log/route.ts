@@ -17,9 +17,12 @@ interface LogPayload {
 }
 
 export async function POST(request: NextRequest) {
-  // Vérification clé interne
+  // Fail-secure : si le secret n'est pas configuré, l'endpoint est inutilisable
+  if (!LOG_SECRET) {
+    return NextResponse.json({ error: 'Log endpoint misconfigured' }, { status: 500 })
+  }
   const auth = request.headers.get('x-log-secret')
-  if (LOG_SECRET && auth !== LOG_SECRET) {
+  if (auth !== LOG_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -32,7 +35,17 @@ export async function POST(request: NextRequest) {
 
   // Géolocalisation IP → country_code (ip-api.com, gratuit, 45 req/min)
   let countryCode: string | undefined
-  if (payload.ip && payload.ip !== 'unknown' && !payload.ip.startsWith('192.168') && !payload.ip.startsWith('10.')) {
+  const isPrivateIP = (ip: string) =>
+    ip.startsWith('10.') ||
+    ip.startsWith('192.168.') ||
+    ip.startsWith('127.') ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+    ip === '::1' ||
+    ip.startsWith('fc00:') ||
+    ip.startsWith('fe80:')
+
+  // ip-api.com : HTTP uniquement sur le tier gratuit (45 req/min)
+  if (payload.ip && payload.ip !== 'unknown' && !isPrivateIP(payload.ip)) {
     try {
       const geoRes = await fetch(
         `http://ip-api.com/json/${payload.ip}?fields=countryCode`,

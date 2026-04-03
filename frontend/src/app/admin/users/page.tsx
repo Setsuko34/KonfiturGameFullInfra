@@ -7,7 +7,7 @@ export const metadata: Metadata = { title: 'Utilisateurs' }
 type Props = { searchParams: { [key: string]: string | string[] | undefined } }
 
 export default async function AdminUsersPage({ searchParams }: Props) {
-  const page = Number(Array.isArray(searchParams.page) ? searchParams.page[0] : (searchParams.page ?? 0))
+  const page = Math.max(0, parseInt(String(Array.isArray(searchParams.page) ? searchParams.page[0] : (searchParams.page ?? '0')), 10) || 0)
   const search = (Array.isArray(searchParams.q) ? searchParams.q[0] : searchParams.q) ?? ''
   const result = await listUsers(page, search)
 
@@ -27,7 +27,9 @@ export default async function AdminUsersPage({ searchParams }: Props) {
         <div className="relative flex-1 max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true"
             style={{ color: 'var(--muted-foreground)' }} />
+          <label htmlFor="search-users" className="sr-only">Rechercher un utilisateur</label>
           <input
+            id="search-users"
             type="search"
             name="q"
             defaultValue={search}
@@ -105,7 +107,7 @@ export default async function AdminUsersPage({ searchParams }: Props) {
         <div className="flex gap-2 mt-4 justify-end">
           {page > 0 && (
             <a
-              href={`/admin/users?page=${page - 1}${search ? `&q=${search}` : ''}`}
+              href={`/admin/users?page=${page - 1}${search ? `&q=${encodeURIComponent(search)}` : ''}`}
               className="px-3 py-1.5 text-sm border transition-opacity hover:opacity-80"
               style={{ borderColor: 'var(--border)' }}
             >
@@ -114,7 +116,7 @@ export default async function AdminUsersPage({ searchParams }: Props) {
           )}
           {(page + 1) * 25 < result.total && (
             <a
-              href={`/admin/users?page=${page + 1}${search ? `&q=${search}` : ''}`}
+              href={`/admin/users?page=${page + 1}${search ? `&q=${encodeURIComponent(search)}` : ''}`}
               className="px-3 py-1.5 text-sm border transition-opacity hover:opacity-80"
               style={{ borderColor: 'var(--border)' }}
             >

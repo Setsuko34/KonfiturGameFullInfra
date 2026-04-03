@@ -34,6 +34,7 @@ async function getBannedIPsCached(siteUrl: string): Promise<Set<string>> {
   try {
     // Appel direct à notre endpoint interne (exclu du matcher → pas de récursion)
     const res = await fetch(`${siteUrl}/api/banned-ips`, {
+      headers: { 'x-log-secret': process.env.LOG_INTERNAL_SECRET ?? '' },
       signal: AbortSignal.timeout(1500),
     })
     if (res.ok) {

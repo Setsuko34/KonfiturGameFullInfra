@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import type { ReactNode } from 'react'
 import { notFound } from 'next/navigation'
 import { Query } from 'node-appwrite'
 import { createSessionClient } from '@/lib/appwrite/session'
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   title: { default: 'Backoffice', template: '%s | Admin KonfiturGame' },
 }
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: ReactNode }) {
   const { account } = createSessionClient()
 
   // Vérification du membership team admins

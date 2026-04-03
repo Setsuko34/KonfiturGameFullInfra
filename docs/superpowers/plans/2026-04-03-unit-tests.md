@@ -315,12 +315,9 @@ cd frontend && pnpm test --reporter=verbose 2>&1 | grep -E "(PASS|FAIL|✓|✗|a
 
 Expected : tous les tests du fichier `appwrite-mappers.test.ts` passent (PASS).
 
-- [ ] **Step 3 : Commit**
+- [ ] **Step 3 : Commit (à faire par le développeur)**
 
-```bash
-cd frontend && git add src/__tests__/appwrite-mappers.test.ts
-git commit -m "test: ajouter tests unitaires pour les 7 mappeurs Appwrite"
-```
+> Les commits sont sous la responsabilité du développeur. Aucune commande git ne doit être exécutée par l'agent.
 
 ---
 

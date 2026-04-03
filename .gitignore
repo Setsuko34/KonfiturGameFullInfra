@@ -43,6 +43,11 @@ dist/
 build/
 
 # ═══════════════════════════════════════════════
+# CLAUDE CODE — config locale (chemins machine-spécifiques)
+# ═══════════════════════════════════════════════
+.claude/settings.local.json
+
+# ═══════════════════════════════════════════════
 # CLAUDE — fichiers locaux spécifiques à la machine
 # ═══════════════════════════════════════════════
 .claude/settings.local.json

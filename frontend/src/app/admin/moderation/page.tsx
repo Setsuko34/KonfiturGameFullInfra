@@ -59,6 +59,7 @@ export default async function AdminModerationPage() {
                       <button
                         type="submit"
                         title="Marquer comme résolu"
+                        aria-label="Marquer comme résolu"
                         className="p-1.5 border transition-opacity hover:opacity-80"
                         style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
                       >
@@ -69,6 +70,7 @@ export default async function AdminModerationPage() {
                       <button
                         type="submit"
                         title="Supprimer le message"
+                        aria-label="Supprimer le message"
                         className="p-1.5 border transition-opacity hover:opacity-80"
                         style={{ borderColor: 'var(--secondary)', color: 'var(--secondary)' }}
                       >
@@ -109,6 +111,7 @@ export default async function AdminModerationPage() {
                     <button
                       type="submit"
                       title="Marquer comme résolu"
+                      aria-label="Marquer comme résolu"
                       className="p-1.5 border transition-opacity hover:opacity-80 flex-shrink-0"
                       style={{ borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}
                     >
