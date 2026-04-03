@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Shield, ShieldOff, Search } from 'lucide-react'
 import { listUsers, blockUser, unblockUser } from '@/lib/actions/admin'
 
@@ -106,22 +107,22 @@ export default async function AdminUsersPage({ searchParams }: Props) {
       {result.total > 25 && (
         <div className="flex gap-2 mt-4 justify-end">
           {page > 0 && (
-            <a
+            <Link
               href={`/admin/users?page=${page - 1}${search ? `&q=${encodeURIComponent(search)}` : ''}`}
               className="px-3 py-1.5 text-sm border transition-opacity hover:opacity-80"
               style={{ borderColor: 'var(--border)' }}
             >
               Précédent
-            </a>
+            </Link>
           )}
           {(page + 1) * 25 < result.total && (
-            <a
+            <Link
               href={`/admin/users?page=${page + 1}${search ? `&q=${encodeURIComponent(search)}` : ''}`}
               className="px-3 py-1.5 text-sm border transition-opacity hover:opacity-80"
               style={{ borderColor: 'var(--border)' }}
             >
               Suivant
-            </a>
+            </Link>
           )}
         </div>
       )}
