@@ -40,7 +40,7 @@ export function validateUpdateJamData(data: UpdateJamData): ValidationResult {
   }
   if ('maxParticipants' in record) {
     const max = record.maxParticipants
-    if (typeof max !== 'number' || max < 2 || max > 10000) {
+    if (typeof max !== 'number' || !Number.isFinite(max) || max < 2 || max > 10000) {
       return { valid: false, error: 'maxParticipants doit être entre 2 et 10000' }
     }
   }

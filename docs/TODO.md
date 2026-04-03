@@ -23,6 +23,23 @@ FONCTIONNALITÉS :
 3. Possibilité de modifier une jam en cours (correction mineure seulement) 
 4. Ajouter des logs pour l'admin pour voir tout les crash et autre, suivre les connexions a l'app (voir une map des emplacement, autoban les bot qui scanne le web etc etc )
 5. Améliorer le SEO de toute l'app
+   Récapitulatif de l'implémentation
+
+┌─────────────────────────────────┬───────────────┬────────────────────────────────────┐                                                
+│             Fichier             │     Tests     │       Bugs trouvés en route        │                                                
+├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
+│ appwrite-mappers.test.ts        │ 15            │ —                                  │                                                
+├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
+│ profile-validators.test.ts      │ +7 (total 15) │ Bug NaN dans validators.ts corrigé │                                                
+├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
+│ actions-profile.test.ts         │ 10            │ Asymétrie trim bio documentée      │                                                
+├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
+│ actions-chat.test.ts            │ 9             │ —                                  │                                                
+├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
+│ actions-teams.test.ts           │ 6             │ —                                  │                                                
+├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
+│ vitest.config.ts + package.json │ —             │ —                                  │                                                
+└─────────────────────────────────┴───────────────┴────────────────────────────────────┘
 
 PROD : 
 1. Mettre en place l'environnement de production (Docker Compose ou Kubernetes)

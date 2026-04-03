@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(chmod +x /mnt/d/dev/KonfiturGameFullInfra/scripts/seed-data.sh && rm /mnt/d/dev/KonfiturGameFullInfra/scripts/seed-data.ts)",
+      "Bash(cd /mnt/d/dev/KonfiturGameFullInfra/scripts && bash seed-data.sh 2>&1)",
+      "Bash(docker ps:*)",
+      "Read(//mnt/d/dev/KonfiturGameFullInfra/**)",
+      "Bash(docker run:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "mcp__appwrite-docs__getTableOfContents",
+      "mcp__appwrite-docs__listFeatures",
+      "mcp__appwrite-docs__getFeatureExamples",
+      "mcp__appwrite-docs__getDocsPage",
+      "Bash(pnpm type-check:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(pnpm ls:*)",
+      "Bash(node -e \":*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm test:*)",
+      "Bash(echo \"EXIT_CODE: $?\")",
+      "Bash(rm -rf /tmp/konfitur-build)",
+      "Bash(cp -r /mnt/d/dev/KonfiturGameFullInfra/frontend /tmp/konfitur-build)",
+      "Read(//tmp/**)",
+      "Bash(NEXT_TELEMETRY_DISABLED=1 pnpm build)",
+      "Bash(chmod:*)",
+      "Bash(pnpm vitest:*)",
+      "Bash(NEXT_PUBLIC_APPWRITE_ENDPOINT=http://localhost:8080/v1 NEXT_PUBLIC_APPWRITE_PROJECT_ID=konfitur-game NEXT_PUBLIC_SITE_URL=http://localhost:3000 pnpm build)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm test:coverage)"
+    ]
+  }
+}

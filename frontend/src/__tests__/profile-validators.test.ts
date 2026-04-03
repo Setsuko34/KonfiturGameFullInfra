@@ -45,3 +45,44 @@ describe('validateAnnouncementData', () => {
     expect(result.valid).toBe(false)
   })
 })
+
+describe('validateUpdateJamData — maxParticipants', () => {
+  it('accepte une valeur limite basse (2)', () => {
+    const result = validateUpdateJamData({ maxParticipants: 2 })
+    expect(result.valid).toBe(true)
+  })
+
+  it('accepte une valeur limite haute (10000)', () => {
+    const result = validateUpdateJamData({ maxParticipants: 10000 })
+    expect(result.valid).toBe(true)
+  })
+
+  it('accepte une valeur intermédiaire (50)', () => {
+    const result = validateUpdateJamData({ maxParticipants: 50 })
+    expect(result.valid).toBe(true)
+  })
+
+  it('refuse maxParticipants < 2', () => {
+    const result = validateUpdateJamData({ maxParticipants: 1 })
+    expect(result.valid).toBe(false)
+    expect(result.error).toMatch(/maxParticipants/)
+  })
+
+  it('refuse maxParticipants > 10000', () => {
+    const result = validateUpdateJamData({ maxParticipants: 10001 })
+    expect(result.valid).toBe(false)
+    expect(result.error).toMatch(/maxParticipants/)
+  })
+
+  it('refuse maxParticipants non-numérique', () => {
+    const result = validateUpdateJamData({ maxParticipants: 'beaucoup' as unknown as number })
+    expect(result.valid).toBe(false)
+    expect(result.error).toMatch(/maxParticipants/)
+  })
+
+  it('refuse maxParticipants NaN', () => {
+    const result = validateUpdateJamData({ maxParticipants: NaN })
+    expect(result.valid).toBe(false)
+    expect(result.error).toMatch(/maxParticipants/)
+  })
+})
