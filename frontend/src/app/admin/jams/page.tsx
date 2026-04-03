@@ -16,7 +16,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default async function AdminJamsPage({ searchParams }: Props) {
   const status = Array.isArray(searchParams.status) ? searchParams.status[0] : searchParams.status
-  const page = Number(Array.isArray(searchParams.page) ? searchParams.page[0] : (searchParams.page ?? 0))
+  const pageParam = Array.isArray(searchParams.page) ? searchParams.page[0] : searchParams.page
+  const page = Math.max(0, parseInt(pageParam ?? '0', 10) || 0)
   const jams = await listAllJams(status, page)
 
   const filters = [

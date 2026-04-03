@@ -26,9 +26,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const VALID_TYPES = new Set<string>(['connection', 'error', 'auth', 'bot_blocked', 'ban_applied'])
+
+  function isValidPayload(p: unknown): p is LogPayload {
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return false
+    const obj = p as Record<string, unknown>
+    if (!VALID_TYPES.has(obj.type as string)) return false
+    const stringFields = ['ip', 'userAgent', 'path', 'userId', 'message'] as const
+    for (const field of stringFields) {
+      if (field in obj && typeof obj[field] !== 'string') return false
+    }
+    return true
+  }
+
   let payload: LogPayload
   try {
-    payload = await request.json()
+    const raw = await request.json()
+    if (!isValidPayload(raw)) {
+      return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
+    }
+    payload = raw
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
@@ -44,8 +61,9 @@ export async function POST(request: NextRequest) {
     ip.startsWith('fc00:') ||
     ip.startsWith('fe80:')
 
-  // ip-api.com : HTTP uniquement sur le tier gratuit (45 req/min)
-  if (payload.ip && payload.ip !== 'unknown' && !isPrivateIP(payload.ip)) {
+  // Géolocalisation désactivée par défaut (ip-api.com ne supporte pas HTTPS sur tier gratuit).
+  // Activer avec GEOIP_ENABLED=true dans .env après avoir évalué les implications RGPD.
+  if (process.env.GEOIP_ENABLED === 'true' && payload.ip && payload.ip !== 'unknown' && !isPrivateIP(payload.ip)) {
     try {
       const geoRes = await fetch(
         `http://ip-api.com/json/${payload.ip}?fields=countryCode`,

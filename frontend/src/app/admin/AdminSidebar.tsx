@@ -8,9 +8,6 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 
-const ADMIN_BG = '#0A0E16'
-const ADMIN_BORDER = 'rgba(239, 35, 60, 0.15)'
-
 export default function AdminSidebar() {
   const { user, logout } = useAuth()
   const pathname = usePathname()
@@ -32,7 +29,7 @@ export default function AdminSidebar() {
       aria-current={isActive(href) ? 'page' : undefined}
       className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-colors"
       style={{
-        background: isActive(href) ? 'rgba(239, 35, 60, 0.12)' : 'transparent',
+        background: isActive(href) ? 'var(--admin-active-bg)' : 'transparent',
         color: isActive(href) ? 'var(--secondary)' : 'var(--sidebar-foreground)',
       }}
     >
@@ -44,13 +41,13 @@ export default function AdminSidebar() {
   return (
     <aside
       className="hidden md:flex flex-col fixed inset-y-0 left-0 w-60 border-r z-30"
-      style={{ background: ADMIN_BG, borderColor: ADMIN_BORDER }}
+      style={{ background: 'var(--admin-sidebar-bg)', borderColor: 'var(--admin-accent-border)' }}
     >
       <nav className="flex flex-col h-full" aria-label="Navigation du backoffice">
         {/* Logo + badge */}
         <div
           className="flex flex-col px-5 py-4 border-b"
-          style={{ borderColor: ADMIN_BORDER }}
+          style={{ borderColor: 'var(--admin-accent-border)' }}
         >
           <div className="flex items-center gap-2">
             <Gamepad2 size={18} style={{ color: 'var(--secondary)' }} aria-hidden="true" />
@@ -61,9 +58,9 @@ export default function AdminSidebar() {
           <span
             className="mt-1.5 text-[9px] tracking-widest uppercase font-bold px-1 py-0.5 w-fit"
             style={{
-              background: 'rgba(239, 35, 60, 0.15)',
+              background: 'var(--admin-accent-border)',
               color: 'var(--secondary)',
-              border: '1px solid rgba(239, 35, 60, 0.3)',
+              border: '1px solid var(--admin-badge-border)',
             }}
           >
             Super Admin
@@ -72,7 +69,7 @@ export default function AdminSidebar() {
 
         {/* Utilisateur */}
         {user && (
-          <div className="px-5 py-3 border-b" style={{ borderColor: ADMIN_BORDER }}>
+          <div className="px-5 py-3 border-b" style={{ borderColor: 'var(--admin-accent-border)' }}>
             <p className="text-[9px] tracking-widest mb-1 uppercase" style={{ color: 'var(--muted-foreground)' }}>
               Connecté
             </p>
@@ -95,7 +92,7 @@ export default function AdminSidebar() {
 
           <p
             className="px-3 pt-4 pb-1 text-[9px] tracking-widest uppercase border-t mt-3"
-            style={{ color: 'var(--muted-foreground)', borderColor: ADMIN_BORDER }}
+            style={{ color: 'var(--muted-foreground)', borderColor: 'var(--admin-accent-border)' }}
           >
             Contenu
           </p>
@@ -106,7 +103,7 @@ export default function AdminSidebar() {
         </div>
 
         {/* Bas de sidebar */}
-        <div className="p-3 border-t space-y-0.5" style={{ borderColor: ADMIN_BORDER }}>
+        <div className="p-3 border-t space-y-0.5" style={{ borderColor: 'var(--admin-accent-border)' }}>
           <Link
             href="/"
             className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium"

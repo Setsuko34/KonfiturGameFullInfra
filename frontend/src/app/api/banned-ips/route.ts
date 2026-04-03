@@ -28,6 +28,9 @@ export async function GET(request: NextRequest) {
       headers: { 'Cache-Control': 'private, max-age=120' },
     })
   } catch {
-    return NextResponse.json({ ips: [] })
+    return NextResponse.json(
+      { error: 'Failed to fetch banned IPs' },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } }
+    )
   }
 }
