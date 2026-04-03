@@ -1,4 +1,4 @@
-import { Client, Databases, Users, Storage } from 'node-appwrite'
+import { Client, Databases, Users, Storage, Teams } from 'node-appwrite'
 
 const client = new Client()
   .setEndpoint(process.env.APPWRITE_INTERNAL_ENDPOINT ?? process.env.NEXT_PUBLIC_APPWRITE_ENDPOINT!)
@@ -8,4 +8,5 @@ const client = new Client()
 export const serverDatabases = new Databases(client)
 export const serverUsers = new Users(client)
 export const serverStorage = new Storage(client)
+export const serverTeams = new Teams(client)
 export { client as serverClient }

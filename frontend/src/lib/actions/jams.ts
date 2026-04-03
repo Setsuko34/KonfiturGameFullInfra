@@ -3,8 +3,8 @@
 import { Query } from 'node-appwrite'
 import { serverDatabases } from '@/lib/appwrite/server'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
-import { mapDocToGameJam } from '@/lib/appwrite/types'
-import type { GameJam } from '@/types'
+import { mapDocToGameJam, mapDocToAnnouncement } from '@/lib/appwrite/types'
+import type { GameJam, Announcement } from '@/types'
 
 export async function getJams(): Promise<GameJam[]> {
   try {
@@ -39,6 +39,23 @@ export async function getJamBySlug(slug: string): Promise<GameJam | null> {
     return mapDocToGameJam(res.documents[0])
   } catch {
     return null
+  }
+}
+
+export async function getAnnouncementsByJam(jamId: string): Promise<Announcement[]> {
+  try {
+    const res = await serverDatabases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.ANNOUNCEMENTS,
+      [
+        Query.equal('jam_id', jamId),
+        Query.orderDesc('$createdAt'),
+        Query.limit(50),
+      ]
+    )
+    return res.documents.map(mapDocToAnnouncement)
+  } catch {
+    return []
   }
 }
 

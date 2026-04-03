@@ -174,6 +174,14 @@ cp /tmp/pnpm-gen/pnpm-lock.yaml frontend/
 
 ---
 
+## Git (Non-Négociable)
+
+- **JAMAIS de `git commit`, `git add`, `git push` sans demande explicite de l'utilisateur**
+- Cette règle s'applique aux subagents et agents délégués — ne jamais inclure d'étapes de commit dans leurs instructions
+- Laisser systématiquement l'utilisateur gérer tous les commits
+
+---
+
 ## Fichiers sensibles (non lisibles par Claude)
 
 Exclus via `.claudeignore`. Claude connaît leur existence et peut les mentionner, mais ne peut pas en lire le contenu. Si une tâche les concerne, demander à l'utilisateur d'agir directement dessus.

@@ -85,3 +85,20 @@ export async function pinMessage(
     return { success: false, error: msg }
   }
 }
+
+export async function reportMessage(
+  messageId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    await serverDatabases.updateDocument(
+      DATABASE_ID,
+      COLLECTIONS.CHAT_MESSAGES,
+      messageId,
+      { reported: true }
+    )
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
+    return { success: false, error: msg }
+  }
+}

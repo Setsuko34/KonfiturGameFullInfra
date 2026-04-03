@@ -13,6 +13,8 @@ export const COLLECTIONS = {
   ANNOUNCEMENTS: 'announcements',
   COMMENTS: 'comments',
   VOTES: 'votes',
+  AUDIT_LOGS: 'audit_logs',
+  BANNED_IPS: 'banned_ips',
 } as const
 
 export const BUCKETS = {
@@ -23,3 +25,5 @@ export const BUCKETS = {
 
 export type CollectionId = typeof COLLECTIONS[keyof typeof COLLECTIONS]
 export type BucketId = typeof BUCKETS[keyof typeof BUCKETS]
+
+export const ADMIN_TEAM_ID = '69bc67f1003d025c931a'

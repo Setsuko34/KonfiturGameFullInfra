@@ -21,6 +21,8 @@ export interface GameJam {
   organizerId: string
   coverImage?: string
   tags?: string[]
+  featured?: boolean
+  featuredOrder?: number
 }
 
 export interface TeamMember {
@@ -56,6 +58,8 @@ export interface Project {
   votesCount: number
   coverImage?: string
   screenshotIds?: string[]
+  reported?: boolean
+  winner?: boolean
 }
 
 export interface Comment {
@@ -89,6 +93,7 @@ export interface ChatMessage {
   content: string
   role: UserRole
   pinned: boolean
+  reported?: boolean
   createdAt: Date
 }
 
@@ -108,4 +113,12 @@ export interface SiteStats {
   participants: number
   projectsSubmitted: number
   countriesRepresented: number
+}
+
+export interface UpdateJamData {
+  description?: string
+  rules?: string[]
+  prizes?: string[]
+  maxParticipants?: number
+  tags?: string[]
 }
