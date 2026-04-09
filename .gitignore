@@ -101,3 +101,6 @@ data/
 .env.ci
 trivy-results.sarif
 trivy-fs-results.sarif
+/docs/superpowers/
+/docs/Doc/
+.obsidian
