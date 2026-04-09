@@ -6,8 +6,8 @@ import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 // Endpoint interne consommé uniquement par le middleware Next.js
 const LOG_SECRET = process.env.LOG_INTERNAL_SECRET
 
-// Cache serveur privé : 2 minutes (non partageable avec des CDN publics)
-export const revalidate = 120
+// Force dynamic: réponse variant par header auth → jamais mise en cache
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   if (!LOG_SECRET) {
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     )
     const ips = res.documents.map(doc => doc.ip as string)
     return NextResponse.json({ ips }, {
-      headers: { 'Cache-Control': 'private, max-age=120' },
+      headers: { 'Cache-Control': 'no-store' },
     })
   } catch {
     return NextResponse.json(
