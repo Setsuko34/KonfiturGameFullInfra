@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Save, Lock, AlertTriangle, Loader2 } from 'lucide-react'
-import { updateProfileName, updateProfileBio, updateProfilePassword, deleteAccount } from '@/lib/actions/profile'
+import { updateProfileClient, updatePasswordClient } from '@/lib/actions/profile.client'
+import { deleteAccount } from '@/lib/actions/profile'
 import type { Models } from 'appwrite'
 
 interface Props {
@@ -29,19 +30,16 @@ export default function ProfileForm({ user }: Props) {
   const handleSaveProfile = () => {
     startProfileTransition(async () => {
       setInfoMsg(null)
-      const [nameResult, bioResult] = await Promise.all([
-        name !== user.name ? updateProfileName(name) : Promise.resolve({ success: true as const }),
-        bio !== ((user.prefs?.bio as string) || '') ? updateProfileBio(bio) : Promise.resolve({ success: true as const }),
-      ])
-      if (!nameResult.success) {
-        setInfoMsg({ type: 'error', text: nameResult.error ?? 'Erreur' })
-        return
+      const result = await updateProfileClient(name, bio, {
+        name: user.name || '',
+        bio: (user.prefs?.bio as string) || '',
+      })
+      if (result.success) {
+        setInfoMsg({ type: 'success', text: 'Profil mis à jour' })
+        router.refresh()
+      } else {
+        setInfoMsg({ type: 'error', text: result.error ?? 'Erreur' })
       }
-      if (!bioResult.success) {
-        setInfoMsg({ type: 'error', text: bioResult.error ?? 'Erreur' })
-        return
-      }
-      setInfoMsg({ type: 'success', text: 'Profil mis à jour' })
     })
   }
 
@@ -52,7 +50,7 @@ export default function ProfileForm({ user }: Props) {
     }
     startPwdTransition(async () => {
       setPwdMsg(null)
-      const result = await updateProfilePassword(currentPwd, newPwd)
+      const result = await updatePasswordClient(currentPwd, newPwd)
       if (result.success) {
         setPwdMsg({ type: 'success', text: 'Mot de passe mis à jour' })
         setCurrentPwd('')

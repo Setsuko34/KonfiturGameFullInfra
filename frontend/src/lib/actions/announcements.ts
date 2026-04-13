@@ -17,7 +17,7 @@ export async function createOrganizerAnnouncement(
   if (!validation.valid) return { success: false, error: validation.error }
 
   try {
-    const { account } = createSessionClient()
+    const { account } = await createSessionClient()
     const user = await account.get()
 
     // Vérifier que l'utilisateur est bien l'organisateur
@@ -56,7 +56,7 @@ export async function deleteOrganizerAnnouncement(
   announcementId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { account } = createSessionClient()
+    const { account } = await createSessionClient()
     const user = await account.get()
 
     // Vérifier propriété via la jam

@@ -12,7 +12,7 @@ import { validateUpdateJamData, type UpdateJamData } from '@/lib/validators'
 // ── Lecture session utilisateur ────────────────────────────────────────────
 
 export async function getCurrentUser() {
-  const { account } = createSessionClient()
+  const { account } = await createSessionClient()
   return account.get()
 }
 

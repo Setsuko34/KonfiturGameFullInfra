@@ -39,6 +39,7 @@ services:
       # URL interne : résolue depuis le container frontend (Server Actions)
       - APPWRITE_INTERNAL_ENDPOINT=http://appwrite/v1
       - APPWRITE_API_KEY=${APPWRITE_API_KEY}
+      - LOG_INTERNAL_SECRET=${LOG_INTERNAL_SECRET}
     ports:
       - "3000:3000"
     labels:
