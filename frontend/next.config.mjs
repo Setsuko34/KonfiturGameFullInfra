@@ -1,9 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  experimental: {
-    serverComponentsExternalPackages: ['node-appwrite'],
-  },
+  serverExternalPackages: ['node-appwrite'],
   images: {
     remotePatterns: [
       {

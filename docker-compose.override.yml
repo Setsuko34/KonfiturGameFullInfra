@@ -15,6 +15,7 @@ services:
       - ./traefik/traefik.dev.yml:/etc/traefik/traefik.dev.yml:ro
     ports:
       - "80:80"
+      - "8080:80"
       - "8081:8080"   # Dashboard Traefik → http://localhost:8081/dashboard/
     labels:
       - "traefik.enable=false"   # Désactive les labels prod du dashboard
@@ -33,8 +34,10 @@ services:
     environment:
       - NODE_ENV=development
       - NEXT_PUBLIC_SITE_URL=http://localhost:3000
-      # URL publique : résolue depuis le navigateur de la machine hôte
-      - NEXT_PUBLIC_APPWRITE_ENDPOINT=http://localhost:8080/v1
+      # URL publique : port 80 obligatoire pour OAuth.
+      # Appwrite 1.8 construit le redirect_uri OAuth à partir du Host header entrant.
+      # Si on passe par :8080, Google/Discord reçoivent un callback :8080 non enregistré.
+      - NEXT_PUBLIC_APPWRITE_ENDPOINT=http://localhost/v1
       - NEXT_PUBLIC_APPWRITE_PROJECT_ID=${APPWRITE_PROJECT_ID}
       # URL interne : résolue depuis le container frontend (Server Actions)
       - APPWRITE_INTERNAL_ENDPOINT=http://appwrite/v1
@@ -53,7 +56,7 @@ services:
   #   ne peut pas résoudre redis/mariadb par leur nom de service
   # ────────────────────────────────────────────────────────
   appwrite:
-    image: appwrite/appwrite:1.5
+    image: appwrite/appwrite:1.8.0
     networks:
       - konfitur-net
       - appwrite-net
@@ -64,14 +67,41 @@ services:
       - "traefik.http.routers.appwrite-dev.service=appwrite-dev"
       - "traefik.http.services.appwrite-dev.loadbalancer.server.port=80"
       - "traefik.docker.network=konfitur-net"
-    ports:
-      - "8080:80"     # Console → http://localhost:8080/console (accès direct)
+    # Pas de port direct : Traefik route localhost:8080 → appwrite (sauf /console → appwrite-console)
     environment:
-      # Appwrite v1.5 stripe le port de _APP_DOMAIN → hostname sans port obligatoire.
+      # Appwrite v1.5+ stripe le port de _APP_DOMAIN → hostname sans port obligatoire.
       # Traefik route Host(`localhost`) → appwrite:80, donc le callback OAuth
       # généré sera http://localhost/v1/... (port 80 implicite, accepté par Google/Discord).
       _APP_DOMAIN: localhost
       _APP_DOMAIN_TARGET: localhost
+      _APP_DOMAIN_TARGET_CNAME: localhost
+      _APP_DOMAIN_TARGET_A: ""
+      _APP_DOMAIN_TARGET_AAAA: ""
+      # OAuth dev : Appwrite 1.8 force https:// + ajoute :80 par défaut
+      # → Google/Discord reçoivent https://localhost:80/... (redirect_uri_mismatch).
+      # On désactive le force HTTPS pour que le scheme reste http:// en dev.
+      _APP_OPTIONS_FORCE_HTTPS: disabled
+      _APP_OPTIONS_ROUTER_PROTECTION: disabled
+
+  # ────────────────────────────────────────────────────────
+  # APPWRITE CONSOLE — SPA admin (container séparé depuis 1.7+)
+  # Route: http://localhost:8080/console → appwrite-console
+  # La règle PathPrefix(/console) est plus spécifique que Host(localhost)
+  # donc Traefik lui donne priorité automatiquement.
+  # ────────────────────────────────────────────────────────
+  appwrite-console:
+    image: appwrite/console:7.5.7
+    container_name: konfitur-appwrite-console
+    restart: unless-stopped
+    networks:
+      - konfitur-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.appwrite-console-dev.rule=Host(`localhost`) && PathPrefix(`/console`)"
+      - "traefik.http.routers.appwrite-console-dev.entrypoints=web"
+      - "traefik.http.routers.appwrite-console-dev.service=appwrite-console-dev"
+      - "traefik.http.services.appwrite-console-dev.loadbalancer.server.port=80"
+      - "traefik.docker.network=konfitur-net"
 
   # ────────────────────────────────────────────────────────
   # APPWRITE REALTIME — Désactivé dans Traefik dev
@@ -80,7 +110,7 @@ services:
   # Même besoin de networks explicites que appwrite ci-dessus
   # ────────────────────────────────────────────────────────
   appwrite-realtime:
-    image: appwrite/appwrite:1.5
+    image: appwrite/appwrite:1.8.0
     networks:
       - konfitur-net
       - appwrite-net

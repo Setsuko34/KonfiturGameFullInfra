@@ -74,7 +74,7 @@ function logAsync(request: NextRequest, siteUrl: string, type: string, message?:
   }).catch(() => {/* log optionnel */})
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname
   const projectId = process.env.NEXT_PUBLIC_APPWRITE_PROJECT_ID
   const sessionCookie = projectId
@@ -128,7 +128,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Exclure /api/ pour éviter la récursion middleware → /api/banned-ips → middleware
+    // Exclure /api/ pour éviter la récursion proxy → /api/banned-ips → proxy
     '/dashboard/:path*',
     '/admin/:path*',
     '/auth/:path*',
