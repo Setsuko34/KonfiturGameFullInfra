@@ -77,11 +77,15 @@ services:
       _APP_DOMAIN_TARGET_CNAME: localhost
       _APP_DOMAIN_TARGET_A: ""
       _APP_DOMAIN_TARGET_AAAA: ""
+      # Bug Appwrite 1.8 : si _APP_DOMAIN_SITES ou _APP_DOMAIN_FUNCTIONS est vide,
+      # str_ends_with($host, '') retourne true en PHP → RULE_NOT_FOUND sur toute requête /v1/.
+      # Fix : fournir des valeurs non-vides qui ne matchent pas "localhost".
+      _APP_DOMAIN_FUNCTIONS: functions.localhost
+      _APP_DOMAIN_SITES: sites.localhost
       # OAuth dev : Appwrite 1.8 force https:// + ajoute :80 par défaut
       # → Google/Discord reçoivent https://localhost:80/... (redirect_uri_mismatch).
       # On désactive le force HTTPS pour que le scheme reste http:// en dev.
       _APP_OPTIONS_FORCE_HTTPS: disabled
-      _APP_OPTIONS_ROUTER_PROTECTION: disabled
 
   # ────────────────────────────────────────────────────────
   # APPWRITE CONSOLE — SPA admin (container séparé depuis 1.7+)
