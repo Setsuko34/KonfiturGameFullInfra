@@ -108,10 +108,11 @@ services:
       - "traefik.docker.network=konfitur-net"
 
   # ────────────────────────────────────────────────────────
-  # APPWRITE REALTIME — Désactivé dans Traefik dev
-  # Le router prod utilise entrypoints=websecure qui n'existe
-  # pas dans traefik.dev.yml → Traefik dev planterait sans ce fix
-  # Même besoin de networks explicites que appwrite ci-dessus
+  # APPWRITE REALTIME — Routé via Traefik en dev
+  # En 1.8, realtime est un container séparé (entrypoint: realtime).
+  # Le SDK dérive ws://localhost/v1/realtime depuis NEXT_PUBLIC_APPWRITE_ENDPOINT.
+  # La règle PathPrefix(/v1/realtime) est plus spécifique que Host(localhost) seul
+  # → Traefik lui donne priorité sur le router appwrite-dev général.
   # ────────────────────────────────────────────────────────
   appwrite-realtime:
     image: appwrite/appwrite:1.8.0
@@ -119,9 +120,17 @@ services:
       - konfitur-net
       - appwrite-net
     labels:
-      - "traefik.enable=false"
-    ports:
-      - "9505:80"
+      - "traefik.enable=true"
+      - "traefik.http.routers.appwrite-realtime-dev.rule=Host(`localhost`) && PathPrefix(`/v1/realtime`)"
+      - "traefik.http.routers.appwrite-realtime-dev.entrypoints=web"
+      - "traefik.http.routers.appwrite-realtime-dev.service=appwrite-realtime-dev"
+      - "traefik.http.services.appwrite-realtime-dev.loadbalancer.server.port=80"
+      - "traefik.docker.network=konfitur-net"
+    environment:
+      _APP_OPTIONS_FORCE_HTTPS: disabled
+      _APP_DOMAIN: localhost
+      _APP_DOMAIN_FUNCTIONS: functions.localhost
+      _APP_DOMAIN_SITES: sites.localhost
 
   mariadb:
     ports:

@@ -28,18 +28,20 @@ const mockTeam = {
 }
 
 interface Props {
-  params: { teamId: string }
+  params: Promise<{ teamId: string }>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { teamId } = await params
   return {
     title: 'Équipe',
-    alternates: { canonical: `/team/${params.teamId}` },
+    alternates: { canonical: `/team/${teamId}` },
   }
 }
 
-export default function TeamPage({ params }: Props) {
-  const team = params.teamId === mockTeam.id ? mockTeam : null
+export default async function TeamPage({ params }: Props) {
+  const { teamId } = await params
+  const team = teamId === mockTeam.id ? mockTeam : null
   if (!team) notFound()
 
   return (
