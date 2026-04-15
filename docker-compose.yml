@@ -77,7 +77,7 @@ services:
   # APPWRITE — Backend (self-hosted)
   # ════════════════════════════════════════
   appwrite:
-    image: appwrite/appwrite:1.5
+    image: appwrite/appwrite:1.8.0
     container_name: konfitur-appwrite
     restart: unless-stopped
     volumes:
@@ -89,6 +89,9 @@ services:
       - _APP_ENV=production
       - _APP_DOMAIN=api.${DOMAIN}
       - _APP_DOMAIN_TARGET=api.${DOMAIN}
+      - _APP_DOMAIN_TARGET_CNAME=api.${DOMAIN}
+      - _APP_DOMAIN_TARGET_A=
+      - _APP_DOMAIN_TARGET_AAAA=
       - _APP_DOMAIN_FUNCTIONS=functions.${DOMAIN}
       - _APP_CONSOLE_WHITELIST_ROOT=enabled
       - _APP_CONSOLE_WHITELIST_EMAILS=${ADMIN_EMAIL}
@@ -120,10 +123,28 @@ services:
       - redis
 
   # ════════════════════════════════════════
+  # APPWRITE CONSOLE — SPA admin (extraite du container API depuis 1.7+)
+  # Route: https://api.${DOMAIN}/console → conteneur dédié
+  # ════════════════════════════════════════
+  appwrite-console:
+    image: appwrite/console:7.5.7
+    container_name: konfitur-appwrite-console
+    restart: unless-stopped
+    networks:
+      - konfitur-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.appwrite-console.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/console`)"
+      - "traefik.http.routers.appwrite-console.entrypoints=websecure"
+      - "traefik.http.routers.appwrite-console.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.appwrite-console.middlewares=security-headers"
+      - "traefik.http.services.appwrite-console.loadbalancer.server.port=80"
+
+  # ════════════════════════════════════════
   # APPWRITE WORKER — Realtime
   # ════════════════════════════════════════
   appwrite-realtime:
-    image: appwrite/appwrite:1.5
+    image: appwrite/appwrite:1.8.0
     container_name: konfitur-appwrite-realtime
     restart: unless-stopped
     entrypoint: realtime
@@ -192,7 +213,7 @@ services:
   # Requis pour que les attributs passent de "processing" à "available"
   # ════════════════════════════════════════
   appwrite-worker-databases:
-    image: appwrite/appwrite:1.5
+    image: appwrite/appwrite:1.8.0
     container_name: konfitur-appwrite-worker-databases
     restart: unless-stopped
     entrypoint: worker-databases

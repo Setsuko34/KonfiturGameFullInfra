@@ -9,11 +9,12 @@ import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'node-appwrite'
 import { mapDocToGameJam } from '@/lib/appwrite/types'
 
-interface Props { params: { userId: string } }
+interface Props { params: Promise<{ userId: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { userId } = await params
   try {
-    const user = await serverUsers.get(params.userId)
+    const user = await serverUsers.get(userId)
     return { title: user.name || 'Profil' }
   } catch {
     return { title: 'Profil introuvable' }
@@ -21,12 +22,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function PublicProfilePage({ params }: Props) {
+  const { userId } = await params
   let userName!: string
   let userBio: string | undefined
   let memberSince!: Date
 
   try {
-    const user = await serverUsers.get(params.userId)
+    const user = await serverUsers.get(userId)
     userName = user.name || 'Anonyme'
     userBio = (user.prefs as Record<string, unknown>)?.bio as string | undefined
     memberSince = new Date(user.$createdAt)
@@ -36,7 +38,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
   // Jams organisées
   const organizedRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
-    Query.equal('organizer_id', params.userId),
+    Query.equal('organizer_id', userId),
     Query.orderDesc('$createdAt'),
     Query.limit(6),
   ])

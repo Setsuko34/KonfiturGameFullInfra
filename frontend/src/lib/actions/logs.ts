@@ -142,7 +142,7 @@ export async function unbanIP(bannedIPId: string): Promise<void> {
 
 export async function clearOldLogs(olderThanDays = 30): Promise<{ deleted: number }> {
   // Vérification admin — seuls les membres de l'équipe admin peuvent purger les logs
-  const { account } = createSessionClient()
+  const { account } = await createSessionClient()
   const user = await account.get()
   const memberships = await serverTeams.listMemberships(ADMIN_TEAM_ID)
   const isAdmin = memberships.memberships.some(m => m.userId === user.$id)

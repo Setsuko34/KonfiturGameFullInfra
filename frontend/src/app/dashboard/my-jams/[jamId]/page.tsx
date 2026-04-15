@@ -7,19 +7,20 @@ import type { Metadata } from 'next'
 import EditJamForm from './EditJamForm'
 import AnnouncementForm from './AnnouncementForm'
 
-interface Props { params: { jamId: string } }
+interface Props { params: Promise<{ jamId: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: `Gestion jam` }
 }
 
 export default async function ManageJamPage({ params }: Props) {
+  const { jamId } = await params
   let data: Awaited<ReturnType<typeof getOrganizedJamDetails>>
   let announcements: Awaited<ReturnType<typeof getAnnouncementsByJam>>
   try {
     ;[data, announcements] = await Promise.all([
-      getOrganizedJamDetails(params.jamId),
-      getAnnouncementsByJam(params.jamId),
+      getOrganizedJamDetails(jamId),
+      getAnnouncementsByJam(jamId),
     ])
   } catch {
     notFound()

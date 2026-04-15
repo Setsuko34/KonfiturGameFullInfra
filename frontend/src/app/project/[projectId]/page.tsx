@@ -8,11 +8,12 @@ import { getCommentsByProject } from '@/lib/actions/comments'
 import ProjectInteractions from './ProjectInteractions'
 
 interface Props {
-  params: { projectId: string }
+  params: Promise<{ projectId: string }>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const project = await getProjectById(params.projectId)
+  const { projectId } = await params
+  const project = await getProjectById(projectId)
   if (!project) return { title: 'Projet introuvable', robots: { index: false } }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr'
@@ -40,9 +41,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ProjectPage({ params }: Props) {
+  const { projectId } = await params
   const [project, initialComments] = await Promise.all([
-    getProjectById(params.projectId),
-    getCommentsByProject(params.projectId),
+    getProjectById(projectId),
+    getCommentsByProject(projectId),
   ])
 
   if (!project) notFound()

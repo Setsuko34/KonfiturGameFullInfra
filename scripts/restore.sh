@@ -99,7 +99,7 @@ echo "────────────────────────�
 # =============================================================================
 # Variables et helpers API Appwrite
 # =============================================================================
-AW_ENDPOINT="${NEXT_PUBLIC_APPWRITE_ENDPOINT:-http://localhost:8080/v1}"
+AW_ENDPOINT="${NEXT_PUBLIC_APPWRITE_ENDPOINT:-http://localhost/v1}"
 AW_PROJECT="${NEXT_PUBLIC_APPWRITE_PROJECT_ID:-}"
 AW_KEY="${APPWRITE_API_KEY:-}"
 
@@ -478,9 +478,26 @@ case "$RESTORE_MODE" in
     if command -v jq &>/dev/null && [[ -n "$AW_PROJECT" && -n "$AW_KEY" ]]; then
       echo ""
       echo "🚀 Démarrage du stack complet pour restaurer les teams..."
-      docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d
-      echo "   Attente qu'Appwrite soit prêt (30s)..."
-      sleep 30
+      # Utiliser l'override dev s'il est présent (hot-reload, ports dev)
+      if [[ -f "$PROJECT_DIR/docker-compose.override.yml" ]]; then
+        docker compose -f "$PROJECT_DIR/docker-compose.yml" -f "$PROJECT_DIR/docker-compose.override.yml" up -d
+      else
+        docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d
+      fi
+      # Appwrite 1.8 démarre plusieurs workers + migrations → poll /health plutôt que sleep fixe
+      echo "   Attente qu'Appwrite soit prêt..."
+      local max_wait=120 waited=0
+      until curl -sf -H "X-Appwrite-Project: $AW_PROJECT" -H "X-Appwrite-Key: $AW_KEY" \
+        "${AW_ENDPOINT}/health" 2>/dev/null | jq -e '.status' &>/dev/null; do
+        sleep 5; waited=$((waited + 5))
+        echo -n "."
+        if [[ "$waited" -ge "$max_wait" ]]; then
+          echo ""
+          echo "   ⚠️  Timeout — Appwrite peut-être pas prêt. Relance le script en mode 3 manuellement."
+          break
+        fi
+      done
+      echo ""
       ( restore_teams ) || echo "   ⚠️  Restauration des teams ignorée"
     else
       echo ""

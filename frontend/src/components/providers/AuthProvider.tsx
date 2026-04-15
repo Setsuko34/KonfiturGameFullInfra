@@ -1,6 +1,7 @@
 'use client'
 
 import { createContext, useContext, useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { account } from '@/lib/appwrite/client'
 import { OAuthProvider } from 'appwrite'
 import type { Models } from 'appwrite'
@@ -19,6 +20,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<Models.User<Models.Preferences> | null>(null)
   const [loading, setLoading] = useState(true)
+  const router = useRouter()
 
   useEffect(() => {
     account.get()
@@ -48,8 +50,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const logout = async () => {
-    await account.deleteSession('current')
+    try {
+      await account.deleteSession('current')
+    } catch {
+      // Session déjà expirée ou invalide côté Appwrite — on nettoie quand même
+    }
     setUser(null)
+    router.push('/auth/login')
   }
 
   return (

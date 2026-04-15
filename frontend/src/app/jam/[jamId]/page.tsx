@@ -13,11 +13,12 @@ import { getProjectsByJam } from '@/lib/actions/projects'
 import { getChatMessages } from '@/lib/actions/chat'
 
 interface Props {
-  params: { jamId: string }
+  params: Promise<{ jamId: string }>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const jam = await getJamById(params.jamId)
+  const { jamId } = await params
+  const jam = await getJamById(jamId)
   if (!jam) return { title: 'Jam introuvable', robots: { index: false } }
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr'
@@ -53,12 +54,13 @@ const statusConfig = {
 }
 
 export default async function JamPage({ params }: Props) {
+  const { jamId } = await params
   const [jam, announcements, teams, projects, chatMessages] = await Promise.all([
-    getJamById(params.jamId),
-    getAnnouncementsByJam(params.jamId),
-    getTeamsByJam(params.jamId),
-    getProjectsByJam(params.jamId),
-    getChatMessages(params.jamId, 'general'),
+    getJamById(jamId),
+    getAnnouncementsByJam(jamId),
+    getTeamsByJam(jamId),
+    getProjectsByJam(jamId),
+    getChatMessages(jamId, 'general'),
   ])
 
   if (!jam) notFound()

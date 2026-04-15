@@ -17,7 +17,7 @@ export async function createOrganizerAnnouncement(
   if (!validation.valid) return { success: false, error: validation.error }
 
   try {
-    const { account } = createSessionClient()
+    const { account } = await createSessionClient()
     const user = await account.get()
 
     // Vérifier que l'utilisateur est bien l'organisateur
@@ -25,7 +25,6 @@ export async function createOrganizerAnnouncement(
     if (jamDoc.organizer_id !== user.$id) {
       return { success: false, error: 'Seul l\'organisateur peut publier des annonces' }
     }
-
     await serverDatabases.createDocument(
       DATABASE_ID,
       COLLECTIONS.ANNOUNCEMENTS,
@@ -35,9 +34,7 @@ export async function createOrganizerAnnouncement(
         content: data.content.trim(),
         jam_id: jamId,
         important: data.important,
-        author_id: user.$id,
-        author_name: user.name || user.email,
-      }
+        author_id: user.$id}
     )
 
     revalidatePath(`/dashboard/my-jams/${jamId}`)
@@ -56,7 +53,7 @@ export async function deleteOrganizerAnnouncement(
   announcementId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { account } = createSessionClient()
+    const { account } = await createSessionClient()
     const user = await account.get()
 
     // Vérifier propriété via la jam

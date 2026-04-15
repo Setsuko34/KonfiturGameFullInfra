@@ -60,14 +60,14 @@ describe('sendChatMessage — validation du contenu', () => {
 describe('sendChatMessage — sanitisation HTML', () => {
   it('échappe les chevrons ouvrants < en &lt;', async () => {
     await sendChatMessage({ ...baseData, content: '<script>alert(1)</script>' })
-    const savedContent: string = mockCreate.mock.calls[0][3].content as string
+    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
     expect(savedContent).toContain('&lt;script&gt;')
     expect(savedContent).not.toContain('<script>')
   })
 
   it('échappe uniquement < et >, pas les autres caractères spéciaux', async () => {
     await sendChatMessage({ ...baseData, content: 'test & "quotes" <tag>' })
-    const savedContent: string = mockCreate.mock.calls[0][3].content as string
+    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
     expect(savedContent).toBe('test & "quotes" &lt;tag&gt;')
   })
 })
@@ -75,19 +75,19 @@ describe('sendChatMessage — sanitisation HTML', () => {
 describe('sendChatMessage — troncature à 2048 caractères', () => {
   it('tronque les messages de plus de 2048 caractères', async () => {
     await sendChatMessage({ ...baseData, content: 'a'.repeat(3000) })
-    const savedContent: string = mockCreate.mock.calls[0][3].content as string
+    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
     expect(savedContent.length).toBe(2048)
   })
 
   it('tronque un message de 2049 caractères à 2048', async () => {
     await sendChatMessage({ ...baseData, content: 'a'.repeat(2049) })
-    const savedContent: string = mockCreate.mock.calls[0][3].content as string
+    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
     expect(savedContent.length).toBe(2048)
   })
 
   it('ne tronque pas les messages de 2048 caractères exactement', async () => {
     await sendChatMessage({ ...baseData, content: 'a'.repeat(2048) })
-    const savedContent: string = mockCreate.mock.calls[0][3].content as string
+    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
     expect(savedContent.length).toBe(2048)
   })
 })

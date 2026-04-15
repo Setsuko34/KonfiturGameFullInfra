@@ -107,7 +107,9 @@ echo "   ✅ project-config.tar.gz"
 # 4. Appwrite API Export : schéma, teams, documents
 #    (non-bloquant si Appwrite est inaccessible)
 # =============================================================================
-AW_ENDPOINT="${NEXT_PUBLIC_APPWRITE_ENDPOINT:-http://localhost:8080/v1}"
+# En dev, NEXT_PUBLIC_APPWRITE_ENDPOINT est dans docker-compose.override.yml (pas dans .env).
+# Fallback : localhost/v1 via Traefik (port 80) ou localhost:8080/v1 (les deux fonctionnent).
+AW_ENDPOINT="${NEXT_PUBLIC_APPWRITE_ENDPOINT:-http://localhost/v1}"
 AW_PROJECT="${NEXT_PUBLIC_APPWRITE_PROJECT_ID:-}"
 AW_KEY="${APPWRITE_API_KEY:-}"
 

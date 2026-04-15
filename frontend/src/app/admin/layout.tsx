@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 }
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-  const { account } = createSessionClient()
+  const { account } = await createSessionClient()
 
   // Vérification du membership team admins
   // 1. Récupérer l'utilisateur courant via sa session

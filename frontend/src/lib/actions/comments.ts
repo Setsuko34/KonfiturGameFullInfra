@@ -39,7 +39,7 @@ export async function addComment(data: {
   }
 
   try {
-    const { account } = createSessionClient()
+    const { account } = await createSessionClient()
     const user = await account.get()
 
     const doc = await serverDatabases.createDocument(

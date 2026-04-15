@@ -13,6 +13,7 @@ export default async function ProfilePage() {
   if (!user) {
     redirect('/auth/login?redirect=/dashboard/profile')
   }
+  const plainUser = JSON.parse(JSON.stringify(user)) as typeof user
 
   return (
     <section aria-labelledby="profile-heading">
@@ -27,7 +28,7 @@ export default async function ProfilePage() {
           })}
         </p>
       </div>
-      <ProfileForm user={user} />
+      <ProfileForm user={plainUser} />
     </section>
   )
 }
