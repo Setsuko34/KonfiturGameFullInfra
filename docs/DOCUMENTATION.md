@@ -632,7 +632,7 @@ La console Appwrite (`https://api.DOMAIN` ou `http://localhost:8080`) te permet 
 Base de données : konfitur-db
 │
 ├── game_jams         ← Les jams (titre, thème, dates, règles...)
-├── teams             ← Les équipes (nom, code d'invitation, chef)
+├── teams             ← Les équipes/guildes (jam_ids[], nom, code d'invitation, chef)
 ├── team_members      ← Qui est dans quelle équipe (avec son rôle)
 ├── projects          ← Les jeux soumis (avec votes)
 ├── chat_messages     ← Messages du chat en direct

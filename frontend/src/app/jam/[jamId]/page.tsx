@@ -11,6 +11,8 @@ import { generateJamJsonLd, truncateDescription } from '@/lib/seo'
 import { getTeamsByJam } from '@/lib/actions/teams'
 import { getProjectsByJam } from '@/lib/actions/projects'
 import { getChatMessages } from '@/lib/actions/chat'
+import { getUserTeams, getCurrentUser } from '@/lib/actions/dashboard'
+import JamTeamsSection from './JamTeamsSection'
 
 interface Props {
   params: Promise<{ jamId: string }>
@@ -55,6 +57,18 @@ const statusConfig = {
 
 export default async function JamPage({ params }: Props) {
   const { jamId } = await params
+
+  // Tenter de récupérer l'utilisateur connecté (peut échouer si non connecté)
+  let currentUser: { id: string; name: string } | null = null
+  let userTeamsData: Awaited<ReturnType<typeof getUserTeams>> = []
+  try {
+    const [u, t] = await Promise.all([getCurrentUser(), getUserTeams()])
+    currentUser = { id: u.$id, name: u.name }
+    userTeamsData = t
+  } catch {
+    // Non connecté — currentUser reste null
+  }
+
   const [jam, announcements, teams, projects, chatMessages] = await Promise.all([
     getJamById(jamId),
     getAnnouncementsByJam(jamId),
@@ -64,6 +78,18 @@ export default async function JamPage({ params }: Props) {
   ])
 
   if (!jam) notFound()
+
+  // Team de l'user dans cette jam
+  const userTeamInThisJam = currentUser
+    ? (userTeamsData.find(({ team }) => team.jamIds.includes(jamId))?.team ?? null)
+    : null
+
+  // Teams dont l'user est leader, pas encore inscrites à cette jam
+  const leaderTeamsNotInJam = currentUser
+    ? userTeamsData
+        .filter(({ isLeader, team }) => isLeader && !team.jamIds.includes(jamId))
+        .map(({ team }) => ({ id: team.id, name: team.name }))
+    : []
 
   const status = statusConfig[jam.status]
 
@@ -247,44 +273,15 @@ export default async function JamPage({ params }: Props) {
               </section>
 
               {/* Section Équipes */}
-              <section id="teams" aria-labelledby="teams-heading">
-                <h2 id="teams-heading" className="text-xl font-bold mb-4">
-                  Équipes ({teams.length})
-                </h2>
-                {teams.length > 0 ? (
-                  <div className="space-y-3">
-                    {teams.map(team => (
-                      <div
-                        key={team.id}
-                        className="p-4 border flex items-center justify-between"
-                        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-                      >
-                        <div>
-                          <p className="font-semibold">{team.name}</p>
-                          <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                            {team.members.length} membre{team.members.length !== 1 ? 's' : ''}
-                          </p>
-                        </div>
-                        <Link
-                          href={`/team/${team.id}`}
-                          className="text-xs font-semibold px-3 py-1.5"
-                          style={{
-                            background: 'var(--surface-elevated)',
-                            color: 'var(--primary)',
-                            border: '1px solid var(--border)',
-                          }}
-                        >
-                          Voir l&apos;équipe
-                        </Link>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    Aucune équipe inscrite pour l&apos;instant.
-                  </p>
-                )}
-              </section>
+              <JamTeamsSection
+                jamId={jam.id}
+                jamTitle={jam.title}
+                jamStatus={jam.status}
+                teams={teams}
+                currentUser={currentUser}
+                userTeamInThisJam={userTeamInThisJam}
+                leaderTeamsNotInJam={leaderTeamsNotInJam}
+              />
 
               {/* Section Projets */}
               <section id="projects" aria-labelledby="projects-heading">

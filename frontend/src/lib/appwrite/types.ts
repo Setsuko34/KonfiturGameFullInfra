@@ -31,12 +31,11 @@ export function mapDocToGameJam(doc: Models.Document): GameJam {
 export function mapDocToTeam(doc: Models.Document): Team {
   return {
     id: doc.$id,
-    jamId: doc.jam_id,
+    jamIds: doc.jam_ids ?? [],
     name: doc.name,
     inviteCode: doc.invite_code,
     leaderId: doc.leader_id,
     members: [],
-    projectId: doc.project_id,
   }
 }
 

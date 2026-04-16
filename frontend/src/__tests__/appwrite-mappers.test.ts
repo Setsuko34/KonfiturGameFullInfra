@@ -97,31 +97,37 @@ describe('mapDocToGameJam', () => {
 // mapDocToTeam
 // ────────────────────────────────────────
 describe('mapDocToTeam', () => {
-  it('mappe les champs requis et initialise members à []', () => {
+  it('mappe jam_ids comme tableau', () => {
     const team = mapDocToTeam(makeDoc({
-      jam_id: 'jam-1',
-      name: 'Pixel Makers',
+      jam_ids: ['jam-1', 'jam-2'],
+      name: 'Pixel Crew',
       invite_code: 'KG-ABCD1234',
       leader_id: 'user-1',
     }))
-    expect(team.id).toBe('doc-1')
-    expect(team.jamId).toBe('jam-1')
-    expect(team.name).toBe('Pixel Makers')
+    expect(team.jamIds).toEqual(['jam-1', 'jam-2'])
+    expect(team.name).toBe('Pixel Crew')
     expect(team.inviteCode).toBe('KG-ABCD1234')
     expect(team.leaderId).toBe('user-1')
-    expect(team.members).toEqual([])
-    expect(team.projectId).toBeUndefined()
   })
 
-  it('mappe projectId quand présent', () => {
+  it('retourne un tableau vide pour une guilde sans jam', () => {
     const team = mapDocToTeam(makeDoc({
-      jam_id: 'jam-1',
-      name: 'Team X',
-      invite_code: 'KG-ABCD1234',
-      leader_id: 'user-1',
-      project_id: 'proj-42',
+      jam_ids: [],
+      name: 'Guilde Solo',
+      invite_code: 'KG-ZZZZZZZZ',
+      leader_id: 'user-2',
     }))
-    expect(team.projectId).toBe('proj-42')
+    expect(team.jamIds).toEqual([])
+  })
+
+  it("n'a pas de propriété projectId", () => {
+    const team = mapDocToTeam(makeDoc({
+      jam_ids: ['jam-1'],
+      name: 'Team',
+      invite_code: 'KG-AAAAAAAA',
+      leader_id: 'user-1',
+    }))
+    expect('projectId' in team).toBe(false)
   })
 })
 

@@ -36,12 +36,12 @@ export interface TeamMember {
 
 export interface Team {
   id: string
-  jamId: string
+  jamIds: string[]       // tableau — [] = guilde pure
   name: string
   inviteCode: string
   leaderId: string
   members: TeamMember[]
-  projectId?: string
+  // projectId supprimé — requête projects par team_id + jam_id
 }
 
 export interface Project {

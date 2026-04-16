@@ -34,11 +34,15 @@ export async function submitProject(data: {
   repoUrl?: string
 }): Promise<{ success: boolean; projectId?: string; error?: string }> {
   try {
-    // Vérifier si un projet existe déjà pour cette équipe
+    // Vérifier si un projet existe déjà pour cette équipe dans cette jam
     const existing = await serverDatabases.listDocuments(
       DATABASE_ID,
       COLLECTIONS.PROJECTS,
-      [Query.equal('team_id', data.teamId), Query.limit(1)]
+      [
+        Query.equal('team_id', data.teamId),
+        Query.equal('jam_id', data.jamId),
+        Query.limit(1),
+      ]
     )
 
     if (existing.documents.length > 0) {
@@ -127,6 +131,26 @@ export async function getProjectById(projectId: string): Promise<Project | null>
   try {
     const doc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId)
     return mapDocToProject(doc)
+  } catch {
+    return null
+  }
+}
+
+export async function getProjectByTeamAndJam(
+  teamId: string,
+  jamId: string
+): Promise<Project | null> {
+  try {
+    const res = await serverDatabases.listDocuments(
+      DATABASE_ID,
+      COLLECTIONS.PROJECTS,
+      [
+        Query.equal('team_id', teamId),
+        Query.equal('jam_id', jamId),
+        Query.limit(1),
+      ]
+    )
+    return res.documents.length > 0 ? mapDocToProject(res.documents[0]) : null
   } catch {
     return null
   }

@@ -23,6 +23,7 @@ FONCTIONNALITÉS :
 3. Possibilité de modifier une jam en cours (correction mineure seulement) 
 4. Ajouter des logs pour l'admin pour voir tout les crash et autre, suivre les connexions a l'app (voir une map des emplacement, autoban les bot qui scanne le web etc etc )
 5. Améliorer le SEO de toute l'app
+6. ✅ Gestion des équipes multi-jam (guildes) — création, invitation, inscription à plusieurs jams, gestion des rôles, suppression
    Récapitulatif de l'implémentation
 
 ┌─────────────────────────────────┬───────────────┬────────────────────────────────────┐                                                

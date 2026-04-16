@@ -178,11 +178,11 @@ wait_attrs game_jams
 echo
 echo '── teams ────────────────────────────'
 new_col teams teams
-astr teams jam_id      36  true
-astr teams name       256  true
+astr teams jam_ids      36  false  true  # array — [] = guilde sans jam
+astr teams name        256  true
 astr teams invite_code  16  true
-astr teams leader_id   36  true
-astr teams project_id  36  false
+astr teams leader_id    36  true
+# project_id supprimé — projets normalisés dans la collection projects (team_id + jam_id)
 wait_attrs teams
 
 echo
