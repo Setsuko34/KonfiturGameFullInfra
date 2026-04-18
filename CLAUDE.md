@@ -1,6 +1,6 @@
 # KonfiturGame — Guide Claude
 
-Plateforme française de Game Jams. Stack: Next.js 14 (App Router), TypeScript strict, Tailwind CSS v4, Appwrite 1.5 self-hosted, Traefik v3.6.7, Docker Compose.
+Plateforme française de Game Jams. Stack: Next.js 16.2.3 (App Router), TypeScript strict, Tailwind CSS v4, Appwrite 1.8.0 self-hosted, Traefik v3.6.7, Docker Compose.
 
 ---
 
@@ -16,18 +16,19 @@ KonfiturGameFullInfra/
 │   ├── traefik.yml             # Config prod (ACME, web+websecure)
 │   ├── traefik.dev.yml         # Config dev (HTTP only, port 80+8080)
 │   └── dynamic/middlewares.yml # security-headers, rate-limit, compress
-├── scripts/                    # seed-data.ts, backup.sh, restore.sh
+├── scripts/                    # seed-data.sh, backup.sh, restore.sh
 └── frontend/                   # App Next.js
     ├── Dockerfile              # PROD (build optimisé)
     ├── Dockerfile.dev          # DEV (hot-reload)
     └── src/
         ├── app/                # Next.js App Router
-        ├── components/         # Header, Footer, JamCard, JamChat…
+        ├── components/         # Header, Footer, JamCard, JamChat, FooterCTA…
         ├── lib/
-        │   ├── appwrite/       # client.ts (browser), server.ts (Server Actions)
-        │   └── actions/        # jams.ts, teams.ts, projects.ts, chat.ts
+        │   ├── appwrite/       # client.ts, server.ts, config.ts, types.ts, session.ts
+        │   └── actions/        # jams.ts, teams.ts, projects.ts, chat.ts, profile.ts, logs.ts…
         ├── hooks/              # useRealtimeChat.ts
-        ├── middleware.ts       # Protège /dashboard, redirige /auth/login
+        ├── proxy.ts            # Middleware bot-detection + ban IP (s'exécute avant middleware.ts)
+        ├── middleware.ts       # Protège /dashboard + /admin, redirige /auth/login
         └── types/index.ts
 ```
 
@@ -62,13 +63,26 @@ KonfiturGameFullInfra/
 
 ## Appwrite
 
+- **Version:** 1.8.0
 - **Database:** `konfitur-db`
-- **Collections:** `game_jams`, `teams`, `team_members`, `projects`, `chat_messages`, `announcements`, `comments`, `votes`
+- **Collections:** `game_jams`, `teams`, `team_members`, `projects`, `chat_messages`, `announcements`, `comments`, `votes`, `audit_logs`, `banned_ips`
 - **Buckets:** `jam-covers`, `project-assets`, `avatars`
 - **IDs définis dans:** `frontend/src/lib/appwrite/config.ts` — toujours importer de là
 - `APPWRITE_API_KEY` → server only, jamais préfixer `NEXT_PUBLIC_`
 - `APPWRITE_INTERNAL_ENDPOINT` → utilisé dans `server.ts` pour les Server Actions (réseau Docker interne)
 - Realtime: `databases.{DB}.collections.{COL}.documents`
+
+### Schéma `teams` (guildes multi-jam)
+```ts
+// teams collection — schéma actuel
+jam_ids: string[]   // tableau — [] = guilde pure sans jam active
+name: string
+invite_code: string // format KG-XXXXXXXX
+leader_id: string
+// project_id SUPPRIMÉ — projets retrouvés par (team_id, jam_id)
+```
+
+Query pour les équipes d'une jam : `Query.contains('jam_ids', jamId)`
 
 ---
 
@@ -104,6 +118,13 @@ import { account, databases } from '@/lib/appwrite/client'
 import { serverDatabases } from '@/lib/appwrite/server'
 ```
 
+### Tests
+```bash
+# Les tests DOIVENT tourner dans le container (node_modules uniquement là)
+docker exec konfitur-frontend sh -c "cd /app && npx vitest run"
+docker exec konfitur-frontend sh -c "cd /app && npx vitest run src/__tests__/actions-teams.test.ts"
+```
+
 ### Accessibilité obligatoire
 - `html lang="fr"`, skip-link `#main-content`, hiérarchie h1>h2>h3
 - `:focus-visible` outline 2px primary, touch targets 44×44px mobile
@@ -119,7 +140,7 @@ import { serverDatabases } from '@/lib/appwrite/server'
 docker compose up
 
 # Seed Appwrite (après avoir rempli APPWRITE_API_KEY dans .env)
-cd frontend && npx tsx ../scripts/seed-data.ts
+./scripts/seed-data.sh
 
 # Build frontend seul
 cd frontend && pnpm build
@@ -130,10 +151,20 @@ cd frontend && pnpm type-check
 # Linting
 cd frontend && pnpm lint
 
+# Tests (dans le container)
+docker exec konfitur-frontend sh -c "cd /app && npx vitest run"
+
+# Migration Appwrite (après upgrade de version)
+docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate
+
 # Générer pnpm-lock.yaml sur Windows FS (EACCES sur /mnt/c/...)
 mkdir -p /tmp/pnpm-gen && cp frontend/package.json /tmp/pnpm-gen/
 docker run --rm -v /tmp/pnpm-gen:/app -w /app node:20-alpine sh -c "corepack enable pnpm && pnpm install --no-frozen-lockfile"
 cp /tmp/pnpm-gen/pnpm-lock.yaml frontend/
+
+# Reprise d'une backup 
+bash ./scripts/restore.sh ./backups/2026-xx-xx_xx-xx-xx
+# choisir en premier mode 1 
 ```
 
 ---
@@ -145,9 +176,10 @@ cp /tmp/pnpm-gen/pnpm-lock.yaml frontend/
 - **appwrite-realtime crash Traefik dev** — `traefik.enable=false` dans l'override (entrypoint `websecure` absent de `traefik.dev.yml`)
 - **ADMIN_EMAIL ACME vide** — passer `ADMIN_EMAIL` dans `environment:` du service Traefik (pas depuis `.env` Docker Compose)
 - **CSP `connect-src` hardcodée** — Traefik file provider ne substitue pas les vars d'env → modifier `middlewares.yml` manuellement en prod
-- **Redis sans `--requirepass`** — Appwrite 1.5 a un bug dans Queue\Connection\Redis qui n'envoie jamais AUTH → jobs de queue jamais publiés. Redis isolé sur `appwrite-net` uniquement.
+- **Redis sans `--requirepass`** — Appwrite a un bug dans Queue\Connection\Redis qui n'envoie jamais AUTH → Redis isolé sur `appwrite-net` uniquement
 - **pnpm-lock.yaml sur Windows FS** — générer dans `/tmp` (voir commande ci-dessus)
-- **OAuth fonctionnel après reprise backup**
+- **Appwrite 500 "Unknown attribute: devKeys"** — après upgrade depuis 1.6.x : lancer `docker exec konfitur-appwrite php .../cli.php migrate` puis `docker restart konfitur-appwrite`
+- **`node_modules` Docker corrompu** — si `frontend/node_modules` est un fichier texte (artefact worktree git) : `rm frontend/node_modules && git rm --cached frontend/node_modules`
 
 ---
 
@@ -155,8 +187,9 @@ cp /tmp/pnpm-gen/pnpm-lock.yaml frontend/
 
 - Cookie Appwrite: `a_session_{APPWRITE_PROJECT_ID}` — lu dans `middleware.ts`
 - `AuthProvider` (`src/components/providers/AuthProvider.tsx`) — expose `useAuth()`
-- Middleware protège `/dashboard`, redirige vers `/auth/login?redirect=...`
-- OAuth Google + Discord implémenté UI fonctionnel 
+- Middleware protège `/dashboard` et `/admin`, redirige vers `/auth/login?redirect=...`
+- Layout admin vérifie l'appartenance à `ADMIN_TEAM_ID` → `notFound()` si non-admin
+- OAuth Google + Discord implémenté et fonctionnel
 
 ---
 

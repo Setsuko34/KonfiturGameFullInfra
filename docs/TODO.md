@@ -1,54 +1,74 @@
-Reste a faire ! 
+# KonfiturGame — Roadmap & TODO
 
-- [ ] Ajouter une section "Contributing" pour encourager les contributions à la documentation.
-- [ ] Ajouter une section "License" pour préciser les droits d'utilisation de la documentation.
-- [ ] Ajouter une section "Contact" pour fournir des informations de contact en cas de questions ou de problèmes.
-- [ ] Ajouter une section "Changelog" pour documenter les changements majeurs dans la documentation au fil du temps.
-- [ ] Ajouter des liens vers des ressources externes utiles, comme la documentation officielle d'Appwrite, des tutoriels, ou des forums de discussion.
-- [ ] Ajouter une section "FAQ" pour répondre aux questions fréquemment posées sur le projet, l'installation, ou l'utilisation.
-- [ ] Ajouter des captures d'écran ou des diagrammes pour illustrer les étapes d'installation, la structure du projet, ou les flux de travail.
-- [ ] Ajouter des exemples de commandes Docker Compose pour démarrer, arrêter, ou dépanner l'environnement de développement.
-- [ ] Ajouter des instructions pour la mise à jour de l'environnement de développement, notamment comment gérer les mises à jour d'Appwrite ou des dépendances.
-  - [ ] Ajouter des conseils pour le dépannage des problèmes courants, comme les erreurs de connexion à la base de données, les problèmes d'authentification, ou les erreurs de configuration de Traefik.
-  
-TEST : 
-1. Ajout des test unitaires 
-2. Ajout des test fonctionnels 
-3. Vérification du bon fonctionnement de realtime
-4. Redirection vers FRVTuber (car projet imaginer par eux)
+## FONCTIONNALITÉS
 
-FONCTIONNALITÉS :
-1. Possibilité d'acceder a son profil, de le gérer, modifier, et de le supprimer
-2. Annonces publiables par les organisateurs sur leurs Jams uniquement
-3. Possibilité de modifier une jam en cours (correction mineure seulement) 
-4. Ajouter des logs pour l'admin pour voir tout les crash et autre, suivre les connexions a l'app (voir une map des emplacement, autoban les bot qui scanne le web etc etc )
-5. Améliorer le SEO de toute l'app
-6. ✅ Gestion des équipes multi-jam (guildes) — création, invitation, inscription à plusieurs jams, gestion des rôles, suppression
-   Récapitulatif de l'implémentation
+### Terminées ✅
+- [x] Gestion des équipes multi-jam (guildes) — création, invitation, inscription à plusieurs jams, gestion des rôles, suppression
+- [x] Gestion du profil utilisateur — modifier nom, bio, mot de passe, supprimer le compte
+- [x] Annonces publiables par les organisateurs sur leurs jams uniquement
+- [x] Édition d'une jam en cours (correction mineure : description, règles, prix, tags, max participants)
+- [x] Logs d'audit admin — voir les actions, crash, connexions
+- [x] Ban IP — détecter les bots, bannir des IPs depuis le panel admin
+- [x] SEO — sitemap dynamique, robots.txt, Open Graph, JSON-LD
 
-┌─────────────────────────────────┬───────────────┬────────────────────────────────────┐                                                
-│             Fichier             │     Tests     │       Bugs trouvés en route        │                                                
-├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
-│ appwrite-mappers.test.ts        │ 15            │ —                                  │                                                
-├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
-│ profile-validators.test.ts      │ +7 (total 15) │ Bug NaN dans validators.ts corrigé │                                                
-├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
-│ actions-profile.test.ts         │ 10            │ Asymétrie trim bio documentée      │                                                
-├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
-│ actions-chat.test.ts            │ 9             │ —                                  │                                                
-├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
-│ actions-teams.test.ts           │ 6             │ —                                  │                                                
-├─────────────────────────────────┼───────────────┼────────────────────────────────────┤                                                
-│ vitest.config.ts + package.json │ —             │ —                                  │                                                
-└─────────────────────────────────┴───────────────┴────────────────────────────────────┘
+### À faire
+- [ ] Améliorer le SEO (structured data plus riche, meta descriptions par page)
+- [ ] Page publique de profil `/profile/[userId]` — à finaliser côté design
+- [ ] Redirection vers FRVTubers (car projet imaginé par eux)
+- [ ] Ajouter Jam_id dans la table votes pour limiter à un vote par user par jam 
 
-PROD : 
-1. Mettre en place l'environnement de production (Docker Compose ou Kubernetes)
-2. Prendre un VPS pour héberger l'application
-3. Configurer le nom de domaine KonfiturGame.fr
-4. Configurer les certificats SSL avec Let's Encrypt
-5. Mettre en place de la surveillance et des alertes pour l'application en production
-6. Effectuer des tests de charge pour s'assurer que l'application peut gérer le trafic attendu
-7. Mettre en place un processus de déploiement continu pour faciliter les mises à jour
-8. Documenter le processus de déploiement et les étapes à suivre pour les mises à jour futures
-9. Assurer la sécurité de l'application en production, notamment en configurant correctement les pare-feu, en utilisant des mots de passe forts, et en appliquant les mises à jour de sécurité régulièrement.
+---
+
+## TESTS
+
+| Fichier | Tests | Notes |
+|---------|-------|-------|
+| `appwrite-mappers.test.ts` | 15 | Mappers Appwrite → types TS |
+| `profile-validators.test.ts` | 15 | Validators formulaire profil (bug NaN corrigé) |
+| `actions-profile.test.ts` | 10 | Actions serveur profil |
+| `actions-chat.test.ts` | 9 | Actions serveur chat |
+| `actions-teams.test.ts` | 6 | Actions serveur équipes/guildes |
+| `bot-detection.test.ts` | — | Bot detection |
+| `seo.test.ts` | — | SEO helpers |
+
+### À faire — Tests
+- [ ] Tests fonctionnels (end-to-end)
+- [ ] Vérification du bon fonctionnement du realtime (Appwrite WebSocket)
+- [ ] Améliorer la couverture des `actions-profile.test.ts` (10 tests en échec connu — fonctions non exportées)
+
+---
+
+## PRODUCTION
+
+- [ ] Prendre un VPS pour héberger l'application
+- [ ] Configurer le nom de domaine KonfiturGame.fr
+- [ ] Configurer les certificats SSL avec Let's Encrypt (Traefik + ACME)
+- [ ] Configurer les DNS (A records: konfiturgame.fr, api., traefik.)
+- [ ] Configurer OAuth Google & Discord avec les redirect URIs de production
+- [ ] Mettre en place la surveillance et les alertes (Uptime Robot, Grafana…)
+- [ ] Effectuer des tests de charge
+- [ ] Mettre en place un processus de déploiement continu (CI/CD)
+- [ ] Sécuriser le pare-feu serveur (ports 80, 443 uniquement)
+- [ ] Automatiser les backups quotidiens (cron)
+- [ ] Configurer la rotation des logs Docker (`daemon.json`)
+
+---
+
+## DOCUMENTATION À COMPLÉTER
+
+- [x] Ajouter une section "Contributing" dans README
+- [x] Ajouter une section "Contact" (lien FRVtubers) dans README
+- [x] Diagramme ERD de la base de données (`docs/DATABASE.md`)
+- [ ] Définir la licence (MIT ? CC BY-NC ?)
+- [ ] Captures d'écran / screenshots pour la doc
+
+---
+
+## PIÈGES CONNUS (à ne pas oublier)
+
+| Problème | Solution |
+|----------|----------|
+| `devKeys` Unknown attribute au démarrage Appwrite | Lancer `docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate` puis redémarrer |
+| `node_modules` corrompu (worktree artifact commité) | `rm frontend/node_modules && git rm --cached frontend/node_modules` |
+| Tests sur host échouent | Lancer via `docker exec konfitur-frontend sh -c "cd /app && npx vitest run ..."` |
+| `pnpm-lock.yaml` EACCES sur WSL2 | Générer dans `/tmp` (voir CLAUDE.md) |

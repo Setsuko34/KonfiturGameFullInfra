@@ -333,18 +333,28 @@ docker compose -f docker-compose.yml up -d frontend
 ### Mettre à jour Appwrite
 
 ```bash
-# 1. Mettre à jour le tag d'image dans docker-compose.yml (ex: 1.5 → 1.6)
-# 2. Tirer les nouvelles images
+# 1. Faire un backup AVANT toute mise à jour (voir §8)
+./scripts/backup.sh
+
+# 2. Mettre à jour le tag d'image dans docker-compose.yml (ex: 1.8.0 → 1.9.0)
+
+# 3. Tirer les nouvelles images
 docker compose -f docker-compose.yml pull appwrite appwrite-realtime appwrite-worker-databases
 
-# 3. Redémarrer — Appwrite lance les migrations automatiquement au démarrage
+# 4. Redémarrer
 docker compose -f docker-compose.yml up -d appwrite appwrite-realtime appwrite-worker-databases
 
-# 4. Vérifier que les migrations sont terminées
-docker compose logs -f appwrite | grep -i "migrat"
+# 5. Lancer les migrations manuellement (recommandé — évite les erreurs de schéma)
+docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate
+
+# 6. Redémarrer Appwrite pour vider le cache
+docker compose -f docker-compose.yml restart appwrite
+
+# 7. Vérifier l'absence d'erreurs
+docker compose logs -f appwrite | grep -i "error\|migrat"
 ```
 
-> **Important :** Faire un backup avant toute mise à jour Appwrite (voir §8).
+> **Important :** Ne pas sauter l'étape `migrate` — Appwrite ne migre pas toujours automatiquement les métadonnées des collections lors d'un upgrade de version majeure (ex: 1.6→1.8 : erreur "Unknown attribute: devKeys" sans migration manuelle).
 
 ### Mettre à jour Traefik
 
@@ -713,7 +723,7 @@ TRAEFIK_DASHBOARD_AUTH=admin:<hash htpasswd -nB>
 NEXT_PUBLIC_SITE_URL=https://konfiturgame.fr
 ```
 
-> **Note Redis :** `REDIS_PASSWORD` n'est pas utilisé — Redis tourne sans auth en prod car Appwrite 1.5 ne supporte pas AUTH Redis. Redis est sur le réseau `appwrite-net` (isolé, non exposé).
+> **Note Redis :** `REDIS_PASSWORD` n'est pas utilisé — Redis tourne sans auth en prod car Appwrite 1.8.0 ne supporte pas AUTH Redis. Redis est sur le réseau `appwrite-net` (isolé, non exposé).
 
 ---
 
@@ -734,4 +744,4 @@ SITE                   → https://konfiturgame.fr
 
 ---
 
-*Guide Production — KonfiturGame · Stack : Next.js 15 · Appwrite 1.5 · Traefik v3 · Docker Compose v2*
+*Guide Production — KonfiturGame · Stack : Next.js 16.2.3 · Appwrite 1.8.0 · Traefik v3.6.7 · Docker Compose v2 · Mise à jour : 2026-04-16*

@@ -32,16 +32,18 @@
 KonfiturGame est une **plateforme web de game jams** (compétitions de création de jeux vidéo).
 Elle permet de :
 - Créer et rejoindre des game jams
-- Former des équipes avec un code d'invitation
-- Soumettre et noter des projets
+- Former des guildes (équipes persistantes réutilisables sur plusieurs jams)
+- Soumettre et voter pour des projets
 - Chatter en temps réel pendant la jam
+- Gérer son profil utilisateur
+- Administrer la plateforme (utilisateurs, modération, logs, ban IP)
 
 **Ce projet est découpé en deux grandes parties :**
 
 | Partie | Rôle | Technologie |
-|---|---|---|
-| **Frontend** | L'interface web que l'utilisateur voit | Next.js 15 (React) |
-| **Backend** | La base de données, l'auth, le stockage | Appwrite 1.5 |
+|--------|------|-------------|
+| **Frontend** | L'interface web que l'utilisateur voit | Next.js 16.2.3 (React) |
+| **Backend** | La base de données, l'auth, le stockage | Appwrite 1.8.0 |
 
 Les deux sont **conteneurisés dans Docker** et exposés sur internet via **Traefik** (le reverse proxy).
 
@@ -64,7 +66,7 @@ Internet
 ┌────────────┐    ┌────────────────────────────────┐
 │  FRONTEND  │    │          APPWRITE              │
 │  Next.js   │    │  (Auth + DB + Realtime +       │
-│  port 3000 │    │   Storage + Functions)          │
+│  port 3000 │    │   Storage)                     │
 └────────────┘    └──────────────┬─────────────────┘
                                  │
                     ┌────────────┴────────────┐
@@ -81,7 +83,7 @@ Internet
 1. L'utilisateur tape `konfiturgame.fr` dans son navigateur
 2. **Traefik** reçoit la requête, vérifie le certificat TLS, et la redirige vers **Next.js**
 3. **Next.js** génère la page (côté serveur) et la renvoie
-4. Le navigateur de l'utilisateur charge la page. Depuis le navigateur, les appels à l'API Appwrite vont vers `api.konfiturgame.fr`
+4. Depuis le navigateur, les appels à l'API Appwrite vont vers `api.konfiturgame.fr`
 5. **Traefik** route `api.konfiturgame.fr` vers **Appwrite**
 
 ### Les réseaux Docker
@@ -104,8 +106,8 @@ MariaDB et Redis ne sont **jamais exposés** directement. Seul Appwrite peut leu
 
 - Il gère automatiquement les certificats HTTPS via Let's Encrypt (renouvellement automatique)
 - Il redirige HTTP → HTTPS
-- Il route les requêtes vers le bon service selon le domaine (`konfiturgame.fr` → Next.js, `api.konfiturgame.fr` → Appwrite)
-- Il applique des règles de sécurité (headers HTTP, rate limiting)
+- Il route les requêtes vers le bon service selon le domaine
+- Il applique des règles de sécurité (headers HTTP, rate limiting, CSP)
 - Il possède un dashboard web d'administration
 
 ### Next.js (Frontend)
@@ -114,6 +116,7 @@ MariaDB et Redis ne sont **jamais exposés** directement. Seul Appwrite peut leu
 - Il génère les pages HTML côté serveur (Server-Side Rendering) pour les performances et le SEO
 - Il contient toute la logique métier frontend (formulaires, navigation, état)
 - Il communique avec Appwrite pour lire/écrire des données
+- Il intègre un middleware de bot-detection (`proxy.ts`) qui bloque les IPs bannies
 - En production, il tourne dans un conteneur Docker minimal (Node.js alpine)
 
 ### Appwrite
@@ -123,10 +126,10 @@ Il fournit d'office :
 - **Auth** : inscription, connexion, sessions, OAuth (Google, Discord)
 - **Database** : base de données NoSQL avec permissions granulaires
 - **Realtime** : WebSocket pour le chat en direct
-- **Storage** : stockage de fichiers (images de couverture, screenshots)
-- **Functions** : fonctions serverless (optionnel)
+- **Storage** : stockage de fichiers (images de couverture, screenshots, avatars)
 
-Appwrite a sa propre **console web** d'administration accessible sur `api.konfiturgame.fr`.
+Appwrite a sa propre **console web** d'administration.
+> **Note Appwrite 1.8.0 :** Si la console renvoie une erreur 500 au premier démarrage après une migration depuis une ancienne version, lancer `docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate` puis redémarrer le container.
 
 ### Appwrite Realtime
 C'est un **worker séparé** d'Appwrite qui gère uniquement les connexions WebSocket.
@@ -140,7 +143,7 @@ Le chat en direct passe par lui. Il est routé séparément par Traefik via le p
 - Accélérer les requêtes fréquentes
 - Transmettre les événements Realtime entre les workers
 
-> **Note Redis :** Redis tourne sans mot de passe (`--requirepass` désactivé) car Appwrite 1.5 a un bug dans `Queue\Connection\Redis` — il n'envoie jamais la commande `AUTH`. Redis est sur `appwrite-net` (réseau isolé, non exposé vers l'extérieur), donc ce n'est pas un risque de sécurité.
+> **Note Redis :** Redis tourne sans mot de passe (`--requirepass` désactivé) car Appwrite a un bug dans `Queue\Connection\Redis` — il n'envoie jamais la commande `AUTH`. Redis est sur `appwrite-net` (réseau isolé, non exposé), donc ce n'est pas un risque de sécurité.
 
 ---
 
@@ -172,7 +175,9 @@ KonfiturGameFullInfra/
 │
 ├── docs/
 │   ├── DOCUMENTATION.md        ← Ce fichier
-│   └── PRODUCTION.md           ← Guide de déploiement production
+│   ├── PRODUCTION.md           ← Guide de déploiement production
+│   ├── TODO.md                 ← Roadmap et fonctionnalités
+│   └── MEMORY.md               ← Historique des sessions de développement
 │
 └── frontend/                   ← L'application Next.js
     ├── Dockerfile              ← Build de production (multi-stage)
@@ -180,8 +185,7 @@ KonfiturGameFullInfra/
     ├── package.json
     ├── next.config.mjs
     ├── tsconfig.json
-    ├── postcss.config.mjs
-    ├── analyse_ui_ux.md        ← Analyse UI/UX des pages (générée)
+    ├── vitest.config.ts        ← Configuration des tests unitaires
     ├── public/                 ← Fichiers statiques (favicon, images locales)
     └── src/
         ├── app/                ← Routes Next.js (App Router)
@@ -189,6 +193,8 @@ KonfiturGameFullInfra/
         ├── lib/                ← Utilitaires, SDK Appwrite, actions serveur
         ├── hooks/              ← Custom React hooks
         ├── types/              ← Types TypeScript
+        ├── __tests__/          ← Tests unitaires Vitest
+        ├── proxy.ts            ← Middleware bot-detection + ban IP
         └── middleware.ts       ← Protection des routes (auth)
 ```
 
@@ -201,27 +207,82 @@ src/app/
 ├── globals.css                 ← Styles globaux + variables CSS
 ├── error.tsx                   ← Page d'erreur générique
 ├── not-found.tsx               ← Page 404
+├── sitemap.ts                  ← Sitemap dynamique (SEO)
+├── robots.ts                   ← robots.txt dynamique (SEO)
+│
+├── og/route.tsx                ← Open Graph image dynamique
+│
+├── api/
+│   ├── banned-ips/route.ts     ← API route : liste des IPs bannies (lue par proxy.ts)
+│   └── log/route.ts            ← API route : enregistrement des logs côté client
 │
 ├── explore/
-│   └── page.tsx                ← /explore — Toutes les jams avec filtres
+│   ├── page.tsx                ← /explore — Toutes les jams
+│   └── ExploreGrid.tsx         ← Grille + filtres (Client Component)
 │
 ├── jam/[jamId]/
 │   ├── page.tsx                ← /jam/:id — Détail d'une jam
+│   ├── JamTeamsSection.tsx     ← Section équipes avec actions contextuelles (Client)
 │   └── loading.tsx             ← Skeleton affiché pendant le chargement
 │
 ├── team/[teamId]/
-│   └── page.tsx                ← /team/:id — Page d'une équipe
+│   └── page.tsx                ← /team/:id — Page publique d'une équipe
 │
 ├── project/[projectId]/
-│   └── page.tsx                ← /project/:id — Page d'un projet soumis
+│   ├── page.tsx                ← /project/:id — Page d'un projet soumis
+│   └── ProjectInteractions.tsx ← Votes et commentaires (Client Component)
+│
+├── profile/[userId]/
+│   └── page.tsx                ← /profile/:id — Page publique d'un profil
 │
 ├── dashboard/
-│   ├── layout.tsx
-│   └── page.tsx                ← /dashboard — Espace organisateur (protégé)
+│   ├── layout.tsx              ← Layout dashboard (sidebar)
+│   ├── page.tsx                ← /dashboard — Vue d'ensemble
+│   ├── DashboardSidebar.tsx    ← Sidebar navigation
+│   ├── participations/
+│   │   └── page.tsx            ← /dashboard/participations
+│   ├── team/
+│   │   ├── page.tsx            ← /dashboard/team — Mes guildes (Server Component)
+│   │   ├── TeamPageClient.tsx  ← Wrapper client (modales)
+│   │   ├── TeamCard.tsx        ← Card d'une guilde (rôles, membres, jams, actions)
+│   │   ├── CreateTeamModal.tsx ← Modal création de guilde
+│   │   ├── JoinTeamModal.tsx   ← Modal rejoindre via code
+│   │   └── SubmitProjectForm.tsx ← Formulaire soumission projet (dans TeamCard)
+│   ├── profile/
+│   │   ├── page.tsx            ← /dashboard/profile — Modifier son profil
+│   │   └── ProfileForm.tsx     ← Formulaire profil (nom, bio, mdp, suppression)
+│   └── my-jams/
+│       ├── page.tsx            ← /dashboard/my-jams — Mes jams organisées
+│       ├── new/page.tsx        ← /dashboard/my-jams/new — Créer une jam
+│       └── [jamId]/
+│           ├── page.tsx        ← /dashboard/my-jams/:id — Gérer une jam
+│           ├── EditJamForm.tsx ← Formulaire d'édition (corrections mineures)
+│           └── AnnouncementForm.tsx ← Créer/supprimer des annonces
+│
+├── admin/
+│   ├── layout.tsx              ← Layout admin (vérif appartenance équipe admin)
+│   ├── page.tsx                ← /admin — Statistiques globales
+│   ├── AdminSidebar.tsx        ← Sidebar admin
+│   ├── users/page.tsx          ← /admin/users — Gestion utilisateurs
+│   ├── jams/
+│   │   ├── page.tsx            ← /admin/jams — Gestion jams
+│   │   └── DeleteJamButton.tsx ← Bouton suppression jam (Client)
+│   ├── moderation/page.tsx     ← /admin/moderation — Messages/projets signalés
+│   ├── featured/page.tsx       ← /admin/featured — Mise en avant + gagnants
+│   ├── announcements/page.tsx  ← /admin/announcements — Annonces globales
+│   └── logs/
+│       ├── page.tsx            ← /admin/logs — Logs d'audit + IPs bannies
+│       ├── BanIPForm.tsx       ← Bannir une IP manuellement
+│       ├── UnbanButton.tsx     ← Débannir une IP
+│       └── ClearLogsButton.tsx ← Vider les logs
 │
 └── auth/
-    ├── login/page.tsx          ← /auth/login
-    └── register/page.tsx       ← /auth/register
+    ├── login/
+    │   ├── page.tsx            ← /auth/login
+    │   └── layout.tsx
+    └── register/
+        ├── page.tsx            ← /auth/register
+        └── layout.tsx
 ```
 
 ### Détail du dossier `src/lib/` (la logique)
@@ -229,26 +290,52 @@ src/app/
 ```
 src/lib/
 ├── appwrite/
-│   ├── client.ts   ← SDK Appwrite pour le navigateur (account, databases, storage)
-│   ├── server.ts   ← SDK Appwrite pour le serveur (avec la clé API secrète)
-│   ├── config.ts   ← Les IDs des collections et buckets (constantes)
-│   └── types.ts    ← Fonctions qui transforment les documents Appwrite en types TS
+│   ├── client.ts           ← SDK Appwrite pour le navigateur
+│   ├── server.ts           ← SDK Appwrite pour le serveur (avec la clé API secrète)
+│   ├── config.ts           ← IDs des collections, buckets, ADMIN_TEAM_ID
+│   ├── types.ts            ← Mappers : Documents Appwrite → Types TypeScript
+│   ├── session.ts          ← Lecture de la session (getCurrentUser)
+│   └── internal-host.ts    ← URL Appwrite interne Docker (Server Actions)
 │
 ├── actions/
-│   ├── jams.ts     ← Server Actions : lire/créer des jams
-│   ├── teams.ts    ← Server Actions : créer une équipe, rejoindre avec un code
-│   ├── projects.ts ← Server Actions : soumettre un projet, voter
-│   └── chat.ts     ← Server Actions : envoyer un message, épingler
+│   ├── jams.ts             ← CRUD jams (créer, lire, éditer, supprimer)
+│   ├── teams.ts            ← Guildes : créer, rejoindre, inscrire à une jam, gérer rôles
+│   ├── projects.ts         ← Soumettre un projet, voter, getProjectByTeamAndJam
+│   ├── chat.ts             ← Envoyer/épingler/signaler des messages
+│   ├── comments.ts         ← CRUD commentaires
+│   ├── announcements.ts    ← CRUD annonces (organisateurs + admin)
+│   ├── dashboard.ts        ← Données dashboard : getUserTeams, getUserParticipations
+│   ├── home.ts             ← Données page d'accueil (stats, jams en cours, gagnants)
+│   ├── admin.ts            ← Actions admin : bloquer users, modération, featured
+│   ├── logs.ts             ← Logs d'audit + ban IP
+│   ├── profile.ts          ← Server Actions : modifier profil, changer mdp, supprimer compte
+│   └── profile.client.ts   ← Actions profil côté client (upload avatar)
 │
-└── mockData.ts     ← Données de démonstration (utilisées sans Appwrite connecté)
+├── validators.ts           ← Validateurs : profil, jam (longueurs, formats)
+├── seo.ts                  ← Helpers génération metadata Next.js
+├── bot-detection.ts        ← Détection bots (User-Agent, patterns d'URL)
+└── mockData.ts             ← Données de démonstration (fallback sans Appwrite)
+```
+
+### Détail du dossier `src/__tests__/` (tests)
+
+```
+src/__tests__/
+├── appwrite-mappers.test.ts    ← 15 tests — mapDocToTeam, mapDocToJam, etc.
+├── profile-validators.test.ts  ← 15 tests — validateUpdateProfileName/Bio/Password
+├── actions-profile.test.ts     ← 10 tests — updateProfileName, updateProfileBio
+├── actions-chat.test.ts        ←  9 tests — sendMessage, pinMessage, reportMessage
+├── actions-teams.test.ts       ←  6 tests — createTeam, joinTeamByCode, getTeamsByJam
+├── bot-detection.test.ts       ← Tests bot-detection
+└── seo.test.ts                 ← Tests SEO helpers
 ```
 
 ---
 
 ## 5. Choix techniques
 
-### Pourquoi Next.js 15 avec App Router ?
-L'**App Router** est la nouvelle architecture de Next.js. Elle permet de mélanger :
+### Pourquoi Next.js avec App Router ?
+L'**App Router** permet de mélanger :
 - Des **Server Components** (composants qui tournent côté serveur, invisibles au client)
 - Des **Client Components** (composants interactifs avec état, hooks)
 - Des **Server Actions** (fonctions serveur appelées depuis le client, sans API REST manuelle)
@@ -259,16 +346,19 @@ Résultat : moins de code, meilleures performances, meilleur SEO.
 Écrire un backend from scratch (authentification, gestion de sessions, stockage de fichiers, WebSockets) est long et risqué. Appwrite fournit tout ça, battle-tested, en self-hosted. Tu gardes le contrôle de tes données sans dépendre d'un service cloud externe.
 
 ### Pourquoi Traefik ?
-Traefik **découvre automatiquement** les services Docker via leurs labels. Quand tu ajoutes un service Docker avec les bons labels, Traefik le route automatiquement sans redémarrer. Il gère aussi Let's Encrypt nativement.
+Traefik **découvre automatiquement** les services Docker via leurs labels. Il gère aussi Let's Encrypt nativement et applique les middlewares de sécurité (CSP, HSTS, rate limiting) de façon centralisée.
 
 ### Pourquoi Tailwind CSS v4 ?
-La v4 utilise les **variables CSS natives** (CSS custom properties) plutôt que des classes utilitaires pré-générées. Cela donne un design system plus flexible et des bundles CSS plus légers. Le design system de KonfiturGame repose entièrement sur des variables CSS (`--primary`, `--background`, etc.).
+La v4 utilise les **variables CSS natives** (CSS custom properties). Le design system de KonfiturGame repose entièrement sur des variables CSS (`--primary`, `--background`, etc.) → changer le thème = changer une variable.
 
 ### Pourquoi TypeScript strict ?
 Avec `strict: true` dans `tsconfig.json`, TypeScript vérifie tout. Ça oblige à gérer les cas `null`, les types incorrects, etc. Le coût est quelques lignes de code en plus ; le bénéfice est l'élimination d'une énorme classe de bugs.
 
 ### Pourquoi pnpm ?
 pnpm est plus rapide et plus efficace qu'npm ou yarn. Il partage les dépendances entre projets (économise de l'espace disque) et installe les paquets beaucoup plus vite.
+
+### Guildes multi-jam vs équipes éphémères
+L'architecture initiale avait `jam_id: string` (1 équipe par jam). On a migré vers `jam_ids: string[]` pour permettre les **guildes persistantes** : une équipe peut s'inscrire à plusieurs jams sans se reformer. Les projets sont dissociés des équipes et retrouvés par `(team_id, jam_id)`.
 
 ---
 
@@ -277,49 +367,17 @@ pnpm est plus rapide et plus efficace qu'npm ou yarn. Il partage les dépendance
 ### Prérequis
 - Docker Desktop installé et démarré
 - `curl` et `jq` installés (`sudo apt install curl jq` sur Linux/WSL)
-- Un nom de domaine pointant vers ton serveur (uniquement pour la prod)
 
 ---
 
 ### Étape 1 — Créer le fichier `.env`
 
 ```bash
-# Depuis la racine du projet
 cp .env.example .env
-```
-
-Ouvre `.env` et remplis chaque variable. Pour les secrets, utilise ces commandes :
-
-```bash
-# Générer APPWRITE_OPENSSL_KEY
-openssl rand -hex 32
-
-# Générer MARIADB_ROOT_PASSWORD
-openssl rand -base64 32
-
-# Générer MARIADB_PASSWORD
-openssl rand -base64 32
-
-# Générer TRAEFIK_DASHBOARD_AUTH (remplace 'ton-mot-de-passe')
-htpasswd -nB admin
-# → Copie la sortie dans TRAEFIK_DASHBOARD_AUTH
-```
-
-Exemple de `.env` pour le développement local :
-```env
-DOMAIN=localhost
-APPWRITE_PROJECT_ID=konfitur-game
-APPWRITE_API_KEY=                    # remplir après l'étape 3
-APPWRITE_OPENSSL_KEY=abc123...
-MARIADB_ROOT_PASSWORD=XYZ...
-MARIADB_PASSWORD=ABC...
-ADMIN_EMAIL=admin@konfiturgame.fr
-SMTP_HOST=smtp.postmarkapp.com
-SMTP_PORT=587
-SMTP_USER=...
-SMTP_PASS=...
-TRAEFIK_DASHBOARD_AUTH=admin:$2y$05$...
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
+# Remplir chaque variable. Pour les secrets :
+openssl rand -hex 32    # → APPWRITE_OPENSSL_KEY
+openssl rand -base64 32 # → MARIADB_ROOT_PASSWORD
+openssl rand -base64 32 # → MARIADB_PASSWORD
 ```
 
 ---
@@ -327,304 +385,160 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ### Étape 2 — Lancer l'infrastructure
 
 ```bash
-# Depuis la racine du projet
 docker compose up -d
+docker compose ps   # vérifier que tout est "Up"
 ```
-
-Attends 30-60 secondes que tous les services démarrent.
-
-```bash
-# Vérifier que tout tourne
-docker compose ps
-```
-
-Tu devrais voir tous les services avec le statut `Up`.
 
 ---
 
 ### Étape 3 — Configurer Appwrite (première fois uniquement)
 
-1. **Ouvre la console Appwrite** dans ton navigateur :
-   - En local : `http://localhost:8080`
-   - En production : `https://api.DOMAIN`
-
-2. **Crée un compte administrateur** (premier compte = admin automatiquement)
-
-3. **Crée un projet** :
-   - Clique sur "Create Project"
-   - ID du projet : `konfitur-game` (doit correspondre à `APPWRITE_PROJECT_ID`)
-   - Nom : `KonfiturGame`
-
-4. **Déclare la plateforme web** (obligatoire pour l'auth) :
-   - Dans le projet → Settings → Platforms → Add Platform → Web
-   - Hostname : `localhost` (dev) ou `konfiturgame.fr` (prod)
-
-5. **Crée une API Key** :
-   - Dans le projet → Settings → API Keys → Create API Key
-   - Nom : `server-key`
-   - Permissions : coche tout (ou au minimum : databases, storage, users)
-   - Copie la clé générée
-
-6. **Ajoute la clé dans `.env`** :
-   ```env
-   APPWRITE_API_KEY=ta-clé-copiée-ici
-   ```
-
-7. **Redémarre le frontend** pour qu'il prenne en compte la nouvelle variable :
-   ```bash
-   docker compose restart frontend
-   ```
+1. Ouvrir `http://localhost:8080/console`
+2. Créer un compte administrateur
+3. Créer un projet :
+   - ID : `konfitur-game` (doit correspondre à `APPWRITE_PROJECT_ID` dans `.env`)
+4. Déclarer la plateforme web : Settings → Platforms → Web → hostname `localhost`
+5. Créer une API Key : Settings → API Keys → tous les scopes
+6. Copier la clé dans `.env` → `APPWRITE_API_KEY`
+7. Redémarrer le frontend : `docker compose restart frontend`
 
 ---
 
 ### Étape 4 — Initialiser la base de données
 
-Ce script crée automatiquement toutes les collections ET insère des données de test :
-
 ```bash
-# Depuis la racine du projet
 chmod +x scripts/seed-data.sh
 ./scripts/seed-data.sh
 ```
 
-Le script va créer :
-- La base de données `konfitur-db`
-- 8 collections (game_jams, teams, team_members, projects, chat_messages, announcements, comments, votes)
-- Une jam de démonstration "Spring Jam 2025"
-- Un message épinglé et une annonce de test
-
-Le script est **idempotent** : il peut être relancé sans risque (les éléments déjà existants sont ignorés avec HTTP 409).
+Crée la base de données `konfitur-db`, les 8 collections, et une jam de démonstration.
+**Idempotent** : peut être relancé sans risque (collections déjà existantes ignorées).
 
 ---
 
-### Étape 5 — Configurer OAuth (optionnel pour le dev)
-
-Voir la section [13. OAuth (Google & Discord)](#13-oauth-google--discord).
-
----
-
-### Étape 6 — Vérifier que tout fonctionne
+### Étape 5 — Vérifier
 
 ```bash
-# Test frontend (dev)
-curl -I http://localhost:3000
-
-# Test Appwrite (dev)
-curl http://localhost:8080/v1/health
-# ou via Traefik :
-curl http://localhost/v1/health
-
-# Test headers de sécurité (prod)
-curl -I https://konfiturgame.fr | grep -E "strict|x-frame|x-content"
+curl -I http://localhost:3000        # frontend
+curl http://localhost:8080/v1/locale  # Appwrite API
 ```
 
 ---
 
 ## 7. Démarrage quotidien
 
-### En développement local
-
 ```bash
-# Démarre tous les services (utilise docker-compose.override.yml automatiquement)
-docker compose up
+# Démarre tout (dev — utilise docker-compose.override.yml automatiquement)
+#lancer le compose de prod suivi du override pour etre en dev 
+docker compose up 
 
-# Ou en arrière-plan
+# En arrière-plan
 docker compose up -d
 
-# Voir les logs en temps réel
+# Logs en temps réel
 docker compose logs -f
-
-# Voir les logs d'un seul service
 docker compose logs -f frontend
-docker compose logs -f appwrite
-docker compose logs -f traefik
 ```
 
 Accès en dev :
-- Frontend : `http://localhost:3000` (hot reload activé)
-- Appwrite console : `http://localhost:8080`
-- Appwrite API : `http://localhost/v1` (via Traefik) ou `http://localhost:8080/v1` (direct)
+- Frontend : `http://localhost:3000` (hot reload)
+- Appwrite console : `http://localhost:8080/console`
 - Dashboard Traefik : `http://localhost:8081/dashboard/`
-
-### En production
-
-```bash
-# Premier démarrage ou après une mise à jour
-docker compose -f docker-compose.yml up -d --build
-
-# Démarrage normal (sans rebuild)
-docker compose -f docker-compose.yml up -d
-
-# Arrêter tous les services
-docker compose down
-
-# Arrêter ET supprimer les volumes (⚠️ SUPPRIME LES DONNÉES)
-docker compose down -v
-```
-
-> **Note :** En production, n'utilise PAS `docker-compose.override.yml`. Utilise explicitement `-f docker-compose.yml`.
-
-### Mettre à jour le frontend
-
-```bash
-git pull
-docker compose build frontend
-docker compose up -d frontend
-```
 
 ---
 
 ## 8. Accéder aux différents services
 
-### En production
-
-| Service | URL | Identifiants |
-|---|---|---|
-| **Site web** | `https://konfiturgame.fr` | Public |
-| **Console Appwrite** | `https://api.konfiturgame.fr` | Ton compte admin |
-| **Dashboard Traefik** | `https://traefik.konfiturgame.fr` | `TRAEFIK_DASHBOARD_AUTH` (htpasswd) |
-
-### En développement local
+### En développement
 
 | Service | URL | Notes |
-|---|---|---|
-| **Site web** | `http://localhost:3000` | Hot reload activé |
-| **Console Appwrite** | `http://localhost:8080` | Accès direct (port mappé) |
-| **Appwrite API (Traefik)** | `http://localhost/v1` | Via Traefik, Host(localhost) |
-| **Dashboard Traefik** | `http://localhost:8081/dashboard/` | Insecure en dev |
+|---------|-----|-------|
+| Site web | `http://localhost:3000` | Hot reload activé |
+| Console Appwrite | `http://localhost:8080/console` | Accès direct |
+| Appwrite API | `http://localhost:8080/v1` | Direct (browser) |
+| Dashboard Traefik | `http://localhost:8081/dashboard/` | Insecure en dev |
 
-### Se connecter à la base de données MariaDB (debug)
+### En production
 
-```bash
-docker compose exec mariadb mysql -u appwrite -p
-# Entre MARIADB_PASSWORD quand demandé
-```
-
-### Se connecter à Redis
-
-```bash
-docker compose exec redis redis-cli
-```
-
-### Accéder au shell du frontend
-
-```bash
-docker compose exec frontend sh
-```
+| Service | URL |
+|---------|-----|
+| Site web | `https://konfiturgame.fr` |
+| Console Appwrite | `https://api.konfiturgame.fr/console` |
+| Dashboard Traefik | `https://traefik.konfiturgame.fr/dashboard/` |
 
 ---
 
 ## 9. Le projet Next.js en détail
 
-### Comment les pages sont construites
-
-Next.js App Router distingue deux types de composants :
+### Server vs Client Components
 
 **Server Components** (par défaut) — s'exécutent sur le serveur :
 ```tsx
-// src/app/page.tsx — Server Component
-// Pas de 'use client', pas de useState, pas de useEffect
-export default async function HomePage() {
-  const jams = await getJams() // Appel serveur direct
+// Pas de 'use client' — fetch Appwrite directement côté serveur
+export default async function JamPage({ params }) {
+  const jam = await getJam(params.jamId)
   return <div>...</div>
 }
 ```
 
 **Client Components** — s'exécutent dans le navigateur :
 ```tsx
-// src/components/Header.tsx
-'use client' // Cette directive est obligatoire
-
+'use client' // directive obligatoire
 import { useState } from 'react'
 
-export default function Header() {
-  const [menuOpen, setMenuOpen] = useState(false)
-  return <header>...</header>
+export default function JamTeamsSection({ teams }) {
+  const [showCreate, setShowCreate] = useState(false)
+  return <section>...</section>
 }
 ```
 
+**Pattern Server → Client** : le Server Component fetch les données et les passe serialisées à un Client Component. Évite les waterfalls client-side.
+
 ### Les Server Actions
 
-Les Server Actions permettent d'appeler du code serveur depuis un composant client **sans écrire une API REST**.
-
 ```tsx
-// src/lib/actions/jams.ts
+// src/lib/actions/teams.ts
 'use server'
-
-export async function createJam(data: {...}) {
+export async function createTeam(data: { jamId?: string; name: string; leaderId: string; leaderName: string }) {
   const doc = await serverDatabases.createDocument(...)
   return { success: true, id: doc.$id }
 }
 
 // Dans un composant client :
-import { createJam } from '@/lib/actions/jams'
-
-function CreateJamForm() {
-  const handleSubmit = async () => {
-    const result = await createJam({ title: '...', ... })
-  }
-}
+import { createTeam } from '@/lib/actions/teams'
+const result = await createTeam({ name: 'Team Pixel', leaderId: user.$id, leaderName: user.name })
 ```
+
+### Le middleware de protection des routes
+
+`src/middleware.ts` protège les routes `/dashboard/*` et `/admin/*`.
+`src/proxy.ts` s'exécute avant le middleware et vérifie les IPs bannies (lecture du cache `/api/banned-ips`).
 
 ### Le design system CSS
 
-Toutes les couleurs et typographies sont définies comme **variables CSS** dans `globals.css`.
-
-Variables disponibles :
 ```
---background       Fond principal      (#0C1018)
---card             Fond des cartes     (#131921)
---surface-elevated Fond surélevé       (#1A2130)
---foreground       Texte principal     (#F0EDE8)
---muted-foreground Texte secondaire    (#8891A4)
---primary          Bleu               (#4F6AFF)
---secondary        Rouge              (#EF233C)
---success          Vert               (#34D399)
---border           Bordure            (#1E2736)
---radius           Coins             (0px — intentionnel)
+--background       #0C1018   Fond principal
+--card             #131921   Fond des cartes
+--foreground       #F0EDE8   Texte principal
+--muted-foreground #8891A4   Texte secondaire
+--primary          #4F6AFF   Bleu (CTA, liens actifs)
+--secondary        #EF233C   Rouge (danger, accents)
+--success          #34D399   Vert
+--border           #1E2736   Bordures
+--radius           0px       Pas d'arrondi — intentionnel
 --font-sans        Space Grotesk
 --font-mono        JetBrains Mono
 ```
 
-Classes utilitaires spéciales (définies dans globals.css) :
-```
-.label-tech        → Texte en majuscules, monospace, 10px, tracking large
-.timer-font        → Chiffres à largeur fixe (pour les countdowns)
-.skip-link         → Lien d'accessibilité "Aller au contenu principal"
-.animate-marquee   → Animation défilement infini
-.accent-line-red   → Barre rouge 3px en haut (via ::before)
-.accent-line-blue  → Barre bleue 3px en haut
-.accent-line-gray  → Barre grise 3px en haut
-.grid-overlay      → Grille subtile en fond (via ::before)
-.noise             → Texture grain en pseudo-élément (via ::after)
-```
-
-### Le middleware d'authentification
-
-Le fichier `src/middleware.ts` s'exécute avant chaque requête et protège les routes :
-
-```tsx
-// Routes protégées → redirige vers /auth/login si non connecté
-const protectedRoutes = ['/dashboard']
-
-// Routes auth → redirige vers / si déjà connecté
-const authRoutes = ['/auth/login', '/auth/register']
-```
-
-Il détecte la session via le cookie Appwrite (`a_session_{projectId}`).
+Règles :
+1. **Zéro border-radius** — tout est rectangulaire
+2. **Couleurs via `style={}`** — jamais en classe Tailwind hardcodée
+3. **Layout via classes Tailwind** — `flex`, `grid`, `gap`, `p-`, `m-`
+4. **Icônes** — Lucide React exclusivement
 
 ---
 
 ## 10. Appwrite — Le backend
-
-### La console d'administration
-
-La console Appwrite (`https://api.DOMAIN` ou `http://localhost:8080`) te permet de :
-- Voir et modifier les données directement
-- Gérer les utilisateurs
-- Configurer les permissions
-- Voir les logs en temps réel
-- Créer des buckets de stockage
 
 ### Structure de la base de données
 
@@ -632,82 +546,151 @@ La console Appwrite (`https://api.DOMAIN` ou `http://localhost:8080`) te permet 
 Base de données : konfitur-db
 │
 ├── game_jams         ← Les jams (titre, thème, dates, règles...)
-├── teams             ← Les équipes/guildes (jam_ids[], nom, code d'invitation, chef)
-├── team_members      ← Qui est dans quelle équipe (avec son rôle)
-├── projects          ← Les jeux soumis (avec votes)
+├── teams             ← Les guildes (jam_ids[], nom, code d'invitation, chef)
+├── team_members      ← Qui est dans quelle guilde (avec son rôle)
+├── projects          ← Les jeux soumis (retrouvés par team_id + jam_id)
 ├── chat_messages     ← Messages du chat en direct
 ├── announcements     ← Annonces des organisateurs
 ├── comments          ← Commentaires sur les projets
-└── votes             ← Qui a voté pour quel projet (1 vote par personne)
+├── votes             ← Qui a voté pour quel projet (1 vote par personne)
+├── audit_logs        ← Logs d'actions admin et erreurs
+└── banned_ips        ← IPs bannies par les admins
 ```
 
-### Les permissions
+### Schéma des collections — détail
 
-Chaque collection a des règles d'accès. Par exemple :
-- **game_jams** : Tout le monde peut lire. Seulement les connectés peuvent créer.
-- **chat_messages** : Tout le monde peut lire. Seulement les connectés peuvent écrire.
-- **votes** : Index unique sur `(project_id, user_id)` → impossible de voter deux fois.
+#### `game_jams`
+| Champ | Type | Notes |
+|-------|------|-------|
+| `title` | String(256) | Requis |
+| `slug` | String(256) | Requis, URL-friendly |
+| `theme` | String(512) | Requis |
+| `description` | String(4096) | Requis |
+| `status` | Enum | `upcoming`, `ongoing`, `ended` |
+| `type` | Enum | `solo`, `team`, `both` |
+| `start_date` | DateTime | Requis |
+| `end_date` | DateTime | Requis |
+| `duration` | String(32) | Ex: "72h" |
+| `max_participants` | Integer | Optionnel |
+| `rules[]` | String[] | Liste des règles |
+| `prizes[]` | String[] | Liste des prix |
+| `tags[]` | String[] | Tags de catégorie |
+| `cover_image_id` | String(256) | ID fichier dans le bucket |
+| `organizer_id` | String(36) | Requis |
 
-### Le Realtime (chat en direct)
+#### `teams` (guildes)
+| Champ | Type | Notes |
+|-------|------|-------|
+| `jam_ids[]` | String[] | Tableau des jams rejointes — `[]` = guilde pure |
+| `name` | String(256) | Requis |
+| `invite_code` | String(16) | Requis, format `KG-XXXXXXXX` |
+| `leader_id` | String(36) | Requis |
 
-Appwrite Realtime utilise les **WebSockets**. Voici comment ça marche :
+> `project_id` a été supprimé. Les projets sont retrouvés par `(team_id, jam_id)`.
 
-1. Le navigateur ouvre une connexion WebSocket vers `wss://api.DOMAIN/v1/realtime`
-2. Il s'abonne aux événements d'une collection : `databases.konfitur-db.collections.chat_messages.documents`
-3. Quand quelqu'un envoie un message, Appwrite notifie **tous les abonnés** en temps réel
-4. Le hook `useRealtimeChat` reçoit l'événement et met à jour l'état React
+#### `team_members`
+| Champ | Type | Notes |
+|-------|------|-------|
+| `team_id` | String(36) | Requis |
+| `user_id` | String(36) | Requis |
+| `name` | String(128) | Requis |
+| `role` | Enum | `dev`, `artist`, `sound`, `designer`, `writer` |
+| `is_leader` | Boolean | Requis |
 
-### Les buckets de stockage
+#### `projects`
+| Champ | Type | Notes |
+|-------|------|-------|
+| `jam_id` | String(36) | Requis |
+| `team_id` | String(36) | Requis |
+| `title` | String(256) | Requis |
+| `description` | String(4096) | Requis |
+| `technologies[]` | String[] | Optionnel |
+| `download_url` | String(2048) | Optionnel |
+| `repo_url` | String(2048) | Optionnel |
+| `submitted` | Boolean | Requis |
+| `submission_date` | DateTime | Optionnel |
+| `votes_count` | Integer | Défaut 0 |
+| `cover_image_id` | String(256) | Optionnel |
+| `screenshot_ids[]` | String[] | Optionnel |
 
-| Bucket | Contenu | Taille max |
-|---|---|---|
-| `jam-covers` | Images de couverture des jams | 5 MB |
-| `project-assets` | Screenshots et builds de jeux | 100 MB |
-| `avatars` | Photos de profil | 2 MB |
+#### `chat_messages`
+| Champ | Type | Notes |
+|-------|------|-------|
+| `jam_id` | String(36) | Requis |
+| `channel` | Enum | `general`, `team-search`, `help` |
+| `author_id` | String(36) | Requis |
+| `author_name` | String(128) | Requis |
+| `content` | String(2048) | Requis |
+| `role` | Enum | `user`, `organizer`, `moderator` |
+| `pinned` | Boolean | Défaut false |
+
+#### `announcements`
+| Champ | Type | Notes |
+|-------|------|-------|
+| `jam_id` | String(36) | Requis (jam ciblée) |
+| `title` | String(256) | Requis |
+| `content` | String(4096) | Requis |
+| `important` | Boolean | Requis |
+| `author_id` | String(36) | Requis |
+
+#### `votes`
+| Champ | Type | Notes |
+|-------|------|-------|
+| `project_id` | String(36) | Requis |
+| `user_id` | String(36) | Requis |
+
+#### `comments`
+| Champ | Type | Notes |
+|-------|------|-------|
+| `project_id` | String(36) | Requis |
+| `author_id` | String(36) | Requis |
+| `author_name` | String(128) | Requis |
+| `content` | String(2048) | Requis |
+
+### Buckets de stockage
+
+| Bucket ID | Contenu | Taille max |
+|-----------|---------|-----------|
+| `jam-covers` | Images de couverture des jams | 5 Mo |
+| `project-assets` | Screenshots et builds | 20 Mo |
+| `avatars` | Photos de profil | 2 Mo |
+
+### Réaltime (chat en direct)
+
+1. Le browser ouvre une WebSocket vers `wss://api.konfiturgame.fr/v1/realtime`
+2. Il s'abonne : `databases.konfitur-db.collections.chat_messages.documents`
+3. Quand un message est envoyé, Appwrite notifie tous les abonnés
+4. Le hook `useRealtimeChat` reçoit l'événement et met à jour React
 
 ---
 
 ## 11. Flux d'authentification
 
-### Inscription (`/auth/register`)
+### Inscription
 
 ```
-1. Utilisateur remplit le formulaire (pseudo, email, mot de passe)
-2. Appel à account.create('unique()', email, password, name)
-   → Appwrite crée l'utilisateur dans sa DB interne
-3. Appel immédiat à account.createEmailPasswordSession(email, password)
-   → Appwrite crée une session et pose un cookie dans le navigateur
+1. Formulaire (pseudo, email, mot de passe)
+2. account.create('unique()', email, password, name)
+3. account.createEmailPasswordSession(email, password)
+   → Cookie de session posé automatiquement
 4. Redirection vers /
 ```
 
-### Connexion (`/auth/login`)
+### Connexion
 
 ```
-1. Utilisateur entre email + mot de passe
-2. Appel à account.createEmailPasswordSession(email, password)
-   → Appwrite vérifie les credentials et crée une session
-   → Cookie de session posé automatiquement dans le navigateur
-3. Appel à account.get() pour récupérer les infos utilisateur
-4. AuthContext mis à jour avec l'utilisateur connecté
-5. Redirection vers / ou vers la page demandée
+1. account.createEmailPasswordSession(email, password)
+   → Cookie a_session_{APPWRITE_PROJECT_ID} posé dans le browser
+2. AuthContext mis à jour
+3. Redirection vers / ou vers la page demandée
 ```
 
-### Vérification de session (middleware)
+### Protection des routes
 
 ```
-Pour chaque requête vers /dashboard :
-1. middleware.ts lit le cookie a_session_{projectId}
-2. Si le cookie existe → laisse passer
-3. Si le cookie n'existe pas → redirige vers /auth/login
-```
-
-### Déconnexion
-
-```
-1. Appel à account.deleteSession('current')
-   → Appwrite invalide la session et supprime le cookie
-2. AuthContext mis à jour (user = null)
-3. Redirection vers /
+proxy.ts → vérifie IP bannie → si oui : 403
+middleware.ts → vérifie cookie session → si absent : redirect /auth/login
+admin/layout.tsx → vérifie appartenance équipe admin → si non : notFound() (404)
 ```
 
 ---
@@ -717,146 +700,91 @@ Pour chaque requête vers /dashboard :
 ### Envoyer un message dans le chat
 
 ```
-Navigateur (Client Component JamChat)
+Client Component JamChat
     │
-    │ 1. L'utilisateur tape un message et appuie sur Entrée
-    │
-    ▼
-databases.createDocument(...)     ← SDK Appwrite côté navigateur
-    │
-    │ 2. Requête HTTP vers http://localhost/v1/databases/.../documents (dev)
-    │                  ou https://api.DOMAIN/v1/... (prod)
+    │ 1. databases.createDocument(...)   ← SDK Appwrite (browser)
     │
     ▼
-Appwrite
-    │
-    │ 3. Appwrite vérifie la session de l'utilisateur
-    │ 4. Appwrite vérifie les permissions
-    │ 5. Appwrite insère le document dans MariaDB
-    │ 6. Appwrite publie l'événement dans Redis
+Appwrite (vérifie session + permissions → insère en MariaDB → publie dans Redis)
     │
     ▼
-Appwrite Realtime Worker
-    │
-    │ 7. Le worker lit l'événement depuis Redis
-    │ 8. Il notifie tous les clients abonnés via WebSocket
+Appwrite Realtime Worker (lit Redis → notifie WebSocket subscribers)
     │
     ▼
-Navigateurs de TOUS les participants connectés
+useRealtimeChat → setMessages() → React re-render
+```
+
+### Créer une guilde et s'inscrire à une jam
+
+```
+Client Component (CreateTeamModal)
     │
-    │ 9. useRealtimeChat reçoit l'événement
-    │ 10. setMessages() met à jour l'état React
-    │ 11. React re-render → le nouveau message apparaît
+    ├── createTeam({ name, leaderId }) → Server Action
+    │     - Génère invite_code (KG-XXXXXXXX)
+    │     - Crée teams doc avec jam_ids: [jamId]
+    │     - Crée team_members doc (is_leader: true)
+    │
+    └── registerTeamToJam(teamId, jamId) → Server Action
+          - Vérifie que l'user n'est pas déjà dans une équipe pour cette jam
+          - Query.contains('jam_ids', jamId) pour trouver conflits
+          - Ajoute jamId au tableau jam_ids de la guilde
 ```
 
 ---
 
 ## 13. OAuth (Google & Discord)
 
-### Problème spécifique à Appwrite v1.5
+### Configuration dev
 
-Appwrite v1.5 traite `_APP_DOMAIN` comme un **hostname pur** — il ignore le port lors de la construction du `redirect_uri` OAuth. Si `_APP_DOMAIN=localhost:8080`, Appwrite génère des callbacks `http://localhost/v1/...` (sans port 8080), ce que Google/Discord rejettent.
-
-**Solution en dev :** On utilise `_APP_DOMAIN: localhost` (sans port) et Traefik route `Host(localhost)` → Appwrite. Le port 80 est le port implicite HTTP, donc le `redirect_uri` `http://localhost/v1/...` est valide et routable.
-
-### Configuration dev (docker-compose.override.yml)
-
-Le service appwrite en dev est configuré ainsi :
-```yaml
-appwrite:
-  labels:
-    - "traefik.enable=true"
-    - "traefik.http.routers.appwrite-dev.rule=Host(`localhost`)"
-    - "traefik.http.routers.appwrite-dev.entrypoints=web"
-    - "traefik.http.routers.appwrite-dev.service=appwrite-dev"
-    - "traefik.http.services.appwrite-dev.loadbalancer.server.port=80"
-    - "traefik.docker.network=konfitur-net"  # important : appwrite est sur 2 réseaux
-  environment:
-    _APP_DOMAIN: localhost
-    _APP_DOMAIN_TARGET: localhost
-```
-
-> **Important :** `traefik.docker.network=konfitur-net` est nécessaire car le container Appwrite est sur deux réseaux (`konfitur-net` et `appwrite-net`). Sans ce label, Traefik peut choisir le mauvais réseau et le router ne se crée pas.
+Le service appwrite en dev est configuré avec `_APP_DOMAIN: localhost` (sans port).
+Traefik route `Host(localhost)` → Appwrite via `docker-compose.override.yml`.
 
 ### Redirect URIs à enregistrer
 
 #### Google Cloud Console
-Dans "APIs & Services" → "Credentials" → ton client OAuth → "Authorized redirect URIs" :
 
-| Environnement | URI à ajouter |
+| Environnement | URI |
 |---|---|
-| **Développement** | `http://localhost/v1/account/sessions/oauth2/callback/google/konfitur-game` |
-| **Production** | `https://api.konfiturgame.fr/v1/account/sessions/oauth2/callback/google/konfitur-game` |
+| Dev | `http://localhost/v1/account/sessions/oauth2/callback/google/konfitur-game` |
+| Prod | `https://api.konfiturgame.fr/v1/account/sessions/oauth2/callback/google/konfitur-game` |
 
 #### Discord Developer Portal
-Dans ton application → "OAuth2" → "Redirects" :
 
-| Environnement | URI à ajouter |
+| Environnement | URI |
 |---|---|
-| **Développement** | `http://localhost/v1/account/sessions/oauth2/callback/discord/konfitur-game` |
-| **Production** | `https://api.konfiturgame.fr/v1/account/sessions/oauth2/callback/discord/konfitur-game` |
+| Dev | `http://localhost/v1/account/sessions/oauth2/callback/discord/konfitur-game` |
+| Prod | `https://api.konfiturgame.fr/v1/account/sessions/oauth2/callback/discord/konfitur-game` |
 
-### Activer OAuth dans la console Appwrite
+### Activer dans la console Appwrite
 
-1. Console Appwrite → ton projet → Auth → Settings
-2. Section "OAuth2 Providers"
-3. Activer **Google** : entrer `Client ID` et `Client Secret` depuis Google Cloud Console
-4. Activer **Discord** : entrer `Client ID` et `Client Secret` depuis Discord Developer Portal
-
-### Vérifier que le routing OAuth fonctionne
-
-```bash
-# Dev — vérifie que Traefik route bien vers Appwrite
-curl -v http://localhost/v1/health
-
-# Dashboard Traefik — vérifie que le router appwrite-dev existe
-# → http://localhost:8081/dashboard/#/http/routers
-```
+Console → ton projet → Auth → Settings → OAuth2 Providers → Google / Discord → coller Client ID + Secret.
 
 ---
 
 ## 14. Variables d'environnement
 
 ### Règle d'or
-Les variables qui commencent par `NEXT_PUBLIC_` sont **visibles par le navigateur**. Ne jamais y mettre de secrets.
+Les variables `NEXT_PUBLIC_*` sont **visibles par le navigateur**. Ne jamais y mettre de secrets.
 
 | Variable | Côté | Description |
-|---|---|---|
-| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | Client + Serveur | URL publique de l'API Appwrite |
+|----------|------|-------------|
+| `NEXT_PUBLIC_APPWRITE_ENDPOINT` | Client + Serveur | URL publique Appwrite |
 | `NEXT_PUBLIC_APPWRITE_PROJECT_ID` | Client + Serveur | ID du projet Appwrite |
-| `NEXT_PUBLIC_SITE_URL` | Client | URL du site (pour les métadonnées) |
-| `APPWRITE_INTERNAL_ENDPOINT` | Serveur uniquement | URL interne (Server Actions → réseau Docker) |
-| `APPWRITE_API_KEY` | Serveur uniquement | Clé secrète (Server Actions) |
+| `NEXT_PUBLIC_SITE_URL` | Client | URL du site |
+| `APPWRITE_INTERNAL_ENDPOINT` | Serveur uniquement | URL interne Docker (Server Actions) |
+| `APPWRITE_API_KEY` | Serveur uniquement | Clé secrète admin |
 | `DOMAIN` | Docker | Domaine principal |
-| `APPWRITE_PROJECT_ID` | Docker + Appwrite | ID du projet (doit correspondre) |
-| `APPWRITE_OPENSSL_KEY` | Appwrite | Clé de chiffrement des données |
+| `APPWRITE_PROJECT_ID` | Docker + Appwrite | ID du projet |
+| `APPWRITE_OPENSSL_KEY` | Appwrite | Clé de chiffrement |
 | `MARIADB_ROOT_PASSWORD` | Docker | Mot de passe root MariaDB |
 | `MARIADB_PASSWORD` | Docker | Mot de passe utilisateur appwrite |
-| `ADMIN_EMAIL` | Traefik | Email pour Let's Encrypt + admin Appwrite |
-| `SMTP_*` | Appwrite | Configuration email transactionnel |
-| `TRAEFIK_DASHBOARD_AUTH` | Traefik | Auth basique dashboard Traefik |
-
-### Variables spécifiques au dev (dans docker-compose.override.yml)
-
-En dev, ces variables sont définies directement dans l'override et ne passent pas par `.env` :
-
-```yaml
-# frontend
-NEXT_PUBLIC_APPWRITE_ENDPOINT=http://localhost:8080/v1   # accès direct depuis le browser
-APPWRITE_INTERNAL_ENDPOINT=http://appwrite/v1            # résolution Docker interne
-NODE_ENV=development
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
-
-# appwrite
-_APP_DOMAIN: localhost
-_APP_DOMAIN_TARGET: localhost
-```
+| `ADMIN_EMAIL` | Traefik | Email pour Let's Encrypt |
+| `SMTP_*` | Appwrite | Configuration email |
+| `TRAEFIK_DASHBOARD_AUTH` | Traefik | Auth basique dashboard |
 
 ---
 
 ## 15. Scripts utilitaires
-
-Tous les scripts sont dans `scripts/` et nécessitent que `.env` soit présent à la racine.
 
 ### `seed-data.sh` — Initialiser la base de données
 
@@ -865,378 +793,107 @@ chmod +x scripts/seed-data.sh
 ./scripts/seed-data.sh
 ```
 
-Crée :
-- La base de données `konfitur-db`
-- 8 collections avec tous leurs attributs et indexes
-- Une jam "Spring Jam 2025" de démonstration
-- Un message épinglé et une annonce de test
-
-**Le script est idempotent** : relancer sur une base déjà initialisée ne cause pas d'erreur.
-
-Prérequis : `curl`, `jq`, Appwrite démarré, `APPWRITE_API_KEY` défini dans `.env`.
+Crée : base `konfitur-db`, 8 collections, jam "Spring Jam 2025", message épinglé, annonce.
+**Idempotent** — relançable sans risque.
 
 ---
 
 ### `backup.sh` — Sauvegarder les données
 
 ```bash
-chmod +x scripts/backup.sh
-
-# Backup dans ./backups/YYYY-MM-DD_HH-MM/ (par défaut)
-./scripts/backup.sh
-
-# Backup dans un dossier personnalisé
-./scripts/backup.sh /chemin/vers/dossier
+./scripts/backup.sh                          # dans ./backups/YYYY-MM-DD_HH-MM/
+./scripts/backup.sh /chemin/vers/dossier     # dans un dossier personnalisé
 ```
 
-Le script sauvegarde :
-- **`mariadb.sql`** — Dump SQL complet de la base de données Appwrite (avec `--single-transaction`)
-- **`appwrite-uploads.tar.gz`** — Uploads utilisateurs
-- **`appwrite-config.tar.gz`** — Configuration Appwrite
-- **`appwrite-functions.tar.gz`** — Fonctions serverless
-- **`appwrite-certificates.tar.gz`** — Certificats SSL Appwrite
-- **`project-config.tar.gz`** — Code source du projet (hors `.env`, `node_modules`, `backups`)
-- **`MANIFEST.txt`** — Métadonnées du backup (date, hostname, tailles)
-
-**Pour archiver et transférer le backup :**
-```bash
-cd backups
-tar -czf konfitur-backup-2025-06-01.tar.gz 2025-06-01_14-30/
-# Puis copier via USB, rsync, scp...
-```
+Contenu du backup : `mariadb.sql`, volumes Appwrite (uploads, config, functions, certificates), code source, `MANIFEST.txt`.
 
 ---
 
 ### `restore.sh` — Restaurer depuis un backup
 
 ```bash
-chmod +x scripts/restore.sh
-
 ./scripts/restore.sh ./backups/2025-06-01_14-30
 ```
 
-Le script :
-1. Demande confirmation (données actuelles effacées)
-2. Démarre MariaDB et Redis
-3. Attend que MariaDB soit prêt
-4. Restaure le dump SQL
-5. Restaure les 4 volumes Appwrite
-
-Après la restauration :
-```bash
-docker compose up -d
-```
-
-> **Prérequis :** Le fichier `.env` doit exister avec les bons mots de passe avant de restaurer.
-
----
-
-### `init-appwrite.sh` — Créer la base de données uniquement
-
-```bash
-bash scripts/init-appwrite.sh
-```
-
-Script minimaliste qui crée uniquement la base de données `konfitur-db` via l'API REST.
-Utilisé comme étape préalable si nécessaire. **Préférer `seed-data.sh`** qui fait tout.
+Restaure MariaDB + volumes Appwrite. Demande confirmation avant d'écraser les données.
 
 ---
 
 ## 16. Commandes utiles
 
-### Docker
-
 ```bash
-# État de tous les services
-docker compose ps
+# ── Docker ────────────────────────────────────
+docker compose ps                          # état des services
+docker compose logs -f [service]           # logs
+docker compose restart frontend            # redémarrer un service
+docker compose up -d --build frontend      # rebuild + redémarrer
 
-# Logs de tous les services
-docker compose logs -f
+# ── Appwrite ──────────────────────────────────
+./scripts/seed-data.sh                     # (re)initialiser les collections
+./scripts/backup.sh                        # backup
 
-# Logs d'un service spécifique
-docker compose logs -f frontend
-docker compose logs -f appwrite
-docker compose logs -f traefik
+# Migration Appwrite (après upgrade de version)
+docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate
 
-# Redémarrer un service
-docker compose restart frontend
-docker compose restart appwrite traefik
+# ── Next.js (dans le container) ──────────────
+docker exec konfitur-frontend sh -c "cd /app && pnpm type-check"
+docker exec konfitur-frontend sh -c "cd /app && npx vitest run"
 
-# Rebuild et redémarrer le frontend
-docker compose up -d --build frontend
+# ── Tests ─────────────────────────────────────
+# Les tests DOIVENT tourner dans le container (node_modules uniquement là)
+docker exec konfitur-frontend sh -c "cd /app && npx vitest run src/__tests__/actions-teams.test.ts"
 
-# Voir la consommation de ressources
-docker stats
-
-# Supprimer les images inutilisées (libère de l'espace)
-docker image prune
-
-# Voir les volumes Docker
-docker volume ls | grep konfitur
-```
-
-### Seed et maintenance Appwrite
-
-```bash
-# Initialiser les collections (première fois ou après un reset)
-./scripts/seed-data.sh
-
-# Backup manuel
-./scripts/backup.sh
-
-# Restaurer depuis un backup
-./scripts/restore.sh ./backups/2025-06-01_14-30
-
-# Voir les logs Appwrite workers
-docker compose logs -f appwrite-worker-databases
-```
-
-### Next.js (développement sans Docker)
-
-```bash
-cd frontend
-
-# Installer les dépendances
-pnpm install
-
-# Démarrer en mode dev (hot reload)
-pnpm dev
-
-# Vérifier les types TypeScript
-pnpm type-check
-
-# Linter
-pnpm lint
-
-# Build de production
-pnpm build
-```
-
-### Traefik — Diagnostics
-
-```bash
-# Vérifier le routing — dashboard en dev
-open http://localhost:8081/dashboard/
-
-# Vérifier les headers de sécurité
-curl -I https://konfiturgame.fr
-
-# Vérifier le certificat TLS
-openssl s_client -connect konfiturgame.fr:443 -servername konfiturgame.fr
-
-# Logs Traefik avec filtre
-docker compose logs traefik | grep -i "appwrite\|error\|acme"
-```
-
-### Réinitialisation complète
-
-```bash
-# ⚠️ SUPPRIME TOUTES LES DONNÉES
-docker compose down -v
-docker compose up -d
-./scripts/seed-data.sh
+# ── Réinitialisation complète ─────────────────
+docker compose down -v && docker compose up -d && ./scripts/seed-data.sh
 ```
 
 ---
 
 ## 17. Cloner l'environnement sur un autre PC
 
-### Méthode A — Depuis Git (nouveau PC, données fraîches)
+### Méthode A — Depuis Git (données fraîches)
 
 ```bash
-# 1. Cloner le dépôt
 git clone https://github.com/<org>/KonfiturGame.git
 cd KonfiturGame
-
-# 2. Créer le .env (les secrets ne sont pas dans Git !)
-cp .env.example .env
-# → Remplir manuellement les secrets (ou les copier depuis l'ancien PC)
-
-# 3. Permissions Traefik ACME
-mkdir -p traefik/acme
-touch traefik/acme/acme.json
-chmod 600 traefik/acme/acme.json
-
-# 4. Démarrer
+cp .env.example .env    # remplir les secrets
+mkdir -p traefik/acme && touch traefik/acme/acme.json && chmod 600 traefik/acme/acme.json
 docker compose up -d
-
-# 5. Configurer Appwrite (créer projet + API key)
-# → Voir Étape 3 de la section 6
-
-# 6. Initialiser la base de données
+# Configurer Appwrite (étape 3 de la section 6)
 ./scripts/seed-data.sh
 ```
 
----
-
-### Méthode B — Depuis un backup (migrations données existantes)
-
-**Sur l'ancien PC** — créer le backup :
+### Méthode B — Depuis un backup
 
 ```bash
-./scripts/backup.sh
+# Sur l'ancien PC
+./scripts/backup.sh /tmp/migration
+tar -czf /tmp/konfitur-migration.tar.gz -C /tmp migration/
 
-# Archiver le backup + le .env
-cd backups
-tar -czf konfitur-migration.tar.gz 2025-06-01_14-30/
-cp ../.env ../konfitur-env-backup.txt   # copier les secrets séparément
-```
-
-**Transférer** sur le nouveau PC (USB, rsync, scp) :
-```bash
-# Via rsync (SSH)
-rsync -avz konfitur-migration.tar.gz user@nouveau-pc:/destination/
-
-# Via scp
-scp konfitur-migration.tar.gz user@nouveau-pc:/destination/
-```
-
-**Sur le nouveau PC** — restaurer :
-
-```bash
-# 1. Cloner le dépôt
-git clone https://github.com/<org>/KonfiturGame.git
-cd KonfiturGame
-
-# 2. Restaurer les secrets
-cp /chemin/vers/konfitur-env-backup.txt .env
-
-# 3. Permissions Traefik ACME
-mkdir -p traefik/acme
-touch traefik/acme/acme.json
-chmod 600 traefik/acme/acme.json
-
-# 4. Extraire le backup
-mkdir -p backups
-cd backups
-tar -xzf /chemin/vers/konfitur-migration.tar.gz
-cd ..
-
-# 5. Restaurer
-chmod +x scripts/restore.sh
-./scripts/restore.sh ./backups/2025-06-01_14-30
-
-# 6. Démarrer tous les services
+# Sur le nouveau PC
+git clone https://github.com/<org>/KonfiturGame.git && cd KonfiturGame
+cp /tmp/konfitur-env.txt .env
+mkdir -p traefik/acme && touch traefik/acme/acme.json && chmod 600 traefik/acme/acme.json
+mkdir -p backups && tar -xzf /tmp/konfitur-migration.tar.gz -C backups/
+./scripts/restore.sh ./backups/migration
 docker compose up -d
-```
-
----
-
-### Checklist de vérification après migration
-
-```bash
-# Tous les services sont up ?
-docker compose ps
-
-# Frontend répond ?
-curl -I http://localhost:3000
-
-# Appwrite répond ?
-curl http://localhost:8080/v1/health
-
-# Routing Traefik OK ?
-curl http://localhost/v1/health
-
-# Dashboard Traefik — router appwrite-dev visible ?
-open http://localhost:8081/dashboard/#/http/routers
 ```
 
 ---
 
 ## 18. Problèmes fréquents
 
-### "Le site ne s'affiche pas / certificat invalide"
-
-1. Vérifie que le DNS pointe vers l'IP du serveur :
-   ```bash
-   nslookup konfiturgame.fr
-   ```
-2. Vérifie que les ports 80 et 443 sont ouverts
-3. Vérifie le fichier `traefik/acme/acme.json` — il doit avoir `chmod 600`
-4. Regarde les logs Traefik : `docker compose logs -f traefik`
-
-### "Appwrite ne répond pas"
-
-```bash
-# Vérifie que MariaDB et Redis sont démarrés
-docker compose ps mariadb redis
-
-# Regarde les logs Appwrite
-docker compose logs -f appwrite
-```
-
-### "Erreur lors du seed : unauthorized"
-
-L'`APPWRITE_API_KEY` dans `.env` est vide ou incorrecte. Assure-toi d'avoir :
-1. Créé le projet dans la console Appwrite
-2. Créé une API Key avec les bonnes permissions
-3. Copié la clé dans `.env`
-4. Redémarré le frontend : `docker compose restart frontend`
-
-### "Le chat ne se met pas à jour en temps réel"
-
-1. Vérifie que le service `appwrite-realtime` tourne :
-   ```bash
-   docker compose ps appwrite-realtime
-   ```
-2. Vérifie que Traefik route bien `/v1/realtime` vers `appwrite-realtime`
-3. Vérifie la CSP dans `middlewares.yml` — elle doit autoriser `wss://api.DOMAIN`
-
-### "OAuth : redirect_uri mismatch"
-
-En dev : le `redirect_uri` généré par Appwrite est `http://localhost/v1/...` (port 80 implicite). Vérifie :
-1. Que les URIs dans Google/Discord correspondent exactement (voir section 13)
-2. Que le router `appwrite-dev` apparaît dans le dashboard Traefik
-3. Que `_APP_DOMAIN: localhost` est bien dans `docker-compose.override.yml` (pas `localhost:8080`)
-
-### "Router appwrite-dev absent du dashboard Traefik"
-
-Cause probable : Appwrite est sur 2 réseaux, Traefik choisit le mauvais.
-
-Vérifie que le label `traefik.docker.network=konfitur-net` est présent sur le service appwrite dans `docker-compose.override.yml`. Ensuite :
-
-```bash
-docker compose down appwrite traefik && docker compose up -d traefik appwrite
-```
-
-### "Erreur TypeScript lors du build"
-
-```bash
-cd frontend
-pnpm type-check
-```
-
-Les erreurs affichées indiquent exactement le fichier et la ligne à corriger.
-
-### "Page blanche / hydration error"
-
-Cela arrive quand un **Server Component** utilise des hooks React, ou quand un **Client Component** tente d'accéder à `window`/`document` côté serveur.
-
-Solution : Ajoute `'use client'` en première ligne du fichier si le composant est interactif.
-
-### "Attributs Appwrite bloqués en 'processing'"
-
-Le worker `appwrite-worker-databases` doit tourner pour traiter les créations d'attributs.
-
-```bash
-docker compose ps appwrite-worker-databases
-docker compose logs appwrite-worker-databases
-```
-
-Le script `seed-data.sh` attend automatiquement (`wait_attrs`) que tous les attributs soient `available` avant de passer à la collection suivante.
-
-### Réinitialiser complètement la base de données
-
-```bash
-# Arrête tout et supprime les volumes (SUPPRIME TOUTES LES DONNÉES)
-docker compose down -v
-
-# Redémarre
-docker compose up -d
-
-# Re-seed
-./scripts/seed-data.sh
-```
+| Problème | Solution |
+|----------|----------|
+| Appwrite console → 500 "Unknown attribute: devKeys" | Lancer `docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate` puis `docker restart konfitur-appwrite` |
+| `node_modules` Docker corrompu (fichier texte au lieu d'un dossier) | `rm frontend/node_modules && git rm --cached frontend/node_modules` |
+| Tests `vitest` Permission denied sur host | Lancer dans le container : `docker exec konfitur-frontend sh -c "cd /app && npx vitest run"` |
+| `pnpm-lock.yaml` EACCES sur WSL2 | Générer dans /tmp : `docker run --rm -v /tmp/pnpm-gen:/app -w /app node:20-alpine sh -c "corepack enable pnpm && pnpm install --no-frozen-lockfile"` |
+| OAuth "redirect_uri mismatch" | Vérifier que `_APP_DOMAIN: localhost` (sans port) est dans l'override + que le router `appwrite-dev` existe dans le dashboard Traefik |
+| Router Traefik `appwrite-dev` absent | Ajouter `traefik.docker.network=konfitur-net` sur le service appwrite dans l'override (Appwrite est sur 2 réseaux) |
+| Attributs Appwrite bloqués en "processing" | Vérifier que `appwrite-worker-databases` tourne : `docker compose ps appwrite-worker-databases` |
+| Chat ne se met pas à jour en temps réel | Vérifier `appwrite-realtime` + CSP `connect-src` dans `middlewares.yml` |
+| "Le site ne s'affiche pas" en prod | Vérifier DNS (`dig konfiturgame.fr`), ports 80/443 ouverts, `chmod 600 traefik/acme/acme.json` |
 
 ---
 
@@ -1250,12 +907,13 @@ LOGS                    → docker compose logs -f [service]
 SEED                    → ./scripts/seed-data.sh
 BACKUP                  → ./scripts/backup.sh
 RESTORE                 → ./scripts/restore.sh ./backups/<date>
-CONSOLE APPWRITE        → http://localhost:8080 (dev) | https://api.DOMAIN (prod)
-DASHBOARD TRAEFIK       → http://localhost:8081/dashboard/ (dev) | https://traefik.DOMAIN (prod)
-SITE                    → http://localhost:3000 (dev) | https://DOMAIN (prod)
-APPWRITE API (dev)      → http://localhost/v1 (Traefik) | http://localhost:8080/v1 (direct)
+TESTS                   → docker exec konfitur-frontend sh -c "cd /app && npx vitest run"
+MIGRATION APPWRITE      → docker exec konfitur-appwrite php .../cli.php migrate
+CONSOLE APPWRITE        → http://localhost:8080/console (dev) | https://api.DOMAIN/console (prod)
+DASHBOARD TRAEFIK       → http://localhost:8081/dashboard/ (dev)
+SITE                    → http://localhost:3000 (dev) | https://konfiturgame.fr (prod)
 ```
 
 ---
 
-*Documentation — KonfiturGame · Stack : Next.js 15 · Appwrite 1.5 · Traefik v3 · Docker Compose v2*
+*Documentation — KonfiturGame · Stack : Next.js 16.2.3 · Appwrite 1.8.0 · Traefik v3.6.7 · Docker Compose v2 · Mise à jour : 2026-04-16*
