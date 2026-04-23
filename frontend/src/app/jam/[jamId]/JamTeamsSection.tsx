@@ -19,6 +19,7 @@ interface Props {
   jamId: string
   jamTitle: string
   jamStatus: 'upcoming' | 'ongoing' | 'ended'
+  startDate: Date
   teams: Team[]
   currentUser: { id: string; name: string } | null
   userTeamInThisJam: Team | null
@@ -29,6 +30,7 @@ export default function JamTeamsSection({
   jamId,
   jamTitle,
   jamStatus,
+  startDate,
   teams,
   currentUser,
   userTeamInThisJam,
@@ -50,7 +52,7 @@ export default function JamTeamsSection({
     })
   }
 
-  const canAct = currentUser && !userTeamInThisJam && jamStatus !== 'ended'
+  const canAct = currentUser && !userTeamInThisJam && Date.now() < startDate.getTime()
 
   return (
     <section id="teams" aria-labelledby="teams-heading">

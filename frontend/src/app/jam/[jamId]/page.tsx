@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { Users, Clock, Trophy, MessageSquare, Info, Megaphone } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import CountdownTimer from '@/components/CountdownTimer'
 import JamChat from '@/components/JamChat'
 import { getJamById, getAnnouncementsByJam } from '@/lib/actions/jams'
 import { generateJamJsonLd, truncateDescription } from '@/lib/seo'
@@ -13,6 +12,7 @@ import { getProjectsByJam } from '@/lib/actions/projects'
 import { getChatMessages } from '@/lib/actions/chat'
 import { getUserTeams, getCurrentUser } from '@/lib/actions/dashboard'
 import JamTeamsSection from './JamTeamsSection'
+import JamCountdownClient from './JamCountdownClient'
 
 interface Props {
   params: Promise<{ jamId: string }>
@@ -91,7 +91,11 @@ export default async function JamPage({ params }: Props) {
         .map(({ team }) => ({ id: team.id, name: team.name }))
     : []
 
-  const status = statusConfig[jam.status]
+  const now = new Date()
+  const effectiveStatus: 'upcoming' | 'ongoing' | 'ended' =
+    now >= jam.endDate ? 'ended' : now >= jam.startDate ? 'ongoing' : 'upcoming'
+
+  const status = statusConfig[effectiveStatus]
 
   const tabs = [
     { id: 'info', label: 'Informations', icon: Info },
@@ -163,18 +167,12 @@ export default async function JamPage({ params }: Props) {
               </div>
 
               {/* Countdown */}
-              {jam.status !== 'ended' && (
-                <div
-                  className="p-6 border w-full lg:w-auto lg:min-w-[280px]"
-                  style={{ background: 'var(--surface-elevated)', borderColor: 'var(--border)' }}
-                >
-                  <CountdownTimer
-                    targetDate={jam.status === 'ongoing' ? jam.endDate : jam.startDate}
-                    size="md"
-                    label={jam.status === 'ongoing' ? 'TEMPS RESTANT' : 'COMMENCE DANS'}
-                  />
-                </div>
-              )}
+              <JamCountdownClient
+                jamId={jam.id}
+                initialStatus={effectiveStatus}
+                startDate={jam.startDate}
+                endDate={jam.endDate}
+              />
             </div>
           </div>
         </div>
@@ -276,7 +274,8 @@ export default async function JamPage({ params }: Props) {
               <JamTeamsSection
                 jamId={jam.id}
                 jamTitle={jam.title}
-                jamStatus={jam.status}
+                jamStatus={effectiveStatus}
+                startDate={jam.startDate}
                 teams={teams}
                 currentUser={currentUser}
                 userTeamInThisJam={userTeamInThisJam}

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useTransition } from 'react'
+import { useState, useEffect, useTransition } from 'react'
 import { Pin, Send, Wifi, WifiOff, Flag } from 'lucide-react'
 import { client, databases } from '@/lib/appwrite/client'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
@@ -44,11 +44,22 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [connected, setConnected] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [])
+  const playPing = () => {
+    try {
+      const ctx = new AudioContext()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.frequency.value = 880
+      gain.gain.setValueAtTime(0.2, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25)
+      osc.start()
+      osc.stop(ctx.currentTime + 0.25)
+    } catch {
+      // AudioContext non disponible (SSR ou politique navigateur)
+    }
+  }
 
   // Charger les messages initiaux du canal
   useEffect(() => {
@@ -72,7 +83,7 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
           if (doc.jam_id === jamId && doc.channel === activeChannel) {
             const msg = mapDocToChatMessage(doc as Parameters<typeof mapDocToChatMessage>[0])
             setMessages(prev => [...prev, msg])
-            setTimeout(scrollToBottom, 50)
+            if (doc.author_id !== user?.$id) playPing()
           }
         }
       }
@@ -82,11 +93,7 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
       unsubscribe()
       setConnected(false)
     }
-  }, [jamId, activeChannel, scrollToBottom])
-
-  useEffect(() => {
-    scrollToBottom()
-  }, [messages, scrollToBottom])
+  }, [jamId, activeChannel, user])
 
   const sendMessage = async () => {
     if (!input.trim() || !user || sending) return
@@ -288,7 +295,6 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
             Aucun message dans ce canal. Soyez le premier à écrire !
           </p>
         )}
-        <div ref={messagesEndRef} aria-hidden="true" />
       </div>
 
       {/* Zone de saisie */}

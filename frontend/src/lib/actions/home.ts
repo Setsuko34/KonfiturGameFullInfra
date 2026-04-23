@@ -13,16 +13,26 @@ export async function getHomePageData(): Promise<{
   stats: SiteStats
 }> {
   try {
-    const [ongoingRes, upcomingRes, winnerProjectsRes, jamsCountRes, participantsCountRes, projectsCountRes] =
+    const now = new Date()
+
+    const [featuredRes, ongoingStatusRes, upcomingStatusRes, winnerProjectsRes, jamsCountRes, participantsCountRes, projectsCountRes] =
       await Promise.all([
+        // Jams mises en avant par l'admin
+        serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
+          Query.equal('featured', true),
+          Query.orderAsc('featured_order'),
+          Query.limit(6),
+        ]),
+        // Jams marquées ongoing en DB (peuvent être en retard)
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
           Query.equal('status', 'ongoing'),
-          Query.limit(1),
+          Query.limit(5),
         ]),
+        // Jams marquées upcoming en DB
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
           Query.equal('status', 'upcoming'),
           Query.orderAsc('start_date'),
-          Query.limit(6),
+          Query.limit(10),
         ]),
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
           Query.equal('winner', true),
@@ -37,8 +47,29 @@ export async function getHomePageData(): Promise<{
         ]),
       ])
 
-    const ongoingJam = ongoingRes.total > 0 ? mapDocToGameJam(ongoingRes.documents[0]) : null
-    const upcomingJams = upcomingRes.documents.map(mapDocToGameJam)
+    const featuredJams = featuredRes.documents.map(mapDocToGameJam)
+    const statusOngoingJams = ongoingStatusRes.documents.map(mapDocToGameJam)
+    const statusUpcomingJams = upcomingStatusRes.documents.map(mapDocToGameJam)
+
+    const isOngoing = (j: GameJam) => now >= j.startDate && now < j.endDate
+    const isUpcoming = (j: GameJam) => now < j.startDate
+
+    // Priorité : featured ongoing → n'importe quelle ongoing (date-réelle)
+    const ongoingJam =
+      featuredJams.find(j => isOngoing(j))
+      ?? statusOngoingJams.find(j => isOngoing(j))
+      ?? null
+
+    // Upcoming : featured en premier, puis les autres, dédupliqués et triés par date
+    const featuredIds = new Set(featuredJams.map(j => j.id))
+    const allUpcoming = [
+      ...featuredJams.filter(j => isUpcoming(j)),
+      ...statusUpcomingJams.filter(j => isUpcoming(j) && !featuredIds.has(j.id)),
+    ]
+      .sort((a, b) => a.startDate.getTime() - b.startDate.getTime())
+      .slice(0, 6)
+
+    const upcomingJams = allUpcoming
     const winnerProjects = winnerProjectsRes.documents.map(mapDocToProject)
 
     // Jointure manuelle : jams et équipes des projets gagnants
