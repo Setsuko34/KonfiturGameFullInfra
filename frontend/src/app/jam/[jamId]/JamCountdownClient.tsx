@@ -2,26 +2,22 @@
 
 import { useState } from 'react'
 import CountdownTimer from '@/components/CountdownTimer'
-import { updateJamStatus } from '@/lib/actions/jams'
 
 interface Props {
-  jamId: string
   initialStatus: 'upcoming' | 'ongoing' | 'ended'
   startDate: Date
   endDate: Date
 }
 
-export default function JamCountdownClient({ jamId, initialStatus, startDate, endDate }: Props) {
+export default function JamCountdownClient({ initialStatus, startDate, endDate }: Props) {
   const [status, setStatus] = useState(initialStatus)
 
   const handleUpcomingExpired = () => {
     setStatus('ongoing')
-    updateJamStatus(jamId, 'ongoing')
   }
 
   const handleOngoingExpired = () => {
     setStatus('ended')
-    updateJamStatus(jamId, 'ended')
   }
 
   if (status === 'ended') return null

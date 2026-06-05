@@ -59,17 +59,6 @@ export async function getAnnouncementsByJam(jamId: string): Promise<Announcement
   }
 }
 
-export async function updateJamStatus(
-  jamId: string,
-  status: 'upcoming' | 'ongoing' | 'ended'
-): Promise<void> {
-  try {
-    await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId, { status })
-  } catch {
-    // Échec silencieux — le statut sera recalculé depuis les dates au prochain chargement
-  }
-}
-
 export async function createJam(data: {
   title: string
   slug: string
