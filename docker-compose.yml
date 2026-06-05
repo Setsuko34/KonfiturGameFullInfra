@@ -103,11 +103,13 @@ services:
       - _APP_DB_PASS=${MARIADB_PASSWORD}
       - _APP_REDIS_HOST=redis
       - _APP_REDIS_PORT=6379
-      - _APP_SMTP_HOST=${SMTP_HOST}
-      - _APP_SMTP_PORT=${SMTP_PORT}
-      - _APP_SMTP_USERNAME=${SMTP_USER}
-      - _APP_SMTP_PASSWORD=${SMTP_PASS}
-      - _APP_SMTP_SECURE=tls
+      - _APP_SMTP_HOST=${APPWRITE_APP_SMTP_HOST}
+      - _APP_SMTP_PORT=${APPWRITE_APP_SMTP_PORT}
+      - _APP_SMTP_SECURE=${APPWRITE_APP_SMTP_SECURE}
+      - _APP_SMTP_USERNAME=${APPWRITE_APP_SMTP_USERNAME}
+      - _APP_SMTP_PASSWORD=${APPWRITE_APP_SMTP_PASSWORD}
+      - _APP_SYSTEM_EMAIL_ADDRESS=${APPWRITE_APP_SYSTEM_EMAIL_ADDRESS}
+      - _APP_SYSTEM_EMAIL_NAME=${APPWRITE_APP_SYSTEM_EMAIL_NAME}
     networks:
       - konfitur-net
       - appwrite-net
@@ -227,6 +229,37 @@ services:
       - _APP_DB_PASS=${MARIADB_PASSWORD}
       - _APP_REDIS_HOST=redis
       - _APP_REDIS_PORT=6379
+    networks:
+      - appwrite-net
+    depends_on:
+      - mariadb
+      - redis
+
+  # ════════════════════════════════════════
+  # APPWRITE WORKER — Mails (envoi SMTP)
+  # ════════════════════════════════════════
+  appwrite-worker-mails:
+    image: appwrite/appwrite:1.8.0
+    container_name: konfitur-appwrite-worker-mails
+    restart: unless-stopped
+    entrypoint: worker-mails
+    environment:
+      - _APP_ENV=production
+      - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
+      - _APP_DB_HOST=mariadb
+      - _APP_DB_PORT=3306
+      - _APP_DB_SCHEMA=appwrite
+      - _APP_DB_USER=appwrite
+      - _APP_DB_PASS=${MARIADB_PASSWORD}
+      - _APP_REDIS_HOST=redis
+      - _APP_REDIS_PORT=6379
+      - _APP_SMTP_HOST=${APPWRITE_APP_SMTP_HOST}
+      - _APP_SMTP_PORT=${APPWRITE_APP_SMTP_PORT}
+      - _APP_SMTP_SECURE=${APPWRITE_APP_SMTP_SECURE}
+      - _APP_SMTP_USERNAME=${APPWRITE_APP_SMTP_USERNAME}
+      - _APP_SMTP_PASSWORD=${APPWRITE_APP_SMTP_PASSWORD}
+      - _APP_SYSTEM_EMAIL_ADDRESS=${APPWRITE_APP_SYSTEM_EMAIL_ADDRESS}
+      - _APP_SYSTEM_EMAIL_NAME=${APPWRITE_APP_SYSTEM_EMAIL_NAME}
     networks:
       - appwrite-net
     depends_on:
