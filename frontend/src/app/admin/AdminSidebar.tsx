@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Gamepad2, LayoutDashboard, Users, List,
+  LayoutDashboard, Users, List,
   AlertTriangle, Megaphone, Star, LogOut, Home, Activity,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -50,7 +50,7 @@ export default function AdminSidebar() {
           style={{ borderColor: 'var(--admin-accent-border)' }}
         >
           <div className="flex items-center gap-2">
-            <Gamepad2 size={18} style={{ color: 'var(--secondary)' }} aria-hidden="true" />
+            <img src="/hautequalite.svg" alt="" width={24} height={24} aria-hidden="true" />
             <Link href="/" className="font-bold text-sm" style={{ color: 'var(--sidebar-foreground)' }}>
               Konfitur<span style={{ color: 'var(--secondary)' }}>Game</span>
             </Link>
