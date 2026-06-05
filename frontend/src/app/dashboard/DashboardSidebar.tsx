@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
-  Gamepad2, LayoutDashboard, Trophy, Users, Send,
+  LayoutDashboard, Trophy, Users, Send,
   List, Plus, LogOut, Menu, X, Home, User,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -41,7 +41,7 @@ export default function DashboardSidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-2 px-5 py-4 border-b" style={{ borderColor: 'var(--sidebar-border)' }}>
-        <Gamepad2 size={18} style={{ color: 'var(--primary)' }} aria-hidden="true" />
+        <img src="/hautequalite.svg" alt="" width={24} height={24} aria-hidden="true" />
         <Link href="/" className="font-bold text-sm" style={{ color: 'var(--sidebar-foreground)' }}>
           Konfitur<span style={{ color: 'var(--primary)' }}>Game</span>
         </Link>
@@ -129,7 +129,7 @@ export default function DashboardSidebar() {
         style={{ background: 'var(--sidebar)', borderColor: 'var(--sidebar-border)' }}
       >
         <div className="flex items-center gap-2 font-bold text-sm">
-          <Gamepad2 size={16} style={{ color: 'var(--primary)' }} aria-hidden="true" />
+          <img src="/hautequalite.svg" alt="" width={20} height={20} aria-hidden="true" />
           Dashboard
         </div>
         <button

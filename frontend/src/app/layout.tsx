@@ -38,6 +38,9 @@ export const metadata: Metadata = {
     site: '@KonfiturGame',
     images: ['/og'],
   },
+  icons: {
+    icon: [{ url: '/hautequalite.svg', type: 'image/svg+xml' }],
+  },
   robots: {
     index: true,
     follow: true,

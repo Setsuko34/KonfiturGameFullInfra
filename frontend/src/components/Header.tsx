@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
-import { Menu, X, Gamepad2, LogIn, LayoutDashboard, LogOut } from 'lucide-react'
+import { Menu, X, LogIn, LayoutDashboard, LogOut } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 
 const navLinks = [
@@ -40,9 +40,11 @@ export default function Header() {
             style={{ color: 'var(--foreground)', fontFamily: 'var(--font-sans)' }}
             aria-label="KonfiturGame — Accueil"
           >
-            <Gamepad2
-              size={22}
-              style={{ color: 'var(--primary)' }}
+            <img
+              src="/hautequalite.svg"
+              alt=""
+              width={32}
+              height={32}
               aria-hidden="true"
             />
             <span>
