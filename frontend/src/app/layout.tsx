@@ -51,7 +51,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
-      <body>
+      <body className="grid-overlay noise">
         <a href="#main-content" className="skip-link">
           Aller au contenu principal
         </a>

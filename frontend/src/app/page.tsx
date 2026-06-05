@@ -36,7 +36,7 @@ export default async function HomePage() {
           )),
         }}
       />
-      <main id="main-content" className="grid-overlay noise">
+      <main id="main-content">
         {/* ═══ HERO ═══ */}
         <section
           className="relative px-4 sm:px-6 lg:px-8 pt-20 pb-16 text-center overflow-hidden"
