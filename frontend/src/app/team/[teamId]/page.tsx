@@ -1,8 +1,10 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import { Crown, Copy, ExternalLink } from 'lucide-react'
+import { Crown, ExternalLink } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import { getTeamById } from '@/lib/actions/teams'
+import CopyInviteButton from './CopyInviteButton'
 
 const roleConfig = {
   dev: { label: 'Développeur', color: 'var(--primary)' },
@@ -12,37 +14,28 @@ const roleConfig = {
   writer: { label: 'Scénariste', color: '#C0C0C0' },
 }
 
-// Données de démonstration
-const mockTeam = {
-  id: 'team-001',
-  jamId: 'jam-001',
-  name: 'Les Pixels Renaissants',
-  inviteCode: 'PXL-REN-2025',
-  leaderId: 'user-002',
-  projectId: undefined as string | undefined,
-  members: [
-    { id: 'm1', userId: 'user-002', name: 'DevPixel', role: 'dev' as const, isLeader: true },
-    { id: 'm2', userId: 'user-003', name: 'ArtistMH', role: 'artist' as const, isLeader: false },
-    { id: 'm3', userId: 'user-004', name: 'SoundWave', role: 'sound' as const, isLeader: false },
-  ],
-}
-
 interface Props {
   params: Promise<{ teamId: string }>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { teamId } = await params
+  const data = await getTeamById(teamId)
+  if (!data) return { title: 'Équipe introuvable', robots: { index: false } }
+
   return {
-    title: 'Équipe',
+    title: data.team.name,
+    description: `Équipe ${data.team.name} — ${data.members.length} membre${data.members.length > 1 ? 's' : ''}`,
     alternates: { canonical: `/team/${teamId}` },
   }
 }
 
 export default async function TeamPage({ params }: Props) {
   const { teamId } = await params
-  const team = teamId === mockTeam.id ? mockTeam : null
-  if (!team) notFound()
+  const data = await getTeamById(teamId)
+  if (!data) notFound()
+
+  const { team, members, jams, projects } = data
 
   return (
     <>
@@ -60,8 +53,16 @@ export default async function TeamPage({ params }: Props) {
             <h1 className="text-3xl font-bold mb-4">{team.name}</h1>
             <div className="flex items-center gap-3">
               <span className="label-tech" style={{ color: 'var(--muted-foreground)' }}>
-                {team.members.length} membre{team.members.length > 1 ? 's' : ''}
+                {members.length} membre{members.length > 1 ? 's' : ''}
               </span>
+              {jams.length > 0 && (
+                <>
+                  <span style={{ color: 'var(--border)' }}>·</span>
+                  <span className="label-tech" style={{ color: 'var(--muted-foreground)' }}>
+                    {jams.length} jam{jams.length > 1 ? 's' : ''}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -81,19 +82,7 @@ export default async function TeamPage({ params }: Props) {
               >
                 {team.inviteCode}
               </code>
-              <button
-                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold"
-                style={{
-                  border: '1px solid var(--border)',
-                  color: 'var(--foreground)',
-                  background: 'var(--surface-elevated)',
-                }}
-                onClick={() => navigator.clipboard.writeText(team.inviteCode)}
-                aria-label="Copier le code d'invitation"
-              >
-                <Copy size={14} aria-hidden="true" />
-                Copier
-              </button>
+              <CopyInviteButton code={team.inviteCode} />
             </div>
             <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>
               Partagez ce code à vos coéquipiers pour qu&apos;ils rejoignent votre équipe.
@@ -104,7 +93,7 @@ export default async function TeamPage({ params }: Props) {
           <section aria-labelledby="members-heading">
             <h2 id="members-heading" className="text-xl font-bold mb-4">Membres de l&apos;équipe</h2>
             <ul className="space-y-3" role="list">
-              {team.members.map(member => {
+              {members.map(member => {
                 const roleInfo = roleConfig[member.role]
                 return (
                   <li
@@ -113,7 +102,6 @@ export default async function TeamPage({ params }: Props) {
                     style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                     aria-label={`${member.name}, ${roleInfo.label}${member.isLeader ? ', chef d\'équipe' : ''}`}
                   >
-                    {/* Avatar */}
                     <div
                       className="w-10 h-10 flex items-center justify-center text-sm font-bold flex-shrink-0"
                       style={{ background: 'var(--surface-elevated)', color: 'var(--foreground)' }}
@@ -121,22 +109,14 @@ export default async function TeamPage({ params }: Props) {
                     >
                       {member.name.charAt(0).toUpperCase()}
                     </div>
-
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold">{member.name}</span>
                         {member.isLeader && (
-                          <Crown
-                            size={14}
-                            style={{ color: '#FFD700' }}
-                            aria-label="Chef d'équipe"
-                          />
+                          <Crown size={14} style={{ color: '#FFD700' }} aria-label="Chef d'équipe" />
                         )}
                       </div>
-                      <span
-                        className="label-tech"
-                        style={{ color: roleInfo.color }}
-                      >
+                      <span className="label-tech" style={{ color: roleInfo.color }}>
                         {roleInfo.label.toUpperCase()}
                       </span>
                     </div>
@@ -146,18 +126,70 @@ export default async function TeamPage({ params }: Props) {
             </ul>
           </section>
 
-          {/* Projet de l'équipe */}
-          <section aria-labelledby="project-heading">
-            <h2 id="project-heading" className="text-xl font-bold mb-4">Projet</h2>
-            {team.projectId ? (
-              <a
-                href={`/project/${team.projectId}`}
-                className="flex items-center gap-2 p-5 border transition-colors"
-                style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-              >
-                <span className="font-semibold flex-1">Voir le projet</span>
-                <ExternalLink size={14} aria-hidden="true" />
-              </a>
+          {/* Jams */}
+          {jams.length > 0 && (
+            <section aria-labelledby="jams-heading">
+              <h2 id="jams-heading" className="text-xl font-bold mb-4">
+                Game Jams ({jams.length})
+              </h2>
+              <ul className="space-y-3" role="list">
+                {jams.map(jam => (
+                  <li key={jam.id}>
+                    <a
+                      href={`/jam/${jam.id}`}
+                      className="flex items-center gap-4 p-4 border"
+                      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold">{jam.title}</p>
+                        <p className="label-tech" style={{ color: 'var(--muted-foreground)' }}>
+                          {jam.status === 'ongoing' ? 'EN COURS' : jam.status === 'upcoming' ? 'À VENIR' : 'TERMINÉE'}
+                        </p>
+                      </div>
+                      <ExternalLink size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {/* Projets */}
+          <section aria-labelledby="projects-heading">
+            <h2 id="projects-heading" className="text-xl font-bold mb-4">Projets</h2>
+            {projects.length > 0 ? (
+              <ul className="space-y-3" role="list">
+                {projects.map(project => (
+                  <li key={project.id}>
+                    <a
+                      href={`/project/${project.id}`}
+                      className="flex items-center gap-2 p-5 border"
+                      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold">{project.title}</p>
+                        <p
+                          className="text-sm line-clamp-1"
+                          style={{ color: 'var(--muted-foreground)' }}
+                        >
+                          {project.description}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <span className="label-tech" style={{ color: 'var(--primary)' }}>
+                          {project.votesCount} vote{project.votesCount !== 1 ? 's' : ''}
+                        </span>
+                        {project.winner && (
+                          <span className="label-tech" style={{ color: 'var(--success)' }}>
+                            ★ GAGNANT
+                          </span>
+                        )}
+                        <ExternalLink size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
+                      </div>
+                    </a>
+                  </li>
+                ))}
+              </ul>
             ) : (
               <div
                 className="p-5 border text-center"

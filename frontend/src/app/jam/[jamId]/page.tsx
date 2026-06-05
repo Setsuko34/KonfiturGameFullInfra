@@ -168,7 +168,6 @@ export default async function JamPage({ params }: Props) {
 
               {/* Countdown */}
               <JamCountdownClient
-                jamId={jam.id}
                 initialStatus={effectiveStatus}
                 startDate={jam.startDate}
                 endDate={jam.endDate}

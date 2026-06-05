@@ -173,6 +173,10 @@ astr  game_jams prizes             512  false  true   # array
 astr  game_jams tags                64  false  true   # array
 astr  game_jams cover_image_id     256  false
 astr  game_jams organizer_id        36  true
+astr  game_jams organizer          256  false
+aint  game_jams participants       false  0
+abool game_jams featured           false  false
+aint  game_jams featured_order     false
 wait_attrs game_jams
 
 echo
@@ -193,6 +197,7 @@ astr  team_members user_id   36   true
 astr  team_members name     128   true
 aenum team_members role '["dev","artist","sound","designer","writer"]'  true  dev
 abool team_members is_leader  true  false
+astr  team_members avatar_url  512  false
 wait_attrs team_members
 
 echo
@@ -210,6 +215,8 @@ adt   projects submission_date false
 aint  projects votes_count    false  0
 astr  projects cover_image_id  256  false
 astr  projects screenshot_ids  256  false  true  # array
+abool projects reported        false  false
+abool projects winner          false  false
 wait_attrs projects
 
 echo
@@ -222,6 +229,7 @@ astr  chat_messages author_name  128   true
 astr  chat_messages content     2048   true
 aenum chat_messages role '["user","organizer","moderator"]'      true  user
 abool chat_messages pinned       false  false
+abool chat_messages reported     false  false
 wait_attrs chat_messages
 
 echo

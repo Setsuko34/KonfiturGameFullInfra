@@ -3,8 +3,8 @@
 import { Query } from 'node-appwrite'
 import { serverDatabases } from '@/lib/appwrite/server'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
-import { mapDocToTeam, mapDocToTeamMember } from '@/lib/appwrite/types'
-import type { Team, TeamMember } from '@/types'
+import { mapDocToTeam, mapDocToTeamMember, mapDocToGameJam, mapDocToProject } from '@/lib/appwrite/types'
+import type { Team, TeamMember, GameJam, Project } from '@/types'
 
 // ── Génération du code d'invitation ──────────────────────────────────────────
 
@@ -300,5 +300,47 @@ export async function deleteTeam(
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erreur inconnue'
     return { success: false, error: msg }
+  }
+}
+
+// ── getTeamById (page publique équipe) ────────────────────────────────────────
+
+export async function getTeamById(teamId: string): Promise<{
+  team: Team
+  members: TeamMember[]
+  jams: GameJam[]
+  projects: Project[]
+} | null> {
+  try {
+    const teamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId)
+    const team = mapDocToTeam(teamDoc)
+
+    const [membersRes, projectsRes] = await Promise.all([
+      serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
+        Query.equal('team_id', teamId),
+        Query.limit(20),
+      ]),
+      serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
+        Query.equal('team_id', teamId),
+        Query.equal('submitted', true),
+        Query.limit(10),
+      ]),
+    ])
+
+    const members = membersRes.documents.map(mapDocToTeamMember)
+    const projects = projectsRes.documents.map(mapDocToProject)
+
+    let jams: GameJam[] = []
+    if (team.jamIds.length > 0) {
+      const jamsRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
+        Query.equal('$id', team.jamIds),
+        Query.limit(20),
+      ])
+      jams = jamsRes.documents.map(mapDocToGameJam)
+    }
+
+    return { team, members, jams, projects }
+  } catch {
+    return null
   }
 }

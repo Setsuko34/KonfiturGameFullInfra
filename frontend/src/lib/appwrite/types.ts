@@ -1,19 +1,22 @@
 import type { Models } from 'appwrite'
 import type { GameJam, Team, TeamMember, Project, ChatMessage, Announcement, Comment } from '@/types'
+import { computeJamStatus } from '@/lib/jam-status'
 
 // Mappeurs Appwrite Document → Types applicatifs
 
 export function mapDocToGameJam(doc: Models.Document): GameJam {
+  const startDate = new Date(doc.start_date)
+  const endDate = new Date(doc.end_date)
   return {
     id: doc.$id,
     title: doc.title,
     slug: doc.slug,
     theme: doc.theme,
     description: doc.description,
-    status: doc.status,
+    status: computeJamStatus(startDate, endDate),
     type: doc.type,
-    startDate: new Date(doc.start_date),
-    endDate: new Date(doc.end_date),
+    startDate,
+    endDate,
     duration: doc.duration,
     participants: doc.participants ?? 0,
     maxParticipants: doc.max_participants,
