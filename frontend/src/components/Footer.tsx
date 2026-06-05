@@ -16,6 +16,7 @@ const footerLinks = {
   Légal: [
     { label: 'Conditions d\'utilisation', href: '/legal/terms' },
     { label: 'Politique de confidentialité', href: '/legal/privacy' },
+    { label: 'Mentions légales', href: '/legal/mentions-legales' },
     { label: 'Contact', href: 'mailto:contact@konfiturgame.fr' },
   ],
 }
