@@ -159,9 +159,7 @@ export interface CreateJamData {
   rules: string[]
   prizes: string[]
   tags: string[]
-  // coverFile intentionnellement absent : File n'est pas sérialisable
-  // à travers la boundary Server Action. L'upload de cover est une
-  // feature distincte (Phase 1.5) via FormData.
+  coverImageId?: string
 }
 
 export async function createJam(data: CreateJamData): Promise<GameJam> {
@@ -185,7 +183,7 @@ export async function createJam(data: CreateJamData): Promise<GameJam> {
       prizes: data.prizes,
       tags: data.tags,
       organizer_id: user.$id,
-      // cover_image_id : upload déféré Phase 1.5 (File non sérialisable via Server Action)
+      ...(data.coverImageId ? { cover_image_id: data.coverImageId } : {}),
     },
     [`read("any")`, `update("user:${user.$id}")`, `delete("user:${user.$id}")`],
   )
@@ -203,18 +201,13 @@ export async function getDashboardOverview(): Promise<{
 }> {
   const user = await getCurrentUser()
 
-  const [memberships, organizedJams, submissions, ongoingJams] = await Promise.all([
+  const [memberships, organizedJams, ongoingJams] = await Promise.all([
     serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
       Query.equal('user_id', user.$id),
-      Query.limit(1),
+      Query.limit(50),
     ]),
     serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
       Query.equal('organizer_id', user.$id),
-      Query.limit(1),
-    ]),
-    // Projets soumis : compter via la collection projects directement
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
-      Query.equal('submitted', true),
       Query.limit(1),
     ]),
     serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
@@ -223,10 +216,22 @@ export async function getDashboardOverview(): Promise<{
     ]),
   ])
 
+  // Projets soumis : uniquement ceux des teams de l'utilisateur
+  const teamIds = memberships.documents.map(m => m.team_id as string)
+  let submittedProjectsCount = 0
+  if (teamIds.length > 0) {
+    const submissions = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
+      Query.equal('team_id', teamIds),
+      Query.equal('submitted', true),
+      Query.limit(1),
+    ])
+    submittedProjectsCount = submissions.total
+  }
+
   return {
     participationsCount: memberships.total,
     organizedJamsCount: organizedJams.total,
-    submittedProjectsCount: submissions.total,  // proxy : équipes où l'user est leader avec projet
+    submittedProjectsCount,
     ongoingJam: ongoingJams.total > 0 ? mapDocToGameJam(ongoingJams.documents[0]) : null,
   }
 }
