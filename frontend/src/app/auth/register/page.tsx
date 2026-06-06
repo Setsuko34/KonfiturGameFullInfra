@@ -40,6 +40,7 @@ export default function RegisterPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [passwordTouched, setPasswordTouched] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -207,6 +208,7 @@ export default function RegisterPage() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
+                  onFocus={() => setPasswordTouched(true)}
                   required
                   autoComplete="new-password"
                   className="w-full px-3 py-2.5 pr-10 text-sm"
@@ -233,7 +235,7 @@ export default function RegisterPage() {
               </div>
 
               {/* Indicateurs de force */}
-              {password && (
+              {(password || passwordTouched) && (
                 <ul
                   id="password-requirements"
                   className="mt-2 space-y-1"
