@@ -1,0 +1,29 @@
+# Liste d'autorisation des domaines référencés dans frontend/src.
+# Tout domaine externe trouvé dans le code et ABSENT de cette liste fait
+# échouer le job CI "rgpd". Un domaine par ligne, correspondance exacte.
+# Sert aussi de registre RGPD des tiers : pour chaque ajout, vérifier si le
+# domaine reçoit des données personnelles et le documenter dans /legal/privacy.
+# Correspondance EXACTE : les sous-domaines doivent être listés individuellement
+# (ex: api.github.com n'est PAS couvert par github.com).
+
+# --- Domaines propres ---
+konfiturgame.fr
+www.konfiturgame.fr
+api.konfiturgame.fr
+
+# --- Schémas / standards (aucun transfert de données) ---
+schema.org
+
+# --- Liens sortants & documentation (navigation utilisateur, pas de transfert automatique) ---
+github.com
+itch.io
+www.cnil.fr
+www.google.com
+www.linkedin.com
+www.ovhcloud.com
+scrapy.org
+example.com
+
+# --- Services tiers recevant des données (conformité RGPD à documenter) ---
+# ip-api.com : géolocalisation d'IP (bot-detection) — IP = donnée personnelle.
+ip-api.com

@@ -1,0 +1,453 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────── Étage 1 : contrôles ────────────────
+
+  quality:
+    name: Lint + type-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm type-check
+
+  tests:
+    name: Tests unitaires
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:coverage
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: frontend/coverage/
+          retention-days: 7
+
+  secrets:
+    name: Scan secrets (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  rgpd:
+    name: Checklist RGPD
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/ci/rgpd-check.sh
+
+  sast:
+    name: Semgrep OWASP (non bloquant)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: true
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan Semgrep
+        run: >-
+          semgrep scan
+          --config p/owasp-top-ten
+          --config p/typescript
+          --config p/react
+          --json-output=semgrep.json
+          --error
+          frontend/src
+      - name: Résumé
+        if: always()
+        run: |
+          COUNT=$(python3 -c "import json; print(len(json.load(open('semgrep.json'))['results']))" 2>/dev/null || echo "?")
+          echo "### Semgrep : ${COUNT} finding(s)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-sast
+          path: semgrep.json
+          retention-days: 7
+
+  deps:
+    name: Audit dépendances (non bloquant)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+      - name: pnpm audit
+        run: pnpm -C frontend audit --prod --json > pnpm-audit.json || true
+      - name: Trivy fs (CVE dépendances)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: frontend
+          format: json
+          output: trivy-fs.json
+          severity: HIGH,CRITICAL
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-deps
+          path: |
+            pnpm-audit.json
+            trivy-fs.json
+          retention-days: 7
+      - name: Bilan (échec si findings)
+        if: always()
+        run: |
+          AUDIT=0
+          if [ -f pnpm-audit.json ]; then
+            AUDIT=$(jq '[.metadata.vulnerabilities[]] | add // 0' pnpm-audit.json)
+          fi
+          TRIVY=0
+          if [ -f trivy-fs.json ]; then
+            TRIVY=$(jq '[.Results[]? | (.Vulnerabilities // [])[]] | length' trivy-fs.json)
+          fi
+          echo "### Audit dépendances : $AUDIT vuln(s) pnpm, $TRIVY vuln(s) Trivy" >> "$GITHUB_STEP_SUMMARY"
+          [ $((AUDIT + TRIVY)) -eq 0 ]
+
+  docker:
+    name: Lint Docker (non bloquant)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: hadolint Dockerfile prod
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: frontend/Dockerfile
+      - name: hadolint Dockerfile dev
+        if: always()
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: frontend/Dockerfile.dev
+      - name: Trivy config (Compose + Dockerfiles)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: .
+          format: json
+          output: trivy-config.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-docker
+          path: trivy-config.json
+          retention-days: 7
+
+  # ──────────────── Étage 2 : déploiement (push main uniquement) ────────────────
+
+  changes:
+    name: Détection des changements
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    timeout-minutes: 5
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend }}
+      functions: ${{ steps.filter.outputs.functions }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+      # Limitation connue : sur un force-push sans ancêtre commun, paths-filter
+      # considère tous les fichiers comme modifiés → redéploiement complet.
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+            functions:
+              - 'appwrite.json'
+              - 'functions/**'
+            infra:
+              - 'docker-compose.yml'
+              - 'traefik/**'
+
+  # Note : si infra ET frontend changent dans le même push, ce job recrée le
+  # frontend avec l'image existante (nouvelle config compose), puis
+  # deploy-frontend reconstruit l'image — bref délai où l'ancienne image
+  # tourne avec la nouvelle config. Acceptable : c'est l'image qui tournait déjà.
+  deploy-infra:
+    name: Déploiement infra (compose / traefik)
+    runs-on: ubuntu-latest
+    needs: [changes, quality, tests, secrets, rgpd]
+    if: github.event_name == 'push' && needs.changes.outputs.infra == 'true'
+    timeout-minutes: 20
+    steps:
+      - name: Pull + up sur le VPS
+        env:
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          envs: APP_DIR
+          command_timeout: 15m
+          script: |
+            set -e
+            cd "$APP_DIR"
+            git pull --ff-only origin main
+            docker compose -f docker-compose.yml up -d --remove-orphans
+      - name: Healthcheck frontend
+        run: |
+          for i in $(seq 1 10); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://konfiturgame.fr || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "Frontend OK (HTTP $code, tentative $i)"
+              exit 0
+            fi
+            echo "Tentative $i/10 : HTTP $code"
+          done
+          echo "Frontend KO après 10 tentatives"
+          exit 1
+      - name: Healthcheck Appwrite
+        run: |
+          for i in $(seq 1 10); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://api.konfiturgame.fr/v1/health || echo "000")
+            case "$code" in
+              200|401)
+                echo "Appwrite OK (HTTP $code — service répond, tentative $i)"
+                exit 0
+                ;;
+            esac
+            echo "Tentative $i/10 : HTTP $code"
+          done
+          echo "Appwrite KO après 10 tentatives"
+          exit 1
+
+  deploy-frontend:
+    name: Déploiement frontend
+    runs-on: ubuntu-latest
+    needs: [changes, quality, tests, secrets, rgpd, deploy-infra]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      needs.changes.outputs.frontend == 'true' &&
+      needs.quality.result == 'success' &&
+      needs.tests.result == 'success' &&
+      needs.secrets.result == 'success' &&
+      needs.rgpd.result == 'success' &&
+      (needs.deploy-infra.result == 'success' || needs.deploy-infra.result == 'skipped')
+    timeout-minutes: 30
+    steps:
+      - name: Pull + build + restart frontend sur le VPS
+        env:
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          envs: APP_DIR
+          command_timeout: 25m
+          script: |
+            set -e
+            cd "$APP_DIR"
+            git pull --ff-only origin main
+            docker compose -f docker-compose.yml build frontend
+            docker compose -f docker-compose.yml up -d frontend
+      - name: Healthcheck frontend
+        run: |
+          for i in $(seq 1 10); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://konfiturgame.fr || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "Frontend OK (HTTP $code, tentative $i)"
+              exit 0
+            fi
+            echo "Tentative $i/10 : HTTP $code"
+          done
+          echo "Frontend KO après 10 tentatives"
+          exit 1
+
+  deploy-functions:
+    name: Déploiement Appwrite functions
+    runs-on: ubuntu-latest
+    needs: [changes, quality, tests, secrets, rgpd]
+    if: github.event_name == 'push' && needs.changes.outputs.functions == 'true'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Exception à la règle pnpm du projet : install global d'un outil CLI
+      # sur un runner éphémère, aucun impact sur le lockfile du projet.
+      - run: npm install -g appwrite-cli@10
+      - name: Push functions vers la prod
+        env:
+          APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}
+        run: |
+          appwrite client \
+            --endpoint https://api.konfiturgame.fr/v1 \
+            --project-id 69a19b8d00175f1d0b99 \
+            --key "$APPWRITE_API_KEY"
+          appwrite push functions --force
+
+  # Phase 2 — schéma Appwrite. Activer après `appwrite pull collections` :
+  # remplacer la condition if par celle de deploy-functions et ajouter
+  # 'appwrite push collections --force' (voir docs/CI-CD.md).
+  deploy-schema:
+    name: Déploiement schéma Appwrite (phase 2 — désactivé)
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/__disabled__'
+    steps:
+      - run: echo "Phase 2 non activée"
+
+  # ──────────────── Issues automatiques ────────────────
+
+  report-deploy-failure:
+    name: Issue si échec de déploiement
+    runs-on: ubuntu-latest
+    needs: [deploy-infra, deploy-frontend, deploy-functions]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      (needs.deploy-infra.result == 'failure' ||
+       needs.deploy-frontend.result == 'failure' ||
+       needs.deploy-functions.result == 'failure')
+    permissions:
+      contents: read
+      issues: write
+    timeout-minutes: 5
+    steps:
+      - name: Créer ou commenter l'issue deploy-failure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          R_INFRA: ${{ needs.deploy-infra.result }}
+          R_FRONT: ${{ needs.deploy-frontend.result }}
+          R_FUNC: ${{ needs.deploy-functions.result }}
+        run: |
+          # Crée le label s'il n'existe pas encore (premier run) — idempotent.
+          gh label create deploy-failure --repo "$REPO" --force \
+            --color D73A4A --description "Échec de déploiement automatique"
+          FAILED=""
+          if [ "$R_INFRA" = "failure" ]; then FAILED="$FAILED deploy-infra"; fi
+          if [ "$R_FRONT" = "failure" ]; then FAILED="$FAILED deploy-frontend"; fi
+          if [ "$R_FUNC" = "failure" ]; then FAILED="$FAILED deploy-functions"; fi
+          # shellcheck disable=SC2016
+          BODY=$(printf '## Échec de déploiement\n\n- **Commit :** `%s`\n- **Jobs en échec :**%s\n- **Logs :** %s\n\nProcédure de rollback : voir `docs/CI-CD.md`.\n' "$SHA" "$FAILED" "$RUN_URL")
+          EXISTING=$(gh issue list --repo "$REPO" --label deploy-failure --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$REPO" --body "$BODY"
+          else
+            gh issue create --repo "$REPO" --title "Échec de déploiement sur main" \
+              --label deploy-failure --body "$BODY"
+          fi
+
+  security-report:
+    name: Issue rapport sécurité
+    runs-on: ubuntu-latest
+    needs: [sast, deps, docker]
+    if: always() && github.event_name == 'push'
+    permissions:
+      contents: read
+      issues: write
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: security-*
+          path: reports
+          merge-multiple: true
+      - name: Construire le rapport
+        id: report
+        run: |
+          mkdir -p reports
+          if ! ls reports/*.json >/dev/null 2>&1; then
+            # Aucun artefact téléchargé (scanners en échec ?) — on ne touche pas à l'issue.
+            echo "total=indisponible" >> "$GITHUB_OUTPUT"
+            echo "Aucun artefact sécurité disponible — gestion d'issue sautée."
+            exit 0
+          fi
+          TOTAL=$(bash scripts/ci/build-security-report.sh reports)
+          echo "total=$TOTAL" >> "$GITHUB_OUTPUT"
+          echo "Findings totaux : $TOTAL"
+      - name: Créer / mettre à jour / fermer l'issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TOTAL: ${{ steps.report.outputs.total }}
+        run: |
+          case "$TOTAL" in
+            ''|*[!0-9]*)
+              echo "Total non numérique ('$TOTAL') — rapport indisponible, issue laissée en l'état."
+              exit 0
+              ;;
+          esac
+          # Crée le label s'il n'existe pas encore (premier run) — idempotent.
+          gh label create security-report --repo "$REPO" --force \
+            --color D93F0B --description "Rapport sécurité CI"
+          EXISTING=$(gh issue list --repo "$REPO" --label security-report --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ "$TOTAL" -eq 0 ]; then
+            if [ -n "$EXISTING" ]; then
+              gh issue close "$EXISTING" --repo "$REPO" \
+                --comment "Plus aucun finding sécurité sur main — fermeture automatique."
+            fi
+            echo "Aucun finding — pas d'issue."
+          elif [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --repo "$REPO" --body-file reports/security-report.md
+          else
+            gh issue create --repo "$REPO" --title "Rapport sécurité automatique" \
+              --label security-report --body-file reports/security-report.md
+          fi
