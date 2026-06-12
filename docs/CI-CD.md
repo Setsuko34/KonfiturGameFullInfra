@@ -1,6 +1,6 @@
 # CI/CD — Guide opérateur
 
-Pipeline : `.github/workflows/ci-cd.yml`. Spec : `docs/superpowers/specs/2026-06-10-ci-cd-pipeline-design.md`.
+Pipeline : `.github/workflows/ci-cd.yml`. Spec : `docs/superpowers/specs/2026-06-10-ci-cd-pipeline-design.md`. Protections de branche : `docs/BRANCH-PROTECTION.md`.
 
 ## Vue d'ensemble
 
