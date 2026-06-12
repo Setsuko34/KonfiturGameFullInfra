@@ -4,8 +4,8 @@ Pipeline : `.github/workflows/ci-cd.yml`. Spec : `docs/superpowers/specs/2026-06
 
 ## Vue d'ensemble
 
-- **PR vers `main`** : contrôles uniquement — bloquants : `Lint + type-check`, `Tests unitaires`, `Scan secrets (gitleaks)`, `Checklist RGPD` ; non bloquants (rapport) : Semgrep, audit dépendances, lint Docker.
-- **Push sur `main`** : mêmes contrôles, puis déploiements **uniquement pour les zones modifiées** :
+- **PR ou push vers `main` et `develop`** : contrôles — bloquants : `Lint + type-check`, `Tests unitaires`, `Scan secrets (gitleaks)`, `Checklist RGPD` ; non bloquants (rapport) : Semgrep, audit dépendances, lint Docker.
+- **Push sur `main` uniquement** : après les contrôles, déploiements **uniquement pour les zones modifiées** (jamais depuis `develop`) :
   - `frontend/**` → rebuild + restart du service `frontend` sur le VPS (SSH)
   - `docker-compose.yml`, `traefik/**` → `docker compose up -d` complet sur le VPS (SSH)
   - `appwrite.json`, `functions/**` → `appwrite push functions` depuis le runner CI
