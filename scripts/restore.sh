@@ -486,7 +486,7 @@ case "$RESTORE_MODE" in
       fi
       # Appwrite 1.8 démarre plusieurs workers + migrations → poll /health plutôt que sleep fixe
       echo "   Attente qu'Appwrite soit prêt..."
-      local max_wait=120 waited=0
+      max_wait=120; waited=0
       until curl -sf -H "X-Appwrite-Project: $AW_PROJECT" -H "X-Appwrite-Key: $AW_KEY" \
         "${AW_ENDPOINT}/health" 2>/dev/null | jq -e '.status' &>/dev/null; do
         sleep 5; waited=$((waited + 5))
