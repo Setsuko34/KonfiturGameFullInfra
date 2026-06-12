@@ -67,6 +67,10 @@ jobs:
     name: Scan secrets (gitleaks)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # gitleaks-action liste les commits de la PR via l'API GitHub
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:

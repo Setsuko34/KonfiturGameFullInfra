@@ -4,7 +4,11 @@ import { computeJamStatus } from '@/lib/jam-status'
 
 // Mappeurs Appwrite Document → Types applicatifs
 
-export function mapDocToGameJam(doc: Models.Document): GameJam {
+// Depuis appwrite 23 / node-appwrite 22, Models.Document est strict (champs $
+// uniquement) ; les attributs de collection passent par la signature d'index.
+export type AppwriteDoc = Models.Document & Record<string, any>
+
+export function mapDocToGameJam(doc: AppwriteDoc): GameJam {
   const startDate = new Date(doc.start_date)
   const endDate = new Date(doc.end_date)
   return {
@@ -31,7 +35,7 @@ export function mapDocToGameJam(doc: Models.Document): GameJam {
   }
 }
 
-export function mapDocToTeam(doc: Models.Document): Team {
+export function mapDocToTeam(doc: AppwriteDoc): Team {
   return {
     id: doc.$id,
     jamIds: doc.jam_ids ?? [],
@@ -42,7 +46,7 @@ export function mapDocToTeam(doc: Models.Document): Team {
   }
 }
 
-export function mapDocToTeamMember(doc: Models.Document): TeamMember {
+export function mapDocToTeamMember(doc: AppwriteDoc): TeamMember {
   return {
     id: doc.$id,
     userId: doc.user_id,
@@ -53,7 +57,7 @@ export function mapDocToTeamMember(doc: Models.Document): TeamMember {
   }
 }
 
-export function mapDocToProject(doc: Models.Document): Project {
+export function mapDocToProject(doc: AppwriteDoc): Project {
   return {
     id: doc.$id,
     jamId: doc.jam_id,
@@ -73,7 +77,7 @@ export function mapDocToProject(doc: Models.Document): Project {
   }
 }
 
-export function mapDocToChatMessage(doc: Models.Document): ChatMessage {
+export function mapDocToChatMessage(doc: AppwriteDoc): ChatMessage {
   return {
     id: doc.$id,
     jamId: doc.jam_id,
@@ -88,7 +92,7 @@ export function mapDocToChatMessage(doc: Models.Document): ChatMessage {
   }
 }
 
-export function mapDocToAnnouncement(doc: Models.Document): Announcement {
+export function mapDocToAnnouncement(doc: AppwriteDoc): Announcement {
   return {
     id: doc.$id,
     jamId: doc.jam_id,
@@ -100,7 +104,7 @@ export function mapDocToAnnouncement(doc: Models.Document): Announcement {
   }
 }
 
-export function mapDocToComment(doc: Models.Document): Comment {
+export function mapDocToComment(doc: AppwriteDoc): Comment {
   return {
     id: doc.$id,
     projectId: doc.project_id,

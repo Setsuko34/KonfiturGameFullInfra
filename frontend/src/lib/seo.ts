@@ -7,6 +7,13 @@ import type { GameJam, Project } from '@/types'
 
 type JsonLdObject = Record<string, unknown>
 
+// Sérialise un objet JSON-LD pour injection dans un <script>.
+// Échappe `<` en `<` : sans cela, un titre de jam/projet contenant
+// `</script>` casserait le tag et permettrait une injection XSS.
+export function serializeJsonLd(jsonLd: JsonLdObject): string {
+  return JSON.stringify(jsonLd).replace(/</g, '\\u003c')
+}
+
 export function generateOrganizationJsonLd(siteUrl: string): JsonLdObject {
   return {
     '@context': 'https://schema.org',

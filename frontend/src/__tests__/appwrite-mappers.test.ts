@@ -8,19 +8,20 @@ import {
   mapDocToAnnouncement,
   mapDocToComment,
 } from '@/lib/appwrite/types'
-import type { Models } from 'appwrite'
+import type { AppwriteDoc } from '@/lib/appwrite/types'
 
 // Document Appwrite minimal avec les champs système requis
-function makeDoc(fields: Record<string, unknown>): Models.Document {
+function makeDoc(fields: Record<string, unknown>): AppwriteDoc {
   return {
     $id: 'doc-1',
+    $sequence: 1,
     $createdAt: '2026-01-15T10:00:00.000Z',
     $updatedAt: '2026-01-15T10:00:00.000Z',
     $permissions: [],
     $collectionId: 'col-1',
     $databaseId: 'db-1',
     ...fields,
-  } as Models.Document
+  }
 }
 
 // ────────────────────────────────────────
