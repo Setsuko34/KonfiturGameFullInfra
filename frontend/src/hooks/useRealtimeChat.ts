@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { client, databases } from '@/lib/appwrite/client'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'appwrite'
@@ -11,30 +11,35 @@ export function useRealtimeChat(jamId: string, channel: ChatChannel) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [connected, setConnected] = useState(false)
   const [loading, setLoading] = useState(true)
-  const unsubscribeRef = useRef<(() => void) | null>(null)
 
-  // Charger les messages initiaux
-  const loadMessages = useCallback(async () => {
-    setLoading(true)
-    try {
-      const res = await databases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, [
-        Query.equal('jam_id', jamId),
-        Query.equal('channel', channel),
-        Query.orderAsc('$createdAt'),
-        Query.limit(100),
-      ])
-      setMessages(res.documents.map(mapDocToChatMessage))
-    } catch (err) {
+  // Chargement initial + reset sur changement de canal
+  useEffect(() => {
+    let cancelled = false
+
+    databases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, [
+      Query.equal('jam_id', jamId),
+      Query.equal('channel', channel),
+      Query.orderAsc('$createdAt'),
+      Query.limit(100),
+    ]).then(res => {
+      if (!cancelled) {
+        setMessages(res.documents.map(mapDocToChatMessage))
+        setLoading(false)
+      }
+    }).catch(err => {
       console.error('Erreur chargement messages', err)
-    } finally {
-      setLoading(false)
+      if (!cancelled) setLoading(false)
+    })
+
+    return () => {
+      cancelled = true
+      setMessages([])
+      setLoading(true)
     }
   }, [jamId, channel])
 
   // Souscription Realtime
   useEffect(() => {
-    loadMessages()
-
     const unsubscribe = client.subscribe(
       `databases.${DATABASE_ID}.collections.${COLLECTIONS.CHAT_MESSAGES}.documents`,
       (response) => {
@@ -45,7 +50,6 @@ export function useRealtimeChat(jamId: string, channel: ChatChannel) {
           if (doc.jam_id === jamId && doc.channel === channel) {
             const msg = mapDocToChatMessage(doc)
             setMessages(prev => {
-              // Éviter les doublons
               if (prev.some(m => m.id === msg.id)) return prev
               return [...prev, msg]
             })
@@ -58,15 +62,14 @@ export function useRealtimeChat(jamId: string, channel: ChatChannel) {
       }
     )
 
-    unsubscribeRef.current = unsubscribe
-    setConnected(true)
+    const timer = setTimeout(() => setConnected(true), 0)
 
     return () => {
+      clearTimeout(timer)
       unsubscribe()
-      unsubscribeRef.current = null
       setConnected(false)
     }
-  }, [jamId, channel, loadMessages])
+  }, [jamId, channel])
 
   return { messages, connected, loading }
 }

@@ -52,7 +52,8 @@ export default function JamTeamsSection({
     })
   }
 
-  const canAct = currentUser && !userTeamInThisJam && Date.now() < startDate.getTime()
+  const [now] = useState(() => Date.now())
+  const canAct = currentUser && !userTeamInThisJam && now < startDate.getTime()
 
   return (
     <section id="teams" aria-labelledby="teams-heading">

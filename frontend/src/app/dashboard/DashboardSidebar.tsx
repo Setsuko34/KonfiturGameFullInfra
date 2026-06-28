@@ -2,36 +2,18 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import Image from 'next/image'
 import {
-  LayoutDashboard, Trophy, Users, Send,
+  LayoutDashboard, Trophy, Users,
   List, Plus, LogOut, Menu, X, Home, User,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
+import SidebarNavLink from '@/components/SidebarNavLink'
 
 export default function DashboardSidebar() {
   const { user, logout } = useAuth()
-  const pathname = usePathname()
   const [open, setOpen] = useState(false)
-
-  const isActive = (href: string) =>
-    href === '/dashboard' ? pathname === href : pathname.startsWith(href)
-
-  const NavLink = ({ href, icon: Icon, label }: { href: string; icon: typeof Home; label: string }) => (
-    <Link
-      href={href}
-      onClick={() => setOpen(false)}
-      aria-current={isActive(href) ? 'page' : undefined}
-      className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-colors"
-      style={{
-        background: isActive(href) ? 'var(--sidebar-accent)' : 'transparent',
-        color: isActive(href) ? 'var(--sidebar-primary)' : 'var(--sidebar-foreground)',
-      }}
-    >
-      <Icon size={15} aria-hidden="true" />
-      {label}
-    </Link>
-  )
+  const closeMenu = () => setOpen(false)
 
   const sidebar = (
     <nav
@@ -41,7 +23,7 @@ export default function DashboardSidebar() {
     >
       {/* Logo */}
       <div className="flex items-center gap-2 px-5 py-4 border-b" style={{ borderColor: 'var(--sidebar-border)' }}>
-        <img src="/hautequalite.svg" alt="" width={24} height={24} aria-hidden="true" />
+        <Image src="/hautequalite.svg" alt="" width={24} height={24} aria-hidden="true" />
         <Link href="/" className="font-bold text-sm" style={{ color: 'var(--sidebar-foreground)' }}>
           Konfitur<span style={{ color: 'var(--primary)' }}>Game</span>
         </Link>
@@ -59,15 +41,15 @@ export default function DashboardSidebar() {
 
       <div className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {/* Vue d'ensemble */}
-        <NavLink href="/dashboard" icon={LayoutDashboard} label="Vue d'ensemble" />
+        <SidebarNavLink href="/dashboard" icon={LayoutDashboard} label="Vue d'ensemble" exact onClose={closeMenu} />
 
         {/* Bloc PARTICIPANT */}
         <p className="px-3 pt-4 pb-1 text-[9px] tracking-widest uppercase" style={{ color: 'var(--muted-foreground)' }}>
           Participant
         </p>
-        <NavLink href="/dashboard/participations" icon={Trophy} label="Mes participations" />
-        <NavLink href="/dashboard/team" icon={Users} label="Mon équipe" />
-        <NavLink href="/dashboard/profile" icon={User} label="Mon profil" />
+        <SidebarNavLink href="/dashboard/participations" icon={Trophy} label="Mes participations" onClose={closeMenu} />
+        <SidebarNavLink href="/dashboard/team" icon={Users} label="Mon équipe" onClose={closeMenu} />
+        <SidebarNavLink href="/dashboard/profile" icon={User} label="Mon profil" onClose={closeMenu} />
         {/* "Mes soumissions" est une sous-section de participations — déférée Phase 1.5.
             Pour l'instant, les soumissions sont visibles dans /dashboard/participations. */}
 
@@ -78,10 +60,10 @@ export default function DashboardSidebar() {
         >
           Organisateur
         </p>
-        <NavLink href="/dashboard/my-jams" icon={List} label="Mes jams" />
+        <SidebarNavLink href="/dashboard/my-jams" icon={List} label="Mes jams" onClose={closeMenu} />
         <Link
           href="/dashboard/my-jams/new"
-          onClick={() => setOpen(false)}
+          onClick={closeMenu}
           className="flex items-center gap-3 px-3 py-2.5 text-sm font-semibold transition-opacity hover:opacity-80 mt-1"
           style={{
             border: '1px solid var(--primary)',
@@ -129,7 +111,7 @@ export default function DashboardSidebar() {
         style={{ background: 'var(--sidebar)', borderColor: 'var(--sidebar-border)' }}
       >
         <div className="flex items-center gap-2 font-bold text-sm">
-          <img src="/hautequalite.svg" alt="" width={20} height={20} aria-hidden="true" />
+          <Image src="/hautequalite.svg" alt="" width={20} height={20} aria-hidden="true" />
           Dashboard
         </div>
         <button
@@ -147,7 +129,7 @@ export default function DashboardSidebar() {
         <>
           <div
             className="md:hidden fixed inset-0 z-30 bg-black/50"
-            onClick={() => setOpen(false)}
+            onClick={closeMenu}
             aria-hidden="true"
           />
           <aside className="md:hidden fixed inset-y-0 left-0 w-64 z-40 flex flex-col border-r"
@@ -162,4 +144,3 @@ export default function DashboardSidebar() {
     </>
   )
 }
-
