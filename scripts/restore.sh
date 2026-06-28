@@ -59,19 +59,25 @@ HAS_MARIADB=false
 HAS_SCHEMA=false
 HAS_TEAMS=false
 HAS_DATA=false
+HAS_STORAGE=false
+HAS_FUNCTIONS=false
 [[ -f "$BACKUP_DIR/mariadb.sql" ]] && HAS_MARIADB=true
 [[ -f "$BACKUP_DIR/appwrite-schema.json" ]] && HAS_SCHEMA=true
 [[ -f "$BACKUP_DIR/appwrite-teams.json" ]] && HAS_TEAMS=true
 [[ -f "$BACKUP_DIR/appwrite-data.json" ]] && HAS_DATA=true
+[[ -f "$BACKUP_DIR/appwrite-storage.json" ]] && HAS_STORAGE=true
+[[ -f "$BACKUP_DIR/appwrite-functions.json" ]] && HAS_FUNCTIONS=true
 
 echo ""
 echo "♻️  Restauration depuis : $BACKUP_DIR"
 echo ""
 echo "Contenu détecté :"
-$HAS_MARIADB && echo "   ✅ mariadb.sql" || echo "   ❌ mariadb.sql (absent)"
-$HAS_SCHEMA  && echo "   ✅ appwrite-schema.json" || echo "   ❌ appwrite-schema.json (absent)"
-$HAS_TEAMS   && echo "   ✅ appwrite-teams.json" || echo "   ❌ appwrite-teams.json (absent)"
-$HAS_DATA    && echo "   ✅ appwrite-data.json" || echo "   ❌ appwrite-data.json (absent)"
+$HAS_MARIADB   && echo "   ✅ mariadb.sql" || echo "   ❌ mariadb.sql (absent)"
+$HAS_SCHEMA    && echo "   ✅ appwrite-schema.json" || echo "   ❌ appwrite-schema.json (absent)"
+$HAS_TEAMS     && echo "   ✅ appwrite-teams.json" || echo "   ❌ appwrite-teams.json (absent)"
+$HAS_DATA      && echo "   ✅ appwrite-data.json" || echo "   ❌ appwrite-data.json (absent)"
+$HAS_STORAGE   && echo "   ✅ appwrite-storage.json (buckets)" || echo "   ❌ appwrite-storage.json (absent)"
+$HAS_FUNCTIONS && echo "   ✅ appwrite-functions.json (functions)" || echo "   ❌ appwrite-functions.json (absent)"
 echo ""
 
 # Choisir le mode
@@ -468,6 +474,141 @@ restore_teams() {
 }
 
 # =============================================================================
+# MODE 2 — Buckets (recréation via API sur serveur vierge)
+# =============================================================================
+restore_buckets() {
+  if ! $HAS_STORAGE; then
+    echo "   ⚠️  appwrite-storage.json absent, buckets non restaurés"
+    return
+  fi
+
+  echo "🪣  Restauration buckets Appwrite..."
+  local storage_data
+  storage_data=$(cat "$BACKUP_DIR/appwrite-storage.json")
+
+  while IFS= read -r bucket_json; do
+    local bucket_id bucket_name permissions file_security enabled max_size extensions compression encryption antivirus transformations
+    bucket_id=$(echo "$bucket_json" | jq -r '."$id"')
+    bucket_name=$(echo "$bucket_json" | jq -r '.name')
+    permissions=$(echo "$bucket_json" | jq -c '."$permissions" // ["read(\"any\")"]')
+    file_security=$(echo "$bucket_json" | jq -r '.fileSecurity // false')
+    enabled=$(echo "$bucket_json" | jq -r '.enabled // true')
+    max_size=$(echo "$bucket_json" | jq -r '.maximumFileSize // 10485760')
+    extensions=$(echo "$bucket_json" | jq -c '.allowedFileExtensions // []')
+    compression=$(echo "$bucket_json" | jq -r '.compression // "none"')
+    encryption=$(echo "$bucket_json" | jq -r '.encryption // true')
+    antivirus=$(echo "$bucket_json" | jq -r '.antivirus // false')
+    transformations=$(echo "$bucket_json" | jq -r '.transformations // true')
+
+    local body result
+    body=$(jq -n \
+      --arg id "$bucket_id" \
+      --arg name "$bucket_name" \
+      --argjson perms "$permissions" \
+      --argjson fs "$file_security" \
+      --argjson en "$enabled" \
+      --argjson ms "$max_size" \
+      --argjson ext "$extensions" \
+      --arg comp "$compression" \
+      --argjson enc "$encryption" \
+      --argjson av "$antivirus" \
+      --argjson tr "$transformations" \
+      '{
+        bucketId: $id, name: $name, permissions: $perms,
+        fileSecurity: $fs, enabled: $en, maximumFileSize: $ms,
+        allowedFileExtensions: $ext, compression: $comp,
+        encryption: $enc, antivirus: $av, transformations: $tr
+      }')
+
+    result=$(aw_post "/storage/buckets" "$body")
+    if [[ "$result" == "null" ]]; then
+      echo "   ⚠️  Bucket \"$bucket_name\" ($bucket_id) — déjà existant ou erreur"
+    else
+      echo "   + Bucket : $bucket_name ($bucket_id)"
+    fi
+  done < <(echo "$storage_data" | jq -c '.buckets[]? // empty')
+
+  echo "   ✅ Buckets restaurés"
+  echo "   💡 Les fichiers uploadés sont dans le volume appwrite-uploads (restauré en Mode 1)"
+}
+
+# =============================================================================
+# MODE 2 — Functions (recréation des métadonnées via API sur serveur vierge)
+# Note : les déploiements ne sont pas re-uploadés automatiquement.
+#        Après restauration, lancer : appwrite push functions
+# =============================================================================
+restore_functions() {
+  if ! $HAS_FUNCTIONS; then
+    echo "   ⚠️  appwrite-functions.json absent, functions non restaurées"
+    return
+  fi
+
+  echo "⚡ Restauration functions Appwrite..."
+  local fn_data
+  fn_data=$(cat "$BACKUP_DIR/appwrite-functions.json")
+
+  while IFS= read -r fn_json; do
+    local fn_id fn_name runtime execute events schedule timeout enabled logging entrypoint commands vars
+    fn_id=$(echo "$fn_json" | jq -r '."$id"')
+    fn_name=$(echo "$fn_json" | jq -r '.name')
+    runtime=$(echo "$fn_json" | jq -r '.runtime')
+    execute=$(echo "$fn_json" | jq -c '.execute // []')
+    events=$(echo "$fn_json" | jq -c '.events // []')
+    schedule=$(echo "$fn_json" | jq -r '.schedule // ""')
+    timeout=$(echo "$fn_json" | jq -r '.timeout // 15')
+    enabled=$(echo "$fn_json" | jq -r '.enabled // true')
+    logging=$(echo "$fn_json" | jq -r '.logging // true')
+    entrypoint=$(echo "$fn_json" | jq -r '.entrypoint // "src/main.js"')
+    commands=$(echo "$fn_json" | jq -r '.commands // ""')
+    vars=$(echo "$fn_json" | jq -c '.vars // []')
+
+    local body result
+    body=$(jq -n \
+      --arg id "$fn_id" \
+      --arg name "$fn_name" \
+      --arg runtime "$runtime" \
+      --argjson execute "$execute" \
+      --argjson events "$events" \
+      --arg schedule "$schedule" \
+      --argjson timeout "$timeout" \
+      --argjson enabled "$enabled" \
+      --argjson logging "$logging" \
+      --arg entrypoint "$entrypoint" \
+      --arg commands "$commands" \
+      '{
+        functionId: $id, name: $name, runtime: $runtime,
+        execute: $execute, events: $events, schedule: $schedule,
+        timeout: $timeout, enabled: $enabled, logging: $logging,
+        entrypoint: $entrypoint, commands: $commands
+      }')
+
+    result=$(aw_post "/functions" "$body")
+    if [[ "$result" == "null" ]]; then
+      echo "   ⚠️  Function \"$fn_name\" ($fn_id) — déjà existante ou erreur"
+    else
+      echo "   + Function : $fn_name ($fn_id, $runtime)"
+    fi
+
+    # Restaurer les variables de la function
+    local var_count=0
+    while IFS= read -r var_json; do
+      local var_key var_val var_secret var_body var_result
+      var_key=$(echo "$var_json" | jq -r '.key')
+      var_val=$(echo "$var_json" | jq -r '.value // ""')
+      var_secret=$(echo "$var_json" | jq -r '.secret // false')
+      var_body=$(jq -n --arg k "$var_key" --arg v "$var_val" '{key: $k, value: $v}')
+      var_result=$(aw_post "/functions/${fn_id}/variables" "$var_body")
+      [[ "$var_result" != "null" ]] && var_count=$((var_count + 1))
+    done < <(echo "$vars" | jq -c '.[]? // empty')
+    [[ "$var_count" -gt 0 ]] && echo "      + $var_count variable(s) restaurée(s)"
+
+  done < <(echo "$fn_data" | jq -c '.functions[]? // empty')
+
+  echo "   ✅ Functions restaurées (métadonnées)"
+  echo "   💡 Pour redéployer le code : appwrite push functions"
+}
+
+# =============================================================================
 # Exécution selon le mode choisi
 # =============================================================================
 case "$RESTORE_MODE" in
@@ -512,6 +653,8 @@ case "$RESTORE_MODE" in
       exit 1
     fi
     restore_schema
+    restore_buckets
+    restore_functions
     restore_teams
     restore_documents
     ;;

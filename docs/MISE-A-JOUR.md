@@ -11,7 +11,7 @@ Procédures pour maintenir les dépendances, les services et le schéma à jour.
 1. [Règles générales](#1-règles-générales)
 2. [Dépendances npm (frontend)](#2-dépendances-npm-frontend)
 3. [Mise à jour Next.js](#3-mise-à-jour-nextjs)
-4. [Mise à jour Appwrite](#4-mise-à-jour-appwrite)
+4. [Mise à jour Appwrite](#4-mise-à-jour-appwrite) — procédure complète, migration DB, bugs connus
 5. [Mise à jour Traefik](#5-mise-à-jour-traefik)
 6. [Mise à jour MariaDB et Redis](#6-mise-à-jour-mariadb-et-redis)
 7. [Mise à jour du schéma Appwrite](#7-mise-à-jour-du-schéma-appwrite)
@@ -183,53 +183,150 @@ Procédure :
 
 ## 4. Mise à jour Appwrite
 
-**Version actuelle :** 1.8.0 (server) + `appwrite-cli@10` (CI)
+**Version actuelle :** 1.9.0 (server) + `appwrite-cli@17.3.1` (local)
 
-> **Critique :** toujours consulter les notes de migration Appwrite avant de mettre à jour. Des migrations de schéma manuelles sont parfois requises.
+> **Critique :** toujours consulter les notes de migration Appwrite avant de mettre à jour. La migration de schéma est **obligatoire** et peut nécessiter des corrections manuelles en base de données.
 
-### Vérifier la compatibilité SDK ↔ serveur
+### Compatibilité CLI ↔ serveur
 
-Le SDK npm `appwrite` (client) et `node-appwrite` (serveur) ont des versions qui correspondent au serveur Appwrite. Avant de mettre à jour le serveur, vérifier que les SDKs sont compatibles.
+La CLI Appwrite envoie un header `X-Appwrite-Response-Format: <version>` — une CLI mauvaise version provoque des erreurs "Route not found" ou pousse des attributs inexistants.
 
-| Appwrite Server | SDK `appwrite` | SDK `node-appwrite` |
-|-----------------|---------------|---------------------|
-| 1.8.x | 23.x | 16.x (environ) |
+| Appwrite Server | CLI locale (`npm install -g`) | SDK `appwrite` (npm) | SDK `node-appwrite` |
+|-----------------|-------------------------------|---------------------|---------------------|
+| 1.9.0 | `appwrite-cli@17.3.1` | 17.x | 15.x (environ) |
+| 1.9.5 | `appwrite-cli@22.x` | — | — |
 
-Consulter [appwrite.io/docs/sdks](https://appwrite.io/docs/sdks) pour la matrice de compatibilité.
+Pour vérifier la version installée : `appwrite --version`
 
-### Procédure de mise à jour
+### Services requis dans docker-compose.yml
+
+Depuis Appwrite 1.9.0, plusieurs workers supplémentaires sont nécessaires. Sans eux, les fonctions ne se déploient pas et les mails ne partent pas.
+
+| Service | Entrypoint | Rôle |
+|---------|-----------|------|
+| `appwrite` | *(main)* | API HTTP |
+| `appwrite-realtime` | `realtime` | WebSocket temps réel |
+| `appwrite-worker-databases` | `worker-databases` | Création d'attributs et indexes |
+| `appwrite-worker-mails` | `worker-mails` | Envoi SMTP |
+| `appwrite-worker-builds` | `worker-builds` | **Compilation des fonctions** (nouveau en 1.9) |
+| `appwrite-worker-functions` | `worker-functions` | **Exécution des fonctions** (cron, triggers) |
+| `appwrite-executor` | *(openruntimes)* | **Sandbox d'exécution** (image séparée) |
+
+Variables obligatoires à ajouter dans tous les services qui touchent aux fonctions :
+```yaml
+- _APP_EXECUTOR_HOST=http://exc1/v1       # hostname fixe de l'executor
+- _APP_EXECUTOR_SECRET=${APPWRITE_EXECUTOR_SECRET}
+- _APP_FUNCTIONS_RUNTIMES=node-20.0
+```
+
+### Procédure de mise à jour pas à pas
 
 ```bash
-# 1. Backup OBLIGATOIRE
+# ── Étape 1 : Backup OBLIGATOIRE ────────────────────────────────────────
 ./scripts/backup.sh
 
-# 2. Lire les notes de migration de la nouvelle version
+# ── Étape 2 : Lire les notes de release ────────────────────────────────
 # https://github.com/appwrite/appwrite/releases
+# Vérifier : nouveaux services requis ? nouveaux paramètres env ? breaking changes SDK ?
 
-# 3. Modifier les tags dans docker-compose.yml
-# appwrite/appwrite:1.8.0 → appwrite/appwrite:x.y.z
+# ── Étape 3 : Mettre à jour les tags dans docker-compose.yml ───────────
+# Remplacer TOUTES les occurrences de l'ancien tag :
+# appwrite/appwrite:1.9.0 → appwrite/appwrite:x.y.z
+# (appwrite, appwrite-realtime, tous les workers)
+# Vérifier aussi l'image de l'executor : openruntimes/executor:x.y.z
 
-# 4. Tirer les nouvelles images
-docker compose -f docker-compose.yml pull \
-  appwrite appwrite-realtime appwrite-worker-databases
+# ── Étape 4 : Vérifier les nouvelles variables d'environnement ──────────
+# Chaque release peut introduire de nouveaux paramètres _APP_*.
+# Comparer le docker-compose.yml officiel de la release cible avec le nôtre.
+# Source : https://github.com/appwrite/appwrite/blob/x.y.z/docker-compose.yml
 
-# 5. Arrêter et redémarrer
-docker compose -f docker-compose.yml up -d \
-  appwrite appwrite-realtime appwrite-worker-databases
+# ── Étape 5 : Tirer les nouvelles images ────────────────────────────────
+docker compose pull appwrite appwrite-realtime \
+  appwrite-worker-databases appwrite-worker-mails \
+  appwrite-worker-builds appwrite-worker-functions
 
-# 6. Attendre le démarrage (~30s)
+# ── Étape 6 : Redémarrer tous les services Appwrite ─────────────────────
+docker compose up -d appwrite appwrite-realtime \
+  appwrite-worker-databases appwrite-worker-mails \
+  appwrite-worker-builds appwrite-worker-functions \
+  appwrite-executor
+
+# ── Étape 7 : Attendre le démarrage (~30-60s) ───────────────────────────
 docker compose logs -f appwrite | grep -i "ready\|started\|error"
 
-# 7. Lancer les migrations (TOUJOURS — même si non mentionné dans les notes)
+# ── Étape 8 : MIGRATION DE BASE DE DONNÉES — OBLIGATOIRE ────────────────
 docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate
+# Durée : 1-5 minutes selon la taille de la base
+# Les "Warning: Failed to delete index..." sont normaux (non bloquants)
+# Attendre "Migration completed successfully" à la fin
 
-# 8. Redémarrer pour vider le cache interne
-docker compose -f docker-compose.yml restart appwrite
+# ── Étape 9 : Vider le cache Redis ──────────────────────────────────────
+# Obligatoire après migration — le cache peut contenir des schémas obsolètes
+docker exec konfitur-redis redis-cli FLUSHALL
 
-# 9. Vérifier l'absence d'erreurs
-docker compose logs appwrite | grep -i "error" | tail -20
+# ── Étape 10 : Redémarrer Appwrite pour recharger les métadonnées ────────
+docker compose restart appwrite appwrite-worker-builds appwrite-worker-functions
+
+# ── Étape 11 : Vérifier les erreurs ─────────────────────────────────────
+docker compose logs appwrite --since=2m | grep -i "error\|exception" | grep -v "password"
 curl https://api.konfiturgame.fr/v1/health
+
+# ── Étape 12 : Pousser la config Appwrite (buckets, fonctions) ───────────
+appwrite push buckets
+appwrite push functions
 ```
+
+### Bugs connus après migration (apparus en 1.8→1.9)
+
+Après une mise à jour majeure, Appwrite peut avoir des **attributs manquants dans les métadonnées SQL** — le code PHP attend un champ qui n'a pas été ajouté par la migration. Symptômes :
+
+- `Unknown attribute: "xyz"` → attribut présent dans le PHP mais absent du JSON de métadonnées
+- `Invalid query: Attribute not found in schema: type` → même cause, mais au niveau d'une query (pas d'insertion)
+
+**Diagnostic :**
+```bash
+# Voir l'erreur exacte dans les logs
+docker logs konfitur-appwrite --since=1m 2>&1 | grep -A5 "Exception\|500"
+
+# Identifier la table concernée (exemple : _console_buckets, _1_buckets, _console_rules)
+docker exec konfitur-mariadb sh -c \
+  'mysql -u root -p"$MYSQL_ROOT_PASSWORD" appwrite -e "DESCRIBE _console_buckets;" 2>/dev/null'
+```
+
+**Correction si un attribut manque dans les métadonnées JSON** (table `_1__metadata` ou `_console__metadata`) :
+```bash
+# 1. Extraire le JSON actuel
+docker exec konfitur-mariadb sh -c \
+  'mysql -u root -p"$MYSQL_ROOT_PASSWORD" appwrite \
+   -e "SELECT attributes FROM _1__metadata WHERE _uid = \"buckets\";" \
+   --skip-column-names 2>/dev/null' > /tmp/attrs.json
+
+# 2. Ajouter l'attribut manquant avec Python (évite les problèmes d'échappement shell)
+python3 -c "
+import json
+with open('/tmp/attrs.json') as f:
+    attrs = json.loads(f.read().strip())
+attrs.append({'\\$id':'xyz','type':'string','size':255,'required':False,
+              'signed':True,'array':False,'filters':[],'default':None,'format':''})
+sql = \"UPDATE _1__metadata SET attributes='\" + json.dumps(attrs, separators=(',',':')) + \"', _updatedAt=NOW(3) WHERE _uid='buckets';\"
+with open('/tmp/fix.sql','w') as f:
+    f.write(sql)
+"
+docker cp /tmp/fix.sql konfitur-mariadb:/tmp/fix.sql
+docker exec konfitur-mariadb sh -c \
+  'mysql -u root -p"$MYSQL_ROOT_PASSWORD" appwrite < /tmp/fix.sql 2>/dev/null'
+
+# 3. Si la colonne SQL est aussi absente, l'ajouter
+docker exec konfitur-mariadb sh -c \
+  'mysql -u root -p"$MYSQL_ROOT_PASSWORD" appwrite \
+   -e "ALTER TABLE _1_buckets ADD COLUMN xyz varchar(255) DEFAULT NULL;" 2>/dev/null'
+
+# 4. Vider le cache et redémarrer
+docker exec konfitur-redis redis-cli FLUSHALL
+docker compose restart appwrite
+```
+
+> Voir aussi `memory/appwrite_migration_190_bugs.md` pour le détail complet des corrections faites lors de la migration 1.8→1.9 (référence pour les prochaines migrations).
 
 ### Mettre à jour les SDKs en même temps
 
@@ -240,9 +337,10 @@ curl https://api.konfiturgame.fr/v1/health
 # Corriger les usages dépréciés dans src/lib/appwrite/
 ```
 
-### Mettre à jour l'Appwrite CLI (CI/CD)
+### Mettre à jour l'Appwrite CLI (CI/CD et local)
 
-Dans `.github/workflows/ci-cd.yml`, chercher `appwrite-cli@` et mettre à jour la version. Vérifier la compatibilité avec la version du serveur.
+- **Local :** `npm install -g appwrite-cli@<version-compatible-serveur>` (voir tableau de compatibilité ci-dessus)
+- **CI/CD :** dans `.github/workflows/ci-cd.yml`, chercher `appwrite-cli@` et mettre à jour la version.
 
 ---
 
@@ -568,8 +666,9 @@ docker compose -f docker-compose.yml up -d --build frontend
 |-----------|-----------------|---------------------|
 | Next.js | 16.2.9 | `frontend/package.json` |
 | SDK `appwrite` (npm) | 23.0.0 | `frontend/package.json` |
-| Appwrite server | 1.8.0 | `docker-compose.yml` |
-| Appwrite CLI (CI) | 10.x | `.github/workflows/ci-cd.yml` |
+| Appwrite server | 1.9.0 | `docker-compose.yml` |
+| Appwrite CLI (local) | 17.3.1 | — (`npm install -g appwrite-cli@17.3.1`) |
+| openruntimes/executor | 0.11.4 | `docker-compose.yml` |
 | Traefik | v3.6.7 | `docker-compose.yml` |
 | MariaDB | 10.11 | `docker-compose.yml` |
 | Redis | 7-alpine | `docker-compose.yml` |
