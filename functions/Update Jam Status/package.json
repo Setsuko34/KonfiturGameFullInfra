@@ -1,0 +1,9 @@
+{
+  "name": "update-jam-status",
+  "version": "1.0.0",
+  "description": "Cron Appwrite — met à jour le statut des game jams selon leurs dates",
+  "main": "src/main.js",
+  "dependencies": {
+    "node-appwrite": "^14.0.0"
+  }
+}
