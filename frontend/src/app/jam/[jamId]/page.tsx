@@ -6,7 +6,7 @@ import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import JamChat from '@/components/JamChat'
 import { getJamById, getAnnouncementsByJam } from '@/lib/actions/jams'
-import { generateJamJsonLd, truncateDescription } from '@/lib/seo'
+import { generateJamJsonLd, serializeJsonLd, truncateDescription } from '@/lib/seo'
 import { getTeamsByJam } from '@/lib/actions/teams'
 import { getProjectsByJam } from '@/lib/actions/projects'
 import { getChatMessages } from '@/lib/actions/chat'
@@ -111,7 +111,8 @@ export default async function JamPage({ params }: Props) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(generateJamJsonLd(jam, process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr')),
+          // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml -- JSON-LD sérialisé avec échappement de `<` (serializeJsonLd)
+          __html: serializeJsonLd(generateJamJsonLd(jam, process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr')),
         }}
       />
       <main id="main-content">

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ID } from 'appwrite'
 import { createJam } from '@/lib/actions/dashboard'
@@ -302,13 +303,13 @@ export default function NewJamForm() {
           >
             {loading ? 'Création...' : 'Créer la jam'}
           </button>
-          <a
+          <Link
             href="/dashboard/my-jams"
             className="px-6 py-3 font-bold text-sm"
             style={{ border: '1px solid var(--border)', color: 'var(--foreground)' }}
           >
             Annuler
-          </a>
+          </Link>
         </div>
       </form>
     </section>

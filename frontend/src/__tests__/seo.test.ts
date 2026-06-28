@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateJamJsonLd, generateProjectJsonLd, generateOrganizationJsonLd } from '@/lib/seo'
+import { generateJamJsonLd, generateProjectJsonLd, generateOrganizationJsonLd, serializeJsonLd } from '@/lib/seo'
 import type { GameJam, Project } from '@/types'
 
 const mockJam: GameJam = {
@@ -69,6 +69,21 @@ describe('generateProjectJsonLd', () => {
     const ld = generateProjectJsonLd(mockProject, 'https://konfiturgame.fr')
     expect(ld.name).toBe(mockProject.title)
     expect(ld.description).toBe(mockProject.description)
+  })
+})
+
+describe('serializeJsonLd', () => {
+  it('sérialise un objet JSON-LD valide', () => {
+    const json = serializeJsonLd({ '@type': 'Event', name: 'Spring Jam' })
+    expect(JSON.parse(json)).toEqual({ '@type': 'Event', name: 'Spring Jam' })
+  })
+
+  it("échappe < pour empêcher l'injection </script> via un contenu utilisateur", () => {
+    const json = serializeJsonLd({ name: '</script><script>alert(1)</script>' })
+    expect(json).not.toContain('<')
+    expect(json).toContain('\\u003c')
+    // Le contenu reste intact après parsing
+    expect(JSON.parse(json).name).toBe('</script><script>alert(1)</script>')
   })
 })
 

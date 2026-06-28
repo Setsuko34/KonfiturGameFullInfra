@@ -18,7 +18,7 @@ export default function ProfileForm({ user }: Props) {
   const [isDeletePending, startDeleteTransition] = useTransition()
 
   const [name, setName] = useState(user.name || '')
-  const [bio, setBio] = useState((user.prefs?.bio as string) || '')
+  const [bio, setBio] = useState(((user.prefs as Record<string, unknown>)?.bio as string) || '')
   const [currentPwd, setCurrentPwd] = useState('')
   const [newPwd, setNewPwd] = useState('')
   const [confirmPwd, setConfirmPwd] = useState('')
@@ -32,7 +32,7 @@ export default function ProfileForm({ user }: Props) {
       setInfoMsg(null)
       const result = await updateProfileClient(name, bio, {
         name: user.name || '',
-        bio: (user.prefs?.bio as string) || '',
+        bio: ((user.prefs as Record<string, unknown>)?.bio as string) || '',
       })
       if (result.success) {
         setInfoMsg({ type: 'success', text: 'Profil mis à jour' })

@@ -3,7 +3,7 @@ import type { Metadata } from 'next'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { getProjectById } from '@/lib/actions/projects'
-import { generateProjectJsonLd, truncateDescription } from '@/lib/seo'
+import { generateProjectJsonLd, serializeJsonLd, truncateDescription } from '@/lib/seo'
 import { getCommentsByProject } from '@/lib/actions/comments'
 import ProjectInteractions from './ProjectInteractions'
 
@@ -55,7 +55,8 @@ export default async function ProjectPage({ params }: Props) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{
-          __html: JSON.stringify(generateProjectJsonLd(project, process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr')),
+          // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml -- JSON-LD sérialisé avec échappement de `<` (serializeJsonLd)
+          __html: serializeJsonLd(generateProjectJsonLd(project, process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr')),
         }}
       />
       <main id="main-content">

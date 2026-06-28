@@ -55,14 +55,6 @@ curl -s -X POST "$NEXT_PUBLIC_APPWRITE_ENDPOINT/databases/konfitur-db/collection
   -H "X-Appwrite-Key: $APPWRITE_API_KEY" \
   -d '{"key":"reported","required":false,"default":false}' | jq .
 
-# Add submitted (boolean) on projects
-echo "Adding submitted to projects..."
-curl -s -X POST "$NEXT_PUBLIC_APPWRITE_ENDPOINT/databases/konfitur-db/collections/projects/attributes/boolean" \
-  -H "Content-Type: application/json" \
-  -H "X-Appwrite-Project: $APPWRITE_PROJECT_ID" \
-  -H "X-Appwrite-Key: $APPWRITE_API_KEY" \
-  -d '{"key":"submitted","required":false,"default":false}' | jq .
-
 # Add reported (boolean) on projects
 echo "Adding reported to projects..."
 curl -s -X POST "$NEXT_PUBLIC_APPWRITE_ENDPOINT/databases/konfitur-db/collections/projects/attributes/boolean" \
