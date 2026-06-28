@@ -1,21 +1,928 @@
 {
-  "projectId": "69a19b8d00175f1d0b99",
-  "projectName": "KonfiturGame",
-  "functions": [
-    {
-      "$id": "update-jam-status",
-      "name": "Update Jam Status",
-      "runtime": "node-20.0",
-      "path": "functions/update-jam-status",
-      "entrypoint": "src/main.js",
-      "commands": "npm install",
-      "schedule": "*/5 * * * *",
-      "timeout": 60,
-      "enabled": true,
-      "logging": true,
-      "execute": [],
-      "scopes": []
-    }
-  ]
+    "projectId": "69b1a2b500083affc894",
+    "projectName": "konfitur-game",
+    "settings": {
+        "services": {
+            "account": true,
+            "avatars": true,
+            "databases": true,
+            "locale": true,
+            "health": true,
+            "storage": true,
+            "teams": true,
+            "users": true,
+            "sites": true,
+            "functions": true,
+            "graphql": true,
+            "messaging": true
+        },
+        "auth": {
+            "methods": {
+                "jwt": true,
+                "phone": true,
+                "invites": true,
+                "anonymous": true,
+                "email-otp": true,
+                "magic-url": true,
+                "email-password": true
+            },
+            "security": {
+                "duration": 31536000,
+                "limit": 0,
+                "sessionsLimit": 10,
+                "passwordHistory": 0,
+                "passwordDictionary": false,
+                "personalDataCheck": false,
+                "sessionAlerts": false,
+                "mockNumbers": []
+            }
+        }
+    },
+    "tablesDB": [
+        {
+            "$id": "konfitur-db",
+            "name": "KonfiturDB",
+            "enabled": true
+        }
+    ],
+    "tables": [
+        {
+            "$id": "game_jams",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "game_jams",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "title",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "slug",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "theme",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 512,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "description",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 4096,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "status",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": "enum",
+                    "elements": [
+                        "upcoming",
+                        "ongoing",
+                        "ended"
+                    ]
+                },
+                {
+                    "key": "type",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": "enum",
+                    "elements": [
+                        "solo",
+                        "team",
+                        "both"
+                    ]
+                },
+                {
+                    "key": "start_date",
+                    "type": "datetime",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "end_date",
+                    "type": "datetime",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "duration",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 32,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "max_participants",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
+                },
+                {
+                    "key": "rules",
+                    "type": "string",
+                    "required": false,
+                    "array": true,
+                    "size": 4096,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "prizes",
+                    "type": "string",
+                    "required": false,
+                    "array": true,
+                    "size": 512,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "tags",
+                    "type": "string",
+                    "required": false,
+                    "array": true,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "cover_image_id",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "organizer_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "featured",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "featured_order",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": 0,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "teams",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "teams",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "name",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "invite_code",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 16,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "leader_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "project_id",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "jam_ids",
+                    "type": "string",
+                    "required": false,
+                    "array": true,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "team_members",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "team_members",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "team_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "user_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "name",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "role",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": "enum",
+                    "elements": [
+                        "dev",
+                        "artist",
+                        "sound",
+                        "designer",
+                        "writer"
+                    ]
+                },
+                {
+                    "key": "is_leader",
+                    "type": "boolean",
+                    "required": true,
+                    "array": false,
+                    "default": null
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "projects",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "projects",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "jam_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "team_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "title",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "description",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 4096,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "technologies",
+                    "type": "string",
+                    "required": false,
+                    "array": true,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "download_url",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 2048,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "repo_url",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 2048,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "submitted",
+                    "type": "boolean",
+                    "required": true,
+                    "array": false,
+                    "default": null
+                },
+                {
+                    "key": "submission_date",
+                    "type": "datetime",
+                    "required": false,
+                    "array": false,
+                    "default": null,
+                    "format": ""
+                },
+                {
+                    "key": "votes_count",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": 0,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
+                },
+                {
+                    "key": "cover_image_id",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "screenshot_ids",
+                    "type": "string",
+                    "required": false,
+                    "array": true,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "reported",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "winner",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "chat_messages",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "chat_messages",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "jam_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "channel",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": "enum",
+                    "elements": [
+                        "general",
+                        "team-search",
+                        "help"
+                    ]
+                },
+                {
+                    "key": "author_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "author_name",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "content",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 2048,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "role",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "default": null,
+                    "format": "enum",
+                    "elements": [
+                        "user",
+                        "organizer",
+                        "moderator"
+                    ]
+                },
+                {
+                    "key": "pinned",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "reported",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "announcements",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "announcements",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "jam_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "title",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "content",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 4096,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "important",
+                    "type": "boolean",
+                    "required": true,
+                    "array": false,
+                    "default": null
+                },
+                {
+                    "key": "author_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "comments",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "comments",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "project_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "author_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "author_name",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 128,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "content",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 2048,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "votes",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "votes",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "project_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "user_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": []
+        },
+        {
+            "$id": "audit_logs",
+            "$permissions": [
+                "read(\"team:admin\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "Audit Logs",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "type",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 32,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "ip",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 45,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "country_code",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 2,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "user_agent",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 512,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "path",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 512,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "user_id",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 64,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "message",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 2048,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "type_created",
+                    "type": "key",
+                    "status": "available",
+                    "columns": [
+                        "type"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "banned_ips",
+            "$permissions": [
+                "read(\"team:admin\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "Banned IPs",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "ip",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 45,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "reason",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "auto",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "ip_unique",
+                    "type": "unique",
+                    "status": "available",
+                    "columns": [
+                        "ip"
+                    ],
+                    "orders": []
+                }
+            ]
+        }
+    ],
+    "teams": [
+        {
+            "$id": "69bc67f1003d025c931a",
+            "$createdAt": "2026-03-19T21:17:37.594+00:00",
+            "$updatedAt": "2026-03-19T21:18:01.792+00:00",
+            "name": "admins",
+            "total": 1,
+            "prefs": {}
+        }
+    ],
+    "functions": [
+        {
+            "$id": "update-jam-status",
+            "name": "Update Jam Status",
+            "runtime": "node-20.0",
+            "path": "functions/update-jam-status",
+            "entrypoint": "src/main.js",
+            "commands": "npm install",
+            "schedule": "*/5 * * * *",
+            "timeout": 60,
+            "enabled": true,
+            "logging": true,
+            "execute": [],
+            "scopes": []
+        }
+    ],
+    "buckets": [
+        {
+            "$id": "jam-covers",
+            "name": "Jam Covers",
+            "enabled": true,
+            "fileSecurity": false,
+            "maximumFileSize": 2097152,
+            "allowedFileExtensions": [
+                "jpg",
+                "jpeg",
+                "png",
+                "webp"
+            ],
+            "compression": "gzip",
+            "encryption": true,
+            "antivirus": false,
+            "permissions": [
+                "read(\"any\")",
+                "create(\"users\")",
+                "update(\"users\")",
+                "delete(\"users\")"
+            ]
+        },
+        {
+            "$id": "project-assets",
+            "name": "Project Assets",
+            "enabled": true,
+            "fileSecurity": false,
+            "maximumFileSize": 10485760,
+            "allowedFileExtensions": [],
+            "compression": "gzip",
+            "encryption": true,
+            "antivirus": false,
+            "permissions": [
+                "read(\"any\")",
+                "create(\"users\")",
+                "update(\"users\")",
+                "delete(\"users\")"
+            ]
+        },
+        {
+            "$id": "avatars",
+            "name": "Avatars",
+            "enabled": true,
+            "fileSecurity": false,
+            "maximumFileSize": 1048576,
+            "allowedFileExtensions": [
+                "jpg",
+                "jpeg",
+                "png",
+                "webp"
+            ],
+            "compression": "gzip",
+            "encryption": true,
+            "antivirus": false,
+            "permissions": [
+                "read(\"any\")",
+                "create(\"users\")",
+                "update(\"users\")",
+                "delete(\"users\")"
+            ]
+        }
+    ]
 }
-

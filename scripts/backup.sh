@@ -5,13 +5,15 @@
 # Par défaut, crée ./backups/YYYY-MM-DD_HH-MM/
 #
 # Contenu du backup :
-#   mariadb.sql              — dump SQL complet (schéma + données internes Appwrite)
-#   appwrite-*.tar.gz        — volumes Docker (uploads, config, functions, certificates)
-#   project-config.tar.gz   — fichiers du projet hors secrets
-#   appwrite-schema.json     — schéma Appwrite via API (databases, collections, attributs, indexes)
-#   appwrite-teams.json      — teams et memberships via API
-#   appwrite-data.json       — documents de toutes les collections via API
-#   MANIFEST.txt             — inventaire du backup
+#   mariadb.sql                — dump SQL complet (schéma + données internes Appwrite)
+#   appwrite-*.tar.gz          — volumes Docker (uploads, config, functions, builds, certificates)
+#   project-config.tar.gz      — fichiers du projet hors secrets
+#   appwrite-schema.json        — schéma Appwrite via API (databases, collections, attributs, indexes)
+#   appwrite-teams.json         — teams et memberships via API
+#   appwrite-data.json          — documents de toutes les collections via API
+#   appwrite-storage.json       — configuration des buckets via API
+#   appwrite-functions.json     — configuration des functions + déploiement actif via API
+#   MANIFEST.txt               — inventaire du backup
 # =============================================================================
 set -euo pipefail
 
@@ -87,6 +89,7 @@ PROJECT_NAME=$(docker inspect konfitur-mariadb --format '{{ index .Config.Labels
 backup_volume "${PROJECT_NAME}_appwrite-uploads"      "appwrite-uploads"      /storage/uploads
 backup_volume "${PROJECT_NAME}_appwrite-config"       "appwrite-config"       /storage/config
 backup_volume "${PROJECT_NAME}_appwrite-functions"    "appwrite-functions"    /storage/functions
+backup_volume "${PROJECT_NAME}_appwrite-builds"       "appwrite-builds"       /storage/builds
 backup_volume "${PROJECT_NAME}_appwrite-certificates" "appwrite-certificates" /storage/certificates
 
 # =============================================================================
@@ -272,6 +275,92 @@ backup_appwrite_api() {
 
   echo "$data_json" > "$BACKUP_DIR/appwrite-data.json"
   echo "   ✅ appwrite-data.json ($total_docs document(s) au total)"
+
+  # ── 4d. Storage buckets (configuration) ──────────────────────────────────────
+  echo "🪣  Buckets Appwrite..."
+
+  local buckets_raw
+  buckets_raw=$(aw_get "/storage/buckets?limit=100")
+
+  local buckets_json
+  buckets_json=$(echo "$buckets_raw" | jq \
+    --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{version: "1.0", exportedAt: $date, buckets: [.buckets[] | {
+      "$id":                  ."$id",
+      name:                   .name,
+      "$permissions":         ."$permissions",
+      fileSecurity:           .fileSecurity,
+      enabled:                .enabled,
+      maximumFileSize:        .maximumFileSize,
+      allowedFileExtensions:  .allowedFileExtensions,
+      compression:            .compression,
+      encryption:             .encryption,
+      antivirus:              .antivirus,
+      transformations:        .transformations
+    }]}')
+
+  local bucket_count
+  bucket_count=$(echo "$buckets_raw" | jq '.total // 0')
+  echo "$buckets_json" > "$BACKUP_DIR/appwrite-storage.json"
+  echo "   ✅ appwrite-storage.json ($bucket_count bucket(s))"
+
+  # ── 4e. Functions + déploiement actif ────────────────────────────────────────
+  echo "⚡ Functions Appwrite..."
+
+  local functions_raw
+  functions_raw=$(aw_get "/functions?limit=100")
+
+  local functions_json
+  functions_json=$(echo "$functions_raw" | jq \
+    --arg date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{version: "1.0", exportedAt: $date, functions: [.functions[] | {
+      "$id":          ."$id",
+      name:           .name,
+      runtime:        .runtime,
+      execute:        .execute,
+      events:         .events,
+      schedule:       .schedule,
+      timeout:        .timeout,
+      enabled:        .enabled,
+      logging:        .logging,
+      entrypoint:     .entrypoint,
+      commands:       .commands,
+      deploymentId:   .deploymentId,
+      vars:           (.vars // [])
+    }]}')
+
+  # Pour chaque function, récupérer la liste des déploiements
+  while IFS= read -r fn_id; do
+    local deployments_raw active_dep
+    deployments_raw=$(aw_get "/functions/${fn_id}/deployments?limit=25")
+
+    # Garder uniquement le déploiement actif (status=ready) ou les 3 derniers
+    active_dep=$(echo "$deployments_raw" | jq '[
+      .deployments[] | {
+        "$id":        ."$id",
+        status:       .status,
+        activate:     .activate,
+        entrypoint:   .entrypoint,
+        commands:     .commands,
+        size:         .size,
+        "$createdAt": ."$createdAt"
+      }
+    ] | sort_by(."$createdAt") | reverse | .[0:3]')
+
+    functions_json=$(echo "$functions_json" | jq \
+      --arg fn "$fn_id" \
+      --argjson deps "$active_dep" \
+      '.functions = [.functions[] | if ."$id" == $fn then . + {deployments: $deps} else . end]')
+
+    local dep_count
+    dep_count=$(echo "$active_dep" | jq 'length')
+    echo "   Function $fn_id : $dep_count déploiement(s) sauvegardé(s)"
+  done < <(echo "$functions_raw" | jq -r '.functions[]."$id"')
+
+  local fn_count
+  fn_count=$(echo "$functions_raw" | jq '.total // 0')
+  echo "$functions_json" > "$BACKUP_DIR/appwrite-functions.json"
+  echo "   ✅ appwrite-functions.json ($fn_count function(s))"
 }
 
 echo ""

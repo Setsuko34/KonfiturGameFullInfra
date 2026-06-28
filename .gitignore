@@ -46,6 +46,9 @@ build/
 # CLAUDE CODE — config locale (chemins machine-spécifiques)
 # ═══════════════════════════════════════════════
 .claude/settings.local.json
+.claude/*
+.agents
+.mcp.json
 
 # ═══════════════════════════════════════════════
 # CLAUDE — fichiers locaux spécifiques à la machine
