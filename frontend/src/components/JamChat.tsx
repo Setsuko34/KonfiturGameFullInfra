@@ -88,8 +88,9 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
         }
       }
     )
-    setConnected(true)
+    const timer = setTimeout(() => setConnected(true), 0)
     return () => {
+      clearTimeout(timer)
       unsubscribe()
       setConnected(false)
     }

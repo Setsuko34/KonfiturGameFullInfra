@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { ID } from 'appwrite'
 import { createJam } from '@/lib/actions/dashboard'
@@ -191,9 +192,12 @@ export default function NewJamForm() {
             {coverFile ? coverFile.name : 'Choisir une image (JPG, PNG, WebP — max 5 Mo)'}
           </button>
           {coverPreview && (
-            <img
+            <Image
               src={coverPreview}
               alt="Aperçu de la cover"
+              width={800}
+              height={160}
+              unoptimized
               className="mt-3 w-full max-h-40 object-cover"
               style={{ border: '1px solid var(--border)' }}
             />

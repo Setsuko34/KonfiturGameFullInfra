@@ -1,42 +1,21 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import Image from 'next/image'
 import {
   LayoutDashboard, Users, List,
   AlertTriangle, Megaphone, Star, LogOut, Home, Activity,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
+import SidebarNavLink from '@/components/SidebarNavLink'
+
+const ADMIN_LINK_STYLE = {
+  activeBackground: 'var(--admin-active-bg)',
+  activeColor: 'var(--secondary)',
+} as const
 
 export default function AdminSidebar() {
   const { user, logout } = useAuth()
-  const pathname = usePathname()
-
-  const isActive = (href: string) =>
-    href === '/admin' ? pathname === href : pathname.startsWith(href)
-
-  const NavLink = ({
-    href,
-    icon: Icon,
-    label,
-  }: {
-    href: string
-    icon: typeof Home
-    label: string
-  }) => (
-    <Link
-      href={href}
-      aria-current={isActive(href) ? 'page' : undefined}
-      className="flex items-center gap-3 px-3 py-2.5 text-sm font-medium transition-colors"
-      style={{
-        background: isActive(href) ? 'var(--admin-active-bg)' : 'transparent',
-        color: isActive(href) ? 'var(--secondary)' : 'var(--sidebar-foreground)',
-      }}
-    >
-      <Icon size={15} aria-hidden="true" />
-      {label}
-    </Link>
-  )
 
   return (
     <aside
@@ -50,7 +29,7 @@ export default function AdminSidebar() {
           style={{ borderColor: 'var(--admin-accent-border)' }}
         >
           <div className="flex items-center gap-2">
-            <img src="/hautequalite.svg" alt="" width={24} height={24} aria-hidden="true" />
+            <Image src="/hautequalite.svg" alt="" width={24} height={24} aria-hidden="true" />
             <Link href="/" className="font-bold text-sm" style={{ color: 'var(--sidebar-foreground)' }}>
               Konfitur<span style={{ color: 'var(--secondary)' }}>Game</span>
             </Link>
@@ -79,7 +58,7 @@ export default function AdminSidebar() {
 
         {/* Navigation */}
         <div className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          <NavLink href="/admin" icon={LayoutDashboard} label="Vue d'ensemble" />
+          <SidebarNavLink href="/admin" icon={LayoutDashboard} label="Vue d'ensemble" exact {...ADMIN_LINK_STYLE} />
 
           <p
             className="px-3 pt-4 pb-1 text-[9px] tracking-widest uppercase"
@@ -87,8 +66,8 @@ export default function AdminSidebar() {
           >
             Gestion
           </p>
-          <NavLink href="/admin/users" icon={Users} label="Utilisateurs" />
-          <NavLink href="/admin/jams" icon={List} label="Jams" />
+          <SidebarNavLink href="/admin/users" icon={Users} label="Utilisateurs" {...ADMIN_LINK_STYLE} />
+          <SidebarNavLink href="/admin/jams" icon={List} label="Jams" {...ADMIN_LINK_STYLE} />
 
           <p
             className="px-3 pt-4 pb-1 text-[9px] tracking-widest uppercase border-t mt-3"
@@ -96,10 +75,10 @@ export default function AdminSidebar() {
           >
             Contenu
           </p>
-          <NavLink href="/admin/moderation" icon={AlertTriangle} label="Modération" />
-          <NavLink href="/admin/announcements" icon={Megaphone} label="Annonces" />
-          <NavLink href="/admin/featured" icon={Star} label="Mise en avant" />
-          <NavLink href="/admin/logs" icon={Activity} label="Logs & Monitoring" />
+          <SidebarNavLink href="/admin/moderation" icon={AlertTriangle} label="Modération" {...ADMIN_LINK_STYLE} />
+          <SidebarNavLink href="/admin/announcements" icon={Megaphone} label="Annonces" {...ADMIN_LINK_STYLE} />
+          <SidebarNavLink href="/admin/featured" icon={Star} label="Mise en avant" {...ADMIN_LINK_STYLE} />
+          <SidebarNavLink href="/admin/logs" icon={Activity} label="Logs & Monitoring" {...ADMIN_LINK_STYLE} />
         </div>
 
         {/* Bas de sidebar */}

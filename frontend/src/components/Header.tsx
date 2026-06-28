@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { useState } from 'react'
 import { Menu, X, LogIn, LayoutDashboard, LogOut } from 'lucide-react'
@@ -40,7 +41,7 @@ export default function Header() {
             style={{ color: 'var(--foreground)', fontFamily: 'var(--font-sans)' }}
             aria-label="KonfiturGame — Accueil"
           >
-            <img
+            <Image
               src="/hautequalite.svg"
               alt=""
               width={32}
