@@ -1,5 +1,5 @@
 import { chromium } from '@playwright/test'
-import { Client, Users, Databases, Teams, ID } from 'node-appwrite'
+import { Client, Users, Databases, Teams, ID, Query } from 'node-appwrite'
 import fs from 'fs'
 import path from 'path'
 
@@ -61,11 +61,17 @@ export default async function globalSetup() {
 
   fs.mkdirSync(AUTH_DIR, { recursive: true })
 
-  // Nettoyage des résidus d'un run précédent
-  await Promise.all([
-    ...Object.values(TEST_USERS).map(u => users.delete(u.id).catch(() => {})),
-    users.delete('e2e-reg-test').catch(() => {}),
-  ])
+  // Nettoyage des résidus d'un run précédent.
+  // Les users fixes (user1/2/admin) ont des IDs déterministes → delete par ID.
+  // Le user d'inscription est créé par le flow UI avec un ID ALÉATOIRE (ID.unique())
+  // → on le supprime par email, sinon il survit entre deux runs et « email déjà utilisé ».
+  await Promise.all(Object.values(TEST_USERS).map(u => users.delete(u.id).catch(() => {})))
+  const leftovers = await users
+    .list([Query.equal('email', 'e2e-reg-test@test.local')])
+    .catch(() => null)
+  if (leftovers) {
+    await Promise.all(leftovers.users.map(u => users.delete(u.$id).catch(() => {})))
+  }
 
   // Création des utilisateurs de test
   await Promise.all(
@@ -80,7 +86,9 @@ export default async function globalSetup() {
     roles: ['owner'],
     userId: TEST_USERS.admin.id,
     url: 'http://localhost:3000',
-  }).catch(() => {})
+  }).catch((err: Error) => {
+    console.warn(`⚠ createMembership admin: ${err.message} (team ${ADMIN_TEAM_ID} existe-t-elle dans Appwrite ?)`)
+  })
 
   // Création des 3 jams de référence
   const ts = Date.now()
@@ -96,6 +104,8 @@ export default async function globalSetup() {
       duration: '10 jours',
       organizer_id: TEST_USERS.admin.id,
       status: 'ongoing',
+      featured: true,
+      featured_order: 0,
     }),
     databases.createDocument(DB, 'game_jams', ID.unique(), {
       title: '[E2E] Jam À Venir',

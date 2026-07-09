@@ -334,7 +334,7 @@ jobs:
           node-version: 20
       # Exception à la règle pnpm du projet : install global d'un outil CLI
       # sur un runner éphémère, aucun impact sur le lockfile du projet.
-      - run: npm install -g appwrite-cli@10
+      - run: npm install -g appwrite-cli@17.3.1
       - name: Push functions vers la prod
         env:
           APPWRITE_API_KEY: ${{ secrets.APPWRITE_API_KEY }}

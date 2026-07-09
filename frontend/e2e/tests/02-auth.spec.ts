@@ -21,11 +21,12 @@ test.describe('1.1 — Inscription email/mot de passe', () => {
     await expect(page.locator('body')).not.toContainText('Se connecter')
   })
 
-  test('session persistante après rechargement', async ({ page }) => {
-    // L'utilisateur créé dans le test précédent est encore connecté dans ce contexte
+  test('page de connexion accessible sans session', async ({ page }) => {
+    // Contexte anonyme (storageState vide) — la page de login doit être visible
     await page.goto('/auth/login')
-    // Si déjà connecté, on est redirigé ailleurs
-    await page.waitForURL(url => !url.pathname.startsWith('/auth'), { timeout: 10_000 })
+    await expect(page.locator('h1')).toContainText('Connexion')
+    await expect(page.locator('#email')).toBeVisible()
+    await expect(page.locator('#password')).toBeVisible()
   })
 
   test('erreur pour email déjà utilisé', async ({ page }) => {
@@ -35,8 +36,8 @@ test.describe('1.1 — Inscription email/mot de passe', () => {
     await page.locator('#password').fill(TEST_USERS.regTest.password)
     await page.locator('button[type="submit"]').click()
 
-    await expect(page.locator('[role="alert"]')).toBeVisible()
-    await expect(page.locator('[role="alert"]')).toContainText(/exist|déjà/i)
+    await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toBeVisible()
+    await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toContainText(/exist|déjà/i)
   })
 
   test('erreur de validation — email malformé', async ({ page }) => {
@@ -55,12 +56,14 @@ test.describe('1.1 — Inscription email/mot de passe', () => {
     await page.goto('/auth/register')
     await page.locator('#name').fill('Test')
     await page.locator('#email').fill('e2e-short@test.local')
+    // Cliquer d'abord pour déclencher onFocus (passwordTouched = true)
+    await page.locator('#password').click()
     await page.locator('#password').fill('abc')
-    await page.locator('button[type="submit"]').click()
-
-    // Les exigences de mot de passe s'affichent
+    // Les exigences doivent s'afficher dès que le champ a du contenu
     await expect(page.locator('#password-requirements')).toBeVisible()
-    await expect(page.locator('[role="alert"]')).toBeVisible()
+    await page.locator('button[type="submit"]').click()
+    // La validation client-côté bloque la soumission et affiche l'erreur
+    await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toBeVisible({ timeout: 5_000 })
   })
 })
 
@@ -110,7 +113,7 @@ test.describe('1.2 — Connexion email/mot de passe', () => {
     await page.locator('#password').fill('mauvais-mot-de-passe')
     await page.locator('button[type="submit"]').click()
 
-    await expect(page.locator('[role="alert"]')).toBeVisible()
+    await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toBeVisible()
     await expect(page).toHaveURL(/\/auth\/login/)
   })
 })

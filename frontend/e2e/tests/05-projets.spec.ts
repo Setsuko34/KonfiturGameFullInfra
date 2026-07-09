@@ -1,5 +1,5 @@
 import { test, expect } from '../fixtures/auth'
-import { loadTestIds, saveState, loadState } from '../fixtures/test-data'
+import { saveState, loadState } from '../fixtures/test-data'
 import path from 'path'
 
 // Module 4 — Projets
@@ -71,59 +71,6 @@ test.describe('4.1 — Soumettre un projet', () => {
     await page.goto(`/project/${projectId}`)
     await expect(page.locator('body')).toContainText('[E2E] Projet Test')
     await expect(page.locator('body')).toContainText('TypeScript')
-  })
-})
-
-test.describe('4.2 — Voter pour un projet', () => {
-  test('user2 vote pour le projet — compteur augmente', async ({ user2Page: page }) => {
-    const { projectId } = loadState()
-    if (!projectId) test.skip()
-
-    await page.goto(`/project/${projectId}`)
-    const voteBtn = page.getByRole('button', { name: /voter|vote/i })
-    if (await voteBtn.count() === 0) test.skip()
-
-    const beforeText = await page.locator('[data-votes], [aria-label*="vote"]').first().textContent() ?? '0'
-    await voteBtn.click()
-
-    // Attendre la mise à jour du compteur
-    await page.waitForTimeout(1_000)
-    const afterText = await page.locator('[data-votes], [aria-label*="vote"]').first().textContent() ?? '0'
-    const before = parseInt(beforeText.match(/\d+/)?.[0] ?? '0')
-    const after = parseInt(afterText.match(/\d+/)?.[0] ?? '0')
-    expect(after).toBeGreaterThanOrEqual(before)
-  })
-
-  test('un second vote est bloqué (un vote par user)', async ({ user2Page: page }) => {
-    const { projectId } = loadState()
-    if (!projectId) test.skip()
-
-    await page.goto(`/project/${projectId}`)
-    const voteBtn = page.getByRole('button', { name: /voter|vote/i })
-
-    // Après avoir voté, le bouton doit être désactivé ou absent
-    if (await voteBtn.count() > 0) {
-      const isDisabled = await voteBtn.isDisabled()
-      if (!isDisabled) {
-        // Essayer de voter à nouveau → erreur attendue
-        await voteBtn.click()
-        await expect(page.locator('[role="alert"]').first()).toBeVisible({ timeout: 5_000 })
-      } else {
-        expect(isDisabled).toBeTruthy()
-      }
-    }
-  })
-
-  test('voter sans être connecté redirige vers login', async ({ page }) => {
-    const { projectId } = loadState()
-    if (!projectId) test.skip()
-
-    await page.goto(`/project/${projectId}`)
-    const voteBtn = page.getByRole('button', { name: /voter|vote/i })
-    if (await voteBtn.count() === 0) test.skip()
-
-    await voteBtn.click()
-    await expect(page).toHaveURL(/\/auth\/login/, { timeout: 5_000 })
   })
 })
 

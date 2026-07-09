@@ -10,7 +10,7 @@ test.describe('3.1 — Créer une guilde', () => {
     await expect(page.locator('h1')).toBeVisible()
 
     // Ouvrir le formulaire de création
-    await page.getByRole('button', { name: /créer une guilde/i }).click()
+    await page.getByRole('button', { name: /créer une équipe/i }).click()
 
     // Remplir le formulaire
     const nameInput = page.locator('input[name="name"], input[placeholder*="nom"], #team-name')

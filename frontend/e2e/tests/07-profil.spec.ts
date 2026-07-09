@@ -8,17 +8,17 @@ import { writeFileSync } from 'fs'
 test.describe('6.1 — Modifier le profil', () => {
   test('formulaire pré-rempli avec les infos actuelles', async ({ user1Page: page }) => {
     await page.goto('/dashboard/profile')
-    await expect(page.locator('input[name="name"], #display-name').first()).toHaveValue(/E2E Joueur1/i)
+    await expect(page.locator('#profile-name')).toHaveValue(/E2E Joueur1/i)
   })
 
   test('modifier le nom d\'affichage', async ({ user1Page: page }) => {
     await page.goto('/dashboard/profile')
 
-    const nameInput = page.locator('input[name="name"], input[name="displayName"], #display-name').first()
+    const nameInput = page.locator('#profile-name')
     await nameInput.clear()
     await nameInput.fill('E2E Joueur1 Modifié')
 
-    await page.getByRole('button', { name: /sauvegarder|mettre à jour|valider/i }).first().click()
+    await page.getByRole('button', { name: /enregistrer|sauvegarder/i }).first().click()
 
     await expect(page.locator('[role="alert"], .success, [data-success]').first()).toBeVisible({ timeout: 5_000 })
   })
@@ -26,12 +26,12 @@ test.describe('6.1 — Modifier le profil', () => {
   test('modifier la bio', async ({ user1Page: page }) => {
     await page.goto('/dashboard/profile')
 
-    const bioInput = page.locator('textarea[name="bio"], #bio').first()
+    const bioInput = page.locator('#profile-bio')
     if (await bioInput.count() === 0) test.skip()
 
     await bioInput.clear()
     await bioInput.fill('Bio E2E — test automatisé.')
-    await page.getByRole('button', { name: /sauvegarder|mettre à jour|valider/i }).first().click()
+    await page.getByRole('button', { name: /enregistrer|sauvegarder/i }).first().click()
 
     await expect(page.locator('[role="alert"], .success, [data-success]').first()).toBeVisible({ timeout: 5_000 })
   })
@@ -52,7 +52,7 @@ test.describe('6.1 — Modifier le profil', () => {
     writeFileSync(avatarPath, pngBytes)
     await avatarInput.setInputFiles(avatarPath)
 
-    await page.getByRole('button', { name: /sauvegarder|mettre à jour|valider/i }).first().click()
+    await page.getByRole('button', { name: /enregistrer|sauvegarder/i }).first().click()
     await expect(page.locator('[role="alert"], .success').first()).toBeVisible({ timeout: 10_000 })
   })
 
@@ -74,17 +74,15 @@ test.describe('6.2 — Changer de mot de passe', () => {
   test('changement avec les bonnes infos', async ({ user1Page: page }) => {
     await page.goto('/dashboard/profile')
 
-    // Trouver la section mot de passe
-    const oldPwInput = page.locator('input[name="oldPassword"], input[name="currentPassword"], #old-password')
+    // IDs réels du formulaire : #pwd-current, #pwd-new, #pwd-confirm
+    const oldPwInput = page.locator('#pwd-current')
     if (await oldPwInput.count() === 0) test.skip()
 
     await oldPwInput.fill('E2eTest1234!')
-    await page.locator('input[name="newPassword"], input[name="password"], #new-password').fill(newPassword)
+    await page.locator('#pwd-new').fill(newPassword)
+    await page.locator('#pwd-confirm').fill(newPassword)
 
-    const confirmInput = page.locator('input[name="confirmPassword"], input[name="passwordConfirm"], #confirm-password')
-    if (await confirmInput.count() > 0) await confirmInput.fill(newPassword)
-
-    await page.getByRole('button', { name: /changer|mettre à jour.*mot de passe/i }).click()
+    await page.getByRole('button', { name: /changer le mot de passe/i }).click()
     await expect(page.locator('[role="alert"], .success').first()).toBeVisible({ timeout: 5_000 })
   })
 
@@ -99,13 +97,14 @@ test.describe('6.2 — Changer de mot de passe', () => {
   test('erreur avec l\'ancien mot de passe incorrect', async ({ user1Page: page }) => {
     await page.goto('/dashboard/profile')
 
-    const oldPwInput = page.locator('input[name="oldPassword"], input[name="currentPassword"], #old-password')
+    const oldPwInput = page.locator('#pwd-current')
     if (await oldPwInput.count() === 0) test.skip()
 
     await oldPwInput.fill('mauvais-mot-de-passe')
-    await page.locator('input[name="newPassword"], #new-password').fill('E2eTest1234!')
+    await page.locator('#pwd-new').fill('E2eTest1234!')
+    await page.locator('#pwd-confirm').fill('E2eTest1234!')
 
-    await page.getByRole('button', { name: /changer|mettre à jour.*mot de passe/i }).click()
+    await page.getByRole('button', { name: /changer le mot de passe/i }).click()
     await expect(page.locator('[role="alert"]').first()).toBeVisible({ timeout: 5_000 })
   })
 })

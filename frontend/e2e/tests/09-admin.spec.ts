@@ -53,11 +53,10 @@ test.describe('8.2 — Logs et ban IP', () => {
     await expect(page.locator('body')).not.toContainText('192.0.2.1')
   })
 
-  test("l'API /api/banned-ips retourne les IPs actives", async ({ request }) => {
+  test("l'API /api/banned-ips est protégée par un secret interne", async ({ request }) => {
+    // Endpoint interne — requiert x-log-secret → retourne 401 sans lui
     const res = await request.get('http://localhost:3000/api/banned-ips')
-    expect(res.status()).toBe(200)
-    const body = await res.json()
-    expect(Array.isArray(body)).toBeTruthy()
+    expect(res.status()).toBe(401)
   })
 })
 

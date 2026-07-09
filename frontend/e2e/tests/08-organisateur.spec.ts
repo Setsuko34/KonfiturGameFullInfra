@@ -16,23 +16,23 @@ test.describe('7.1 — Créer une jam', () => {
 
     await expect(page).toHaveURL(/\/dashboard\/my-jams\/new/, { timeout: 5_000 })
 
-    // Remplir le formulaire
+    // Remplir le formulaire (IDs réels du NewJamForm)
     const tomorrow = new Date(Date.now() + 2 * 24 * 3600 * 1000)
     const inNineDays = new Date(Date.now() + 9 * 24 * 3600 * 1000)
     const fmt = (d: Date) => d.toISOString().slice(0, 16)
 
-    await page.locator('input[name="title"], #jam-title').fill('[E2E] Jam Créée par User1')
+    await page.locator('#title').fill('[E2E] Jam Créée par User1')
 
-    const themeInput = page.locator('input[name="theme"], #jam-theme')
+    const themeInput = page.locator('#theme')
     if (await themeInput.count() > 0) await themeInput.fill('Science-fiction')
 
-    const descInput = page.locator('textarea[name="description"], #jam-description')
+    const descInput = page.locator('#description')
     if (await descInput.count() > 0) await descInput.fill('Jam E2E créée via le formulaire organisateur.')
 
-    const startInput = page.locator('input[type="datetime-local"][name="start_date"], #start-date')
+    const startInput = page.locator('#startDate')
     if (await startInput.count() > 0) await startInput.fill(fmt(tomorrow))
 
-    const endInput = page.locator('input[type="datetime-local"][name="end_date"], #end-date')
+    const endInput = page.locator('#endDate')
     if (await endInput.count() > 0) await endInput.fill(fmt(inNineDays))
 
     await page.getByRole('button', { name: /créer|publier|valider/i }).last().click()

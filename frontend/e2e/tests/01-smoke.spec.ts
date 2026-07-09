@@ -14,11 +14,12 @@ test("page d'accueil se charge sans erreur", async ({ page }) => {
   await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
 })
 
-test('Appwrite health check passe', async ({ request }) => {
-  const res = await request.get('http://localhost:8080/v1/health')
+test('Appwrite répond (version publique)', async ({ request }) => {
+  // /v1/health requiert le scope health.read → utiliser /v1/health/version (public)
+  const res = await request.get('http://localhost:8080/v1/health/version')
   expect(res.status()).toBe(200)
   const body = await res.json()
-  expect(body.status).toBe('pass')
+  expect(body.version).toBeTruthy()
 })
 
 test('page 404 pour une route inexistante', async ({ page }) => {

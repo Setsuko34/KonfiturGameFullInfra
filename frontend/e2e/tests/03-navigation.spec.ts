@@ -29,11 +29,9 @@ test.describe('2.1 — Page d\'accueil', () => {
 
   test('cliquer sur une jam redirige vers /jam/:id', async ({ page }) => {
     const ids = loadTestIds()
-    await page.goto('/')
-    // Navigation directe vers la jam E2E en cours
-    const res = await page.goto(`/jam/${ids.jamOngoingId}`)
-    expect(res?.status()).toBe(200)
-    await expect(page.locator('body')).toContainText('[E2E] Jam En Cours')
+    // Navigation directe vers la jam E2E en cours (ID créé en global-setup)
+    await page.goto(`/jam/${ids.jamOngoingId}`)
+    await expect(page.locator('body')).toContainText('[E2E] Jam En Cours', { timeout: 15_000 })
   })
 
   test('menu responsive — présence du header', async ({ page }) => {
@@ -86,7 +84,7 @@ test.describe('2.3 — Page de détail d\'une jam', () => {
     const ids = loadTestIds()
     await page.goto(`/jam/${ids.jamOngoingId}`)
 
-    await expect(page.locator('h1, [data-jam-title]').first()).toContainText('[E2E] Jam En Cours')
+    await expect(page.locator('h1').first()).toContainText('[E2E] Jam En Cours', { timeout: 15_000 })
     // La page doit mentionner le thème
     await expect(page.locator('body')).toContainText('Temps limité')
   })
