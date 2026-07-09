@@ -41,6 +41,13 @@ frontend/out/
 # ═══════════════════════════════════════════════
 dist/
 build/
+*.tsbuildinfo
+
+# ═══════════════════════════════════════════════
+# TESTS E2E PLAYWRIGHT — artefacts générés à chaque run
+# ═══════════════════════════════════════════════
+frontend/test-results/
+frontend/playwright-report/
 
 # ═══════════════════════════════════════════════
 # CLAUDE CODE — config locale (chemins machine-spécifiques)
