@@ -12,7 +12,7 @@
 4. [Les guildes (équipes)](#4-les-guildes-équipes)
 5. [Participer à une game jam](#5-participer-à-une-game-jam)
 6. [Soumettre un projet](#6-soumettre-un-projet)
-7. [Voter et commenter](#7-voter-et-commenter)
+7. [Liker et commenter](#7-liker-et-commenter)
 8. [Le chat en direct](#8-le-chat-en-direct)
 9. [Gérer son profil](#9-gérer-son-profil)
 10. [Rôle Organisateur — Créer et gérer une jam](#10-rôle-organisateur--créer-et-gérer-une-jam)
@@ -70,7 +70,8 @@ Cliquer sur le bouton **Déconnexion** dans le header (à droite).
 La page d'accueil affiche :
 - Les **jams en cours** (avec countdown en temps réel)
 - Les **jams à venir**
-- Les **derniers résultats** (jams terminées et gagnants)
+- Les **projets les plus aimés** (classement popularité par likes)
+- Les **derniers résultats** (podiums des jams terminées)
 - Des statistiques globales (nombre de jams, participants, projets)
 
 ### Page Explorer (`/explore`)
@@ -152,7 +153,7 @@ Une fois inscrit, depuis la page de la jam :
 |--------|---------------|
 | `À venir` | La jam n'a pas encore commencé |
 | `En cours` | La jam est active — on peut s'inscrire et soumettre |
-| `Terminée` | La jam est finie — les votes sont ouverts |
+| `Terminée` | La jam est finie — les likes restent ouverts et le podium (top 3) peut être désigné |
 
 ---
 
@@ -182,21 +183,23 @@ Tant que la jam est **en cours**, il est possible de revenir sur le formulaire p
 Une fois soumis, le projet est visible sur `/project/:id` avec :
 - Description, technologies, liens
 - Images et screenshots
-- Section votes et commentaires
+- Section likes et commentaires
 
 ---
 
-## 7. Voter et commenter
+## 7. Liker et commenter
 
-### Voter pour un projet
+### Liker un projet
 
-Les votes sont ouverts sur les projets des jams **terminées**.
+1. Aller sur la page du projet (`/project/:id`) — connexion requise
+2. Cliquer sur le bouton **J'aime** (cœur) : le like s'ajoute, le compteur s'incrémente
+3. Re-cliquer retire le like (**togglable**) — un seul like par projet et par utilisateur
 
-1. Aller sur la page du projet (`/project/:id`) ou sur la page de la jam
-2. Cliquer sur le bouton **Voter**
-3. Un seul vote est possible par projet et par utilisateur
+Les likes alimentent le **classement popularité** :
+- Les projets d'une jam sont triés par nombre de likes décroissant
+- La page d'accueil affiche une section **« Projets les plus aimés »**
 
-> Le compteur de votes est mis à jour en temps réel.
+> Le classement popularité (likes) est distinct du **podium officiel** (top 3), désigné par l'organisateur — voir la section Admin.
 
 ### Commenter un projet
 
@@ -316,10 +319,13 @@ Le panneau admin est accessible à l'adresse `/admin`. L'accès est réservé au
 - Voir les messages et projets signalés
 - Prendre des mesures (suppression de contenu)
 
-### Mise en avant (`/admin/featured`)
+### Mise en avant et podium (`/admin/featured`)
 
 - Mettre en avant des jams ou des projets sur la page d'accueil
-- Désigner les gagnants d'une jam terminée
+- **Désigner le podium** d'une jam : boutons **1er / 2e / 3e** sur chaque projet soumis
+  - Disponible **uniquement après la fin de la jam** (avant : « Podium ouvrable après la fin de la jam »)
+  - Re-cliquer sur le rang attribué le retire
+  - Le podium est éditorial — indépendant du nombre de likes
 
 ### Annonces globales (`/admin/announcements`)
 
@@ -347,4 +353,4 @@ Le panneau admin est accessible à l'adresse `/admin`. L'accès est réservé au
 
 ---
 
-*KonfiturGame · Manuel d'utilisation · Mis à jour : 2026-06-28*
+*KonfiturGame · Manuel d'utilisation · Mis à jour : 2026-07-08*

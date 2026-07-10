@@ -159,11 +159,13 @@ git reset --hard origin/main
 
 ## Phase 2 — schéma Appwrite dans la CI
 
-1. En dev, récupérer le schéma : `appwrite pull collections` (et `appwrite pull buckets`) → remplit `appwrite.json`.
-2. Vérifier le diff de `appwrite.json`.
-3. Dans `ci-cd.yml`, job `deploy-schema` : remplacer `if: github.ref == 'refs/heads/__disabled__'` par la même condition que `deploy-functions`, et remplacer `appwrite push functions --force` par `appwrite push collections --force`.
-4. La clé API de prod doit gagner les scopes `databases`/`collections`.
-5. Les scripts shell de schéma (`init-appwrite.sh`, `update-schema-phase1.sh`) deviennent obsolètes.
+Le schéma (tables, buckets, teams) est **déjà capturé** dans `appwrite.json`. Reste à activer le job :
+
+1. Dans `ci-cd.yml`, job `deploy-schema` : remplacer `if: github.ref == 'refs/heads/__disabled__'` par la même condition que `deploy-functions`, et utiliser `appwrite push tables --force` (la commande `push collections` est dépréciée depuis la CLI 17).
+2. La clé API de prod doit gagner les scopes `databases.read`/`databases.write`.
+3. Les scripts shell de schéma (`init-appwrite.sh`, `update-schema-phase1.sh`) deviennent obsolètes (`seed-data.sh` reste utile pour les données de test).
+
+Procédure détaillée : `MISE-A-JOUR.md §7`.
 
 ---
 
@@ -175,11 +177,12 @@ Les jobs Semgrep / audit dépendances / Docker sont non bloquants (`continue-on-
 
 ## Notes diverses
 
-- **Version Appwrite CLI épinglée** : `appwrite-cli@10` — compatible serveur 1.8.x. Revalider à chaque upgrade Appwrite.
+- **Tests E2E hors CI** : la suite Playwright (`pnpm e2e`) nécessite l'infrastructure Docker complète (frontend + Appwrite + données de test) — elle ne tourne **pas** dans le pipeline. L'exécuter localement avant de merger (voir `docs/DOC_test_E2E.md`).
+- **Version Appwrite CLI épinglée** : le workflow épingle `appwrite-cli@10` (`ci-cd.yml`, job deploy-functions) — **obsolète depuis le passage du serveur en 1.9.0** : à mettre à jour vers `appwrite-cli@17.3.1` (une CLI incompatible provoque des erreurs "Route not found" — tableau de compatibilité dans `MISE-A-JOUR.md §4`). Revalider à chaque upgrade Appwrite.
 - **Force-push sans ancêtre commun** : paths-filter considère alors tous les fichiers comme modifiés → redéploiement complet. Ne pas force-pusher sur `main` inutilement.
 - **Concurrence** : un seul run à la fois par branche (`concurrency` au niveau workflow) ; les runs de PR sont annulés si un nouveau push arrive, les runs de push sur `main` attendent.
 - **gitleaks-action v3** : gratuit pour les comptes personnels ; une licence est requise pour les organisations GitHub.
 
 ---
 
-*KonfiturGame · Pipeline CI/CD · Mis à jour : 2026-06-28*
+*KonfiturGame · Pipeline CI/CD · Mis à jour : 2026-07-08*

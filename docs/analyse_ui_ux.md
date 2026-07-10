@@ -1,7 +1,7 @@
 # Analyse UI/UX — KonfiturGame Frontend
 
-> Générée le 16 mars 2026 à partir de l'inspection du code source.
-> Stack : Next.js 15 · Tailwind CSS · Appwrite · Lucide icons
+> Générée le 16 mars 2026 à partir de l'inspection du code source — instantané d'audit, les défauts listés reflètent l'état du code à cette date.
+> Stack : Next.js 16 · Tailwind CSS v4 · Appwrite · Lucide icons
 > Design system : thème sombre (#0C1018 / #F0EDE8) · Space Grotesk · `--radius: 0px`
 
 ---

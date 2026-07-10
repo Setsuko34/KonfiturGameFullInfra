@@ -209,4 +209,4 @@ Aucune confirmation demandée — vérifier l'ID avant.
 
 ---
 
-*KonfiturGame · Rulesets GitHub · Mis à jour : 2026-06-28*
+*KonfiturGame · Rulesets GitHub · Mis à jour : 2026-07-08*

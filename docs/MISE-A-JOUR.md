@@ -205,6 +205,7 @@ Depuis Appwrite 1.9.0, plusieurs workers supplémentaires sont nécessaires. San
 | Service | Entrypoint | Rôle |
 |---------|-----------|------|
 | `appwrite` | *(main)* | API HTTP |
+| `appwrite-console` | *(image `appwrite/console`)* | **Console web** (image séparée depuis 1.9, servie sur `/console`) |
 | `appwrite-realtime` | `realtime` | WebSocket temps réel |
 | `appwrite-worker-databases` | `worker-databases` | Création d'attributs et indexes |
 | `appwrite-worker-mails` | `worker-mails` | Envoi SMTP |
@@ -217,6 +218,11 @@ Variables obligatoires à ajouter dans tous les services qui touchent aux foncti
 - _APP_EXECUTOR_HOST=http://exc1/v1       # hostname fixe de l'executor
 - _APP_EXECUTOR_SECRET=${APPWRITE_EXECUTOR_SECRET}
 - _APP_FUNCTIONS_RUNTIMES=node-20.0
+```
+
+Variable obligatoire sur le service `appwrite` pour que le SSR fonctionne (voir Bugs connus ci-dessous) :
+```yaml
+- _APP_MIGRATION_HOST=appwrite            # hostname Docker interne reconnu par le routeur
 ```
 
 ### Procédure de mise à jour pas à pas
@@ -269,7 +275,7 @@ docker compose restart appwrite appwrite-worker-builds appwrite-worker-functions
 
 # ── Étape 11 : Vérifier les erreurs ─────────────────────────────────────
 docker compose logs appwrite --since=2m | grep -i "error\|exception" | grep -v "password"
-curl https://api.konfiturgame.fr/v1/health
+curl https://api.konfiturgame.fr/v1/health/version   # → doit renvoyer la nouvelle version
 
 # ── Étape 12 : Pousser la config Appwrite (buckets, fonctions) ───────────
 appwrite push buckets
@@ -278,7 +284,15 @@ appwrite push functions
 
 ### Bugs connus après migration (apparus en 1.8→1.9)
 
-Après une mise à jour majeure, Appwrite peut avoir des **attributs manquants dans les métadonnées SQL** — le code PHP attend un champ qui n'a pas été ajouté par la migration. Symptômes :
+#### SSR cassé — 401 "router" sur les Server Actions
+
+Après la migration 1.9, les appels internes du frontend (réseau Docker, `http://appwrite/v1`) peuvent être rejetés en 401 par le routeur Appwrite : le hostname interne `appwrite` n'est plus reconnu.
+
+**Fix :** ajouter `_APP_MIGRATION_HOST=appwrite` dans l'`environment:` du service `appwrite` (c'est cette variable qui réinjecte le hostname dans la liste des hôtes autorisés — pas `_APP_ROUTER_PROTECTION`), puis `docker compose up -d appwrite`.
+
+#### Attributs manquants dans les métadonnées SQL
+
+Après une mise à jour majeure, Appwrite peut avoir des **attributs manquants dans les métadonnées SQL** — le code PHP attend un champ qui n'a pas été ajouté par la migration. Constaté en 1.8→1.9 sur les tables `_console_buckets`, `_1_buckets` et `_console_rules` (transformations absentes du script de migration). Symptômes :
 
 - `Unknown attribute: "xyz"` → attribut présent dans le PHP mais absent du JSON de métadonnées
 - `Invalid query: Attribute not found in schema: type` → même cause, mais au niveau d'une query (pas d'insertion)
@@ -326,7 +340,7 @@ docker exec konfitur-redis redis-cli FLUSHALL
 docker compose restart appwrite
 ```
 
-> Voir aussi `memory/appwrite_migration_190_bugs.md` pour le détail complet des corrections faites lors de la migration 1.8→1.9 (référence pour les prochaines migrations).
+> Cette procédure de correction (extraction JSON → ajout de l'attribut via Python → `ALTER TABLE` si besoin → flush Redis) est celle appliquée lors de la migration 1.8→1.9. La conserver comme référence pour les prochaines migrations majeures.
 
 ### Mettre à jour les SDKs en même temps
 
@@ -419,15 +433,44 @@ docker compose -f docker-compose.yml up -d redis
 
 ## 7. Schéma et fonctions Appwrite via `appwrite.json`
 
-`appwrite.json` (racine du repo) est la **source de vérité** pour toute la configuration Appwrite versionnée. Le principe : modifier via la console Appwrite → capturer dans `appwrite.json` → committer → la CI déploie automatiquement.
+`appwrite.json` (racine du repo) est la **source de vérité** pour toute la configuration Appwrite versionnée. Le principe : modifier via la console Appwrite → capturer dans `appwrite.json` → committer → déployer (CLI ou CI).
 
 ### État actuel des phases
 
-| Phase | Ressource | État | Déploiement CI |
-|-------|-----------|------|----------------|
-| Phase 1 | Fonctions (`functions/**`) | Actif | Oui — push `main` |
-| Phase 2 | Collections / Schéma | À activer (voir ci-dessous) | Non encore |
-| Phase 3 | Buckets Storage | Non commencé | Non |
+| Phase | Ressource | État | Déploiement |
+|-------|-----------|------|-------------|
+| Phase 1 | Fonctions (`functions/**`) | Actif | CI — push `main` |
+| Phase 2 | Tables / Schéma (10 collections) | **Capturé dans `appwrite.json`** | Manuel (`appwrite push tables`) — job CI `deploy-schema` à activer |
+| Phase 3 | Buckets + Teams | **Capturés dans `appwrite.json`** | Manuel (`appwrite push buckets` / `push teams`) |
+
+### Commandes CLI — migrations de schéma
+
+> CLI compatible serveur obligatoire (voir tableau §4). Pour Appwrite 1.9.0 : `npm install -g appwrite-cli@17.3.1`. Depuis la CLI 17+, `pull/push collections` est **déprécié** au profit de `pull/push tables`.
+
+```bash
+# Configurer le client (une fois)
+appwrite client \
+  --endpoint https://api.konfiturgame.fr/v1 \
+  --project-id 69a19b8d00175f1d0b99 \
+  --key "$APPWRITE_API_KEY"
+
+# Capturer l'état du serveur → appwrite.json
+appwrite pull tables        # schéma des collections
+appwrite pull buckets       # buckets Storage
+appwrite pull teams         # teams (admins)
+appwrite pull functions     # config des fonctions
+
+# Appliquer appwrite.json → serveur
+appwrite push tables --force
+appwrite push buckets
+appwrite push teams
+appwrite push functions --force
+
+# Tout pousser d'un coup
+appwrite push all
+```
+
+> Ne pas confondre avec la migration de **version** du serveur (`docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate`) documentée au §4 — celle-ci migre la structure interne d'Appwrite lors d'une montée de version, pas le schéma applicatif.
 
 ---
 
@@ -475,25 +518,18 @@ mkdir -p functions/<function-id>/src
 **Déploiement manuel (sans CI) :**
 
 ```bash
-npm install -g appwrite-cli@10
-appwrite client \
-  --endpoint https://api.konfiturgame.fr/v1 \
-  --project-id 69a19b8d00175f1d0b99 \
-  --key "$APPWRITE_API_KEY"
 appwrite push functions --force
 ```
 
 ---
 
-### Modifier le schéma — Phase 1 (actuel)
-
-Le schéma est créé et modifié manuellement via la console puis répercuté dans les scripts et le code TypeScript.
+### Modifier le schéma (workflow `appwrite.json`)
 
 #### Ajouter un attribut à une collection existante
 
 1. Ajouter l'attribut dans la console Appwrite (Databases → collection → Attributes)
 2. Attendre que le statut passe de `processing` à `available`
-3. Mettre à jour `scripts/seed-data.sh` pour les prochaines initialisations
+3. Capturer : `appwrite pull tables` puis `git diff appwrite.json`
 4. Mettre à jour les types TypeScript :
    - `frontend/src/lib/appwrite/types.ts` — mapper Appwrite → type TS
    - `frontend/src/types/index.ts` — interface TypeScript
@@ -503,69 +539,38 @@ Le schéma est créé et modifié manuellement via la console puis répercuté d
 #### Ajouter une nouvelle collection
 
 1. Créer la collection dans la console Appwrite avec les attributs et permissions
-2. Ajouter la constante dans `frontend/src/lib/appwrite/config.ts`
-3. Ajouter le mapper dans `frontend/src/lib/appwrite/types.ts`
-4. Ajouter les Server Actions dans `frontend/src/lib/actions/`
-5. Mettre à jour `scripts/seed-data.sh` (ou créer un script dédié)
+2. Capturer : `appwrite pull tables` puis `git diff appwrite.json`
+3. Ajouter la constante dans `frontend/src/lib/appwrite/config.ts`
+4. Ajouter le mapper dans `frontend/src/lib/appwrite/types.ts`
+5. Ajouter les Server Actions dans `frontend/src/lib/actions/`
 6. Mettre à jour `docs/DATABASE.md`
+
+> `scripts/seed-data.sh` reste utile pour insérer des **données de test** — le schéma, lui, vit dans `appwrite.json`.
 
 ---
 
-### Activer la Phase 2 — déploiement automatique du schéma
+### Activer le job CI `deploy-schema` (déploiement automatique du schéma)
 
-> À faire une fois. Prérequis : toutes les collections sont stables et le schéma de prod est correct.
+> À faire une fois. Prérequis : le schéma de prod est stable et capturé dans `appwrite.json` (fait).
 
 ```bash
-# 1. Installer l'Appwrite CLI
-npm install -g appwrite-cli@10
-
-# 2. Se connecter à la prod
-appwrite client \
-  --endpoint https://api.konfiturgame.fr/v1 \
-  --project-id 69a19b8d00175f1d0b99 \
-  --key "$APPWRITE_API_KEY"
-
-# 3. Capturer le schéma actuel de prod dans appwrite.json
-appwrite pull collections
-
-# 4. Vérifier le diff — appwrite.json va beaucoup changer (c'est normal au premier pull)
-git diff appwrite.json
-
-# 5. Étendre la clé API CI pour inclure le schéma
+# 1. Étendre la clé API CI pour inclure le schéma
 # Console → API Keys → clé CI → ajouter : databases.read + databases.write
 
-# 6. Mettre à jour le secret GitHub
+# 2. Mettre à jour le secret GitHub
 gh secret set APPWRITE_API_KEY --body "<nouvelle-clé-avec-scopes-databases>"
 
-# 7. Activer le job deploy-schema dans .github/workflows/ci-cd.yml
+# 3. Activer le job deploy-schema dans .github/workflows/ci-cd.yml
 # Remplacer : if: github.ref == 'refs/heads/__disabled__'
 # Par la même condition if: que le job deploy-functions
 # Remplacer : echo "Phase 2 non activée"
-# Par : appwrite push collections --force
+# Par : appwrite push tables --force
 # (précédé des mêmes étapes checkout + setup-node + install cli + appwrite client)
 
-# 8. Commit + push → la CI déploiera le schéma automatiquement à chaque modification
+# 4. Commit + push → la CI déploiera le schéma automatiquement à chaque modification
 ```
 
-**Après activation :**
-- Ne plus modifier le schéma directement dans la console sans répercuter dans `appwrite.json`
-- Workflow : console Appwrite (modifier) → `appwrite pull collections` → `git diff` → commit → push `main` → CI déploie
-- `scripts/seed-data.sh` et `scripts/create-log-collections.sh` deviennent obsolètes pour la création du schéma (mais `seed-data.sh` reste utile pour insérer des données de test)
-
----
-
-### Phase 3 — buckets Storage dans `appwrite.json`
-
-```bash
-# Capturer la config actuelle des buckets
-appwrite pull buckets
-
-# Vérifier et committer
-git diff appwrite.json
-
-# Activer un job deploy-buckets dans la CI (même pattern que deploy-schema)
-# Commande : appwrite push buckets --force
-```
+**Après activation :** ne plus modifier le schéma directement dans la console sans répercuter dans `appwrite.json` (workflow : console → `appwrite pull tables` → `git diff` → commit → push `main` → CI déploie).
 
 ---
 
@@ -584,6 +589,10 @@ docker exec konfitur-frontend sh -c "cd /app && pnpm type-check"
 docker exec konfitur-frontend sh -c "cd /app && npx vitest run"
 # → tous passent
 
+# Tests end-to-end (infra Docker complète requise — voir docs/DOC_test_E2E.md)
+cd frontend && pnpm e2e
+# → tous passent
+
 # Build de prod
 docker exec konfitur-frontend sh -c "cd /app && pnpm build"
 # → succès sans erreur
@@ -593,7 +602,7 @@ docker exec konfitur-frontend sh -c "cd /app && pnpm build"
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}' https://konfiturgame.fr        # → 200
-curl -s https://api.konfiturgame.fr/v1/health | grep '"status":"pass"' # → ok
+curl -s https://api.konfiturgame.fr/v1/health/version | grep '"version"' # → ok (health complet : clé API requise)
 curl -I https://konfiturgame.fr | grep strict-transport                # → présent
 docker compose ps                                                        # → tous "Up"
 ```
@@ -666,7 +675,10 @@ docker compose -f docker-compose.yml up -d --build frontend
 |-----------|-----------------|---------------------|
 | Next.js | 16.2.9 | `frontend/package.json` |
 | SDK `appwrite` (npm) | 23.0.0 | `frontend/package.json` |
+| SDK `node-appwrite` (npm) | 22.1.3 | `frontend/package.json` |
+| Playwright (`@playwright/test`) | 1.50.x | `frontend/package.json` |
 | Appwrite server | 1.9.0 | `docker-compose.yml` |
+| Appwrite console | 7.5.7 | `docker-compose.yml` |
 | Appwrite CLI (local) | 17.3.1 | — (`npm install -g appwrite-cli@17.3.1`) |
 | openruntimes/executor | 0.11.4 | `docker-compose.yml` |
 | Traefik | v3.6.7 | `docker-compose.yml` |
@@ -676,4 +688,4 @@ docker compose -f docker-compose.yml up -d --build frontend
 
 ---
 
-*KonfiturGame · Manuel de mise à jour · Mis à jour : 2026-06-28*
+*KonfiturGame · Manuel de mise à jour · Mis à jour : 2026-07-08*

@@ -30,16 +30,19 @@ Internet
    ▼
 Traefik v3.6.7 (ports 80 / 443)
    ├── konfiturgame.fr          → Frontend Next.js 16.2.9 :3000
-   ├── api.konfiturgame.fr      → Appwrite 1.8.0 :80 (API + Console + Realtime)
+   ├── api.konfiturgame.fr      → Appwrite 1.9.0 (API + Realtime)
+   │      └── /console          → appwrite-console 7.5.7 (image séparée depuis 1.9)
    └── traefik.konfiturgame.fr  → Dashboard Traefik (Basic Auth)
          │
          ├── appwrite ──► MariaDB 10.11  (appwrite-net)
-         └── appwrite ──► Redis 7        (appwrite-net)
+         ├── appwrite ──► Redis 7        (appwrite-net)
+         └── workers  ──► databases · mails · builds · functions
+                          + appwrite-executor 0.11.4 (sandbox fonctions)
 ```
 
 **Réseaux Docker :**
 - `konfitur-net` — Traefik ↔ Frontend ↔ Appwrite
-- `appwrite-net` — Appwrite ↔ MariaDB ↔ Redis (isolé, non exposé à Traefik)
+- `appwrite-net` — Appwrite ↔ workers ↔ MariaDB ↔ Redis (isolé, non exposé à Traefik)
 
 ---
 
@@ -172,7 +175,7 @@ docker compose -f docker-compose.yml up -d
 
 Ordre de démarrage (géré par `depends_on`) :
 1. `mariadb` + `redis`
-2. `appwrite` + `appwrite-realtime` + `appwrite-worker-databases`
+2. `appwrite` + `appwrite-console` + `appwrite-realtime` + les workers (`databases`, `mails`, `builds`, `functions`) + `appwrite-executor`
 3. `frontend`
 4. `traefik` (en parallèle)
 
@@ -205,58 +208,52 @@ Settings → Platforms → Add Platform → **Web** → Hostname : `konfiturgame
 | Section | État actuel | Déploiement |
 |---------|-------------|-------------|
 | `functions` | `update-jam-status` (cron toutes les 5 min, node-20) | CI auto sur push `main` |
-| `collections` | Phase 2 — activer après `appwrite pull collections` | CI auto après activation |
-| `buckets` | Phase 3 — non encore capturé | Manuel pour l'instant |
+| `tables` | Capturé — 10 collections dans `appwrite.json` | `appwrite push tables` manuel (job CI `deploy-schema` à activer, voir `CI-CD.md`) |
+| `buckets` | Capturé — 3 buckets dans `appwrite.json` | `appwrite push buckets` manuel |
+| `teams` | Capturé — team `admins` | `appwrite push teams` manuel |
 
-Pour les étapes d'activation de chaque phase, voir `docs/MISE-A-JOUR.md → §7`.
+### 4.5 — Installer et configurer l'Appwrite CLI
 
-### 4.5 — Déployer les fonctions Appwrite
+> **Version critique :** la CLI doit être compatible avec la version serveur — voir le tableau de compatibilité dans `MISE-A-JOUR.md §4`. Pour Appwrite 1.9.0 : `appwrite-cli@17.3.1`.
+
+```bash
+npm install -g appwrite-cli@17.3.1
+
+appwrite client \
+  --endpoint https://api.konfiturgame.fr/v1 \
+  --project-id 69a19b8d00175f1d0b99 \
+  --key "$APPWRITE_API_KEY"
+```
+
+### 4.6 — Déployer le schéma, les buckets et les teams
+
+```bash
+# Schéma (10 collections) — 'collections' est déprécié, utiliser 'tables'
+appwrite push tables --force
+
+# Buckets Storage (jam-covers 2 Mo, project-assets 10 Mo, avatars 1 Mo)
+appwrite push buckets
+
+# Team admins (accès /admin)
+appwrite push teams
+```
+
+Puis insérer les **données de test** (optionnel — le script crée aussi le schéma s'il manque, il est idempotent) :
+
+```bash
+chmod +x scripts/seed-data.sh
+./scripts/seed-data.sh
+```
+
+### 4.7 — Déployer les fonctions Appwrite
 
 Le CI déploie automatiquement les fonctions à chaque push sur `main` modifiant `appwrite.json` ou `functions/**`.
 
 **Premier déploiement (avant que la CI ne soit configurée) :**
 
 ```bash
-npm install -g appwrite-cli@10
-
-appwrite client \
-  --endpoint https://api.konfiturgame.fr/v1 \
-  --project-id 69a19b8d00175f1d0b99 \
-  --key "$APPWRITE_API_KEY"
-
 appwrite push functions --force
 ```
-
-### 4.6 — Créer les collections (phase 1 — scripts)
-
-Tant que la phase 2 n'est pas activée, les collections sont créées via les scripts shell :
-
-```bash
-chmod +x scripts/seed-data.sh scripts/create-log-collections.sh
-
-# Collections principales (game_jams, teams, team_members, projects,
-# chat_messages, announcements, comments, votes) + données de test
-./scripts/seed-data.sh
-
-# Collections de monitoring (audit_logs, banned_ips)
-./scripts/create-log-collections.sh
-```
-
-Les deux scripts sont **idempotents** — HTTP 409 ignoré sur collections existantes.
-
-> Une fois la phase 2 activée, le schéma sera géré via `appwrite.json` et ces scripts ne seront plus nécessaires pour initialiser le schéma (les données de test dans `seed-data.sh` restent utiles).
-
-### 4.7 — Créer les buckets Storage (manuel)
-
-Console Appwrite → Storage → Create Bucket :
-
-| Bucket ID | Nom | Max file size |
-|---|---|---|
-| `jam-covers` | Jam Covers | 5 Mo |
-| `project-assets` | Project Assets | 20 Mo |
-| `avatars` | Avatars | 2 Mo |
-
-> Phase 3 : `appwrite pull buckets` permettra de versionner la config des buckets dans `appwrite.json`.
 
 ### 4.8 — Générer l'API Key
 
@@ -265,7 +262,7 @@ Settings → API Keys → **Create API Key** :
 | Usage | Scopes minimaux |
 |-------|----------------|
 | Clé `.env` (backend Next.js) | `databases.read`, `databases.write`, `storage.read`, `storage.write`, `users.read`, `users.write` |
-| Clé CI GitHub (`APPWRITE_API_KEY` secret) | `functions.read`, `functions.write` — à étendre avec `databases.read`, `databases.write` lors de l'activation phase 2 |
+| Clé CI GitHub (`APPWRITE_API_KEY` secret) | `functions.read`, `functions.write` — à étendre avec `databases.read`, `databases.write` lors de l'activation du job `deploy-schema` (voir `CI-CD.md`) |
 
 Copier la clé backend dans `.env` → `APPWRITE_API_KEY`.
 Clé CI → `gh secret set APPWRITE_API_KEY --body "<la-clé>"`.
@@ -309,8 +306,13 @@ Console → projet → Auth → Settings → OAuth2 Providers → coller Client 
 curl -I https://konfiturgame.fr
 # → HTTP/2 200 + strict-transport-security
 
-# API Appwrite
-curl https://api.konfiturgame.fr/v1/health
+# API Appwrite (endpoint public — /v1/health sans clé renvoie 401 depuis la 1.9)
+curl https://api.konfiturgame.fr/v1/health/version
+# → {"version":"1.9.0"}
+
+# Healthcheck complet (nécessite une clé API avec scope health.read)
+curl -H "X-Appwrite-Project: konfitur-game" -H "X-Appwrite-Key: $APPWRITE_API_KEY" \
+  https://api.konfiturgame.fr/v1/health
 # → {"status":"pass",...}
 
 # Dashboard Traefik (authentification requise)
@@ -341,23 +343,17 @@ Le CI/CD effectue cette étape automatiquement sur push vers `main` si `frontend
 
 ### Appwrite
 
+> **Ne pas improviser une montée de version Appwrite.** Depuis la 1.9, la procédure implique tous les workers, l'executor, la migration de base, le flush Redis et des corrections potentielles de métadonnées. Suivre la procédure complète pas à pas : **`MISE-A-JOUR.md §4`**.
+
+Résumé (les détails sont dans MISE-A-JOUR.md) :
+
 ```bash
-# 1. Backup AVANT toute mise à jour
-./scripts/backup.sh
-
-# 2. Modifier le tag d'image dans docker-compose.yml
-
-# 3. Tirer les nouvelles images
-docker compose -f docker-compose.yml pull appwrite appwrite-realtime appwrite-worker-databases
-
-# 4. Redémarrer
-docker compose -f docker-compose.yml up -d appwrite appwrite-realtime appwrite-worker-databases
-
-# 5. Lancer les migrations (OBLIGATOIRE — voir §Dépannage)
-docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate
-
-# 6. Redémarrer pour vider le cache
-docker compose -f docker-compose.yml restart appwrite
+./scripts/backup.sh                                             # 1. Backup OBLIGATOIRE
+# 2. Mettre à jour TOUS les tags d'images (appwrite, console, realtime, workers, executor)
+# 3. docker compose pull + up -d des services Appwrite
+docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate   # 4. Migration DB
+docker exec konfitur-redis redis-cli FLUSHALL                   # 5. Flush cache
+docker compose -f docker-compose.yml restart appwrite           # 6. Recharger les métadonnées
 ```
 
 ### Traefik
@@ -405,7 +401,7 @@ rsync -avz konfitur-backup-20260628.tar.gz user@nas:/backups/
 ./scripts/restore.sh ./backups/2025-06-01_14-30
 # → confirmation requise (choisir mode 1 : MariaDB + volumes)
 docker compose -f docker-compose.yml up -d
-curl https://api.konfiturgame.fr/v1/health
+curl https://api.konfiturgame.fr/v1/health/version
 ```
 
 Ce que fait le script :
@@ -442,7 +438,7 @@ docker compose -f docker-compose.yml up -d
 
 # ── VÉRIFICATION ───────────────────────────────
 docker compose ps
-curl https://api.konfiturgame.fr/v1/health
+curl https://api.konfiturgame.fr/v1/health/version
 curl -I https://konfiturgame.fr
 ```
 
@@ -497,16 +493,19 @@ docker compose logs traefik | grep -i "acme\|certif\|error"
 ### Frontend ne joint pas Appwrite
 
 ```bash
-docker exec konfitur-frontend curl https://api.konfiturgame.fr/v1/health
+docker exec konfitur-frontend curl https://api.konfiturgame.fr/v1/health/version
 docker exec konfitur-frontend env | grep APPWRITE
 ```
 
-### Appwrite "Unknown attribute: devKeys" (post-migration version)
+### Appwrite "Unknown attribute: xyz" (post-migration de version)
 
 ```bash
 docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate
+docker exec konfitur-redis redis-cli FLUSHALL
 docker compose -f docker-compose.yml restart appwrite
 ```
+
+Si l'erreur persiste, la migration a laissé des métadonnées incomplètes — correction manuelle documentée dans `MISE-A-JOUR.md §4 → Bugs connus après migration`.
 
 ### Espace disque saturé
 
@@ -562,7 +561,7 @@ APPWRITE_INTERNAL_ENDPOINT=http://appwrite/v1
 LOG_INTERNAL_SECRET=<openssl rand -hex 32>
 ```
 
-> **Note Redis :** pas de `REDIS_PASSWORD` — Appwrite 1.8.0 ne supporte pas `AUTH` Redis. Redis est isolé sur `appwrite-net`.
+> **Note Redis :** pas de `REDIS_PASSWORD` — Appwrite (bug toujours présent en 1.9.0) n'envoie pas `AUTH` à Redis. Redis est isolé sur `appwrite-net`.
 
 ---
 
@@ -575,10 +574,11 @@ LOGS                   → docker compose logs -f [service]
 REBUILD FRONTEND       → docker compose -f docker-compose.yml up -d --build frontend
 BACKUP                 → ./scripts/backup.sh
 RESTORE                → ./scripts/restore.sh ./backups/<date>
-SEED (schéma)          → ./scripts/seed-data.sh && ./scripts/create-log-collections.sh
+SEED (données de test) → ./scripts/seed-data.sh
 PUSH FONCTIONS         → appwrite push functions --force
-PULL SCHÉMA (phase 2)  → appwrite pull collections
-PUSH SCHÉMA (phase 2)  → appwrite push collections --force
+PULL SCHÉMA            → appwrite pull tables
+PUSH SCHÉMA            → appwrite push tables --force
+PUSH BUCKETS / TEAMS   → appwrite push buckets && appwrite push teams
 MIGRATION APPWRITE     → docker exec konfitur-appwrite php .../cli.php migrate
 CONSOLE APPWRITE       → https://api.konfiturgame.fr/console
 DASHBOARD TRAEFIK      → https://traefik.konfiturgame.fr/dashboard/
@@ -587,4 +587,4 @@ SITE                   → https://konfiturgame.fr
 
 ---
 
-*KonfiturGame · Next.js 16.2.9 · Appwrite 1.8.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-06-28*
+*KonfiturGame · Next.js 16.2.9 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-08*

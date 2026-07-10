@@ -12,6 +12,8 @@
 4. Un scénario est **accepté** si tous ses critères sont cochés
 5. Un scénario est **bloquant** si la mise en production ne peut pas avoir lieu sans lui
 
+> **Automatisation :** une grande partie de ces scénarios est automatisée par la suite E2E Playwright (`cd frontend && pnpm e2e` — voir `DOC_test_E2E.md`) : modules 1 (auth), 2 (navigation), 3 (guildes), 4.1/4.3 (projets, commentaires), 5 (chat realtime), 6 (profil), 7 (organisateur) et 8 (admin). Ce cahier reste la **référence d'acceptation manuelle** — notamment pour OAuth (1.3, 1.4), les likes/podium (4.2, 8.3), l'infrastructure (9.1) et l'accessibilité (9.2), non couverts par la suite automatisée.
+
 **Environnements couverts :**
 - DEV : `http://localhost:3000` + `http://localhost:8080`
 - PROD : `https://konfiturgame.fr` + `https://api.konfiturgame.fr`
@@ -24,12 +26,15 @@ Avant de commencer les scénarios, vérifier que l'infrastructure répond :
 
 ```bash
 # Dev
-curl -s -o /dev/null -w '%{http_code}' http://localhost:3000          # → 200
-curl -s http://localhost:8080/v1/health | grep -q '"status":"pass"'  # → ok
+curl -s -o /dev/null -w '%{http_code}' http://localhost:3000              # → 200
+curl -s http://localhost:8080/v1/health/version | grep -q '"version"'     # → ok
 
 # Prod
-curl -s -o /dev/null -w '%{http_code}' https://konfiturgame.fr       # → 200
-curl -s https://api.konfiturgame.fr/v1/health | grep -q '"status"'   # → ok
+curl -s -o /dev/null -w '%{http_code}' https://konfiturgame.fr            # → 200
+curl -s https://api.konfiturgame.fr/v1/health/version | grep -q '"version"' # → ok
+
+# Note : /v1/health (statut complet) requiert une clé API depuis Appwrite 1.9
+# (scope health.read) — /v1/health/version est l'endpoint public de ping.
 ```
 
 Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d'abord (voir `DEPLOIEMENT.md`).
@@ -254,21 +259,24 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 
 ---
 
-### 4.2 Voter pour un projet
+### 4.2 Liker un projet
 
-**Prérequis :** 4.1, jam en statut `ended`  
+**Prérequis :** 4.1, utilisateur connecté  
 **Bloquant :** non
 
 | # | Étape | Résultat attendu |
 |---|-------|-----------------|
-| 1 | Aller sur `/project/:id` | Bouton Vote visible |
-| 2 | Cliquer sur Voter | Compteur augmente de 1 |
-| 3 | Cliquer à nouveau sur Voter | Erreur ou bouton désactivé (un seul vote) |
-| 4 | Se déconnecter et voter | Redirection vers `/auth/login` |
+| 1 | Aller sur `/project/:id` | Bouton « J'aime » (cœur) visible |
+| 2 | Cliquer sur J'aime | Compteur +1, cœur rempli, bouton en surbrillance |
+| 3 | Cliquer à nouveau | **Unlike** : compteur -1, cœur vidé (toggle) |
+| 4 | Re-liker puis recharger la page | Le like est conservé (état `initialLiked` côté serveur) |
+| 5 | Consulter le bouton sans être connecté | Bouton désactivé |
+| 6 | Liker plusieurs projets et aller sur `/` | Section « Projets les plus aimés » triée par likes décroissants |
 
 **Critères d'acceptation :**
-- [ ] Un seul vote par `(project_id, user_id)` est enregistré
-- [ ] Le compteur de votes est persistant après rechargement
+- [ ] Un seul document `likes` par `(project_id, user_id)` — le toggle supprime/recrée
+- [ ] Le compteur `likes_count` ne descend jamais sous 0
+- [ ] Les projets de la jam sont triés par likes décroissants
 
 ---
 
@@ -419,6 +427,27 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 
 ---
 
+### 8.3 Désigner le podium d'une jam
+
+**Prérequis :** 4.1 (projet soumis), jam en statut `ended`  
+**Bloquant :** non
+
+| # | Étape | Résultat attendu |
+|---|-------|-----------------|
+| 1 | Aller sur `/admin/featured` avec une jam **non terminée** sélectionnée | Message « Podium ouvrable après la fin de la jam », pas de boutons |
+| 2 | Sélectionner une jam **terminée** | Boutons **1er / 2e / 3e** sur chaque projet |
+| 3 | Cliquer sur « 1er » pour un projet | Bordure et trophée passent en couleur primaire |
+| 4 | Re-cliquer sur « 1er » | Le rang est retiré (`placement` repasse à 0) |
+| 5 | Attribuer 1er/2e/3e à trois projets, aller sur `/` | Les gagnants apparaissent dans le Hall of Fame avec leur **vrai rang** |
+| 6 | Vérifier `/jam/:id` | Badge « ★ 1er/2e/3e » sur les projets primés |
+
+**Critères d'acceptation :**
+- [ ] `placement` est borné à [0, 3] dans Appwrite
+- [ ] Le podium est indépendant du nombre de likes
+- [ ] La home affiche le rang stocké, pas un rang calculé
+
+---
+
 ## Module 9 — Infrastructure
 
 ### 9.1 TLS et sécurité (prod uniquement)
@@ -428,7 +457,7 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 | 1 | `curl -I https://konfiturgame.fr` | `strict-transport-security` présent |
 | 2 | `curl -I http://konfiturgame.fr` | Redirection 301 → HTTPS |
 | 3 | Inspecter les headers de réponse | `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` présents |
-| 4 | `curl -I https://api.konfiturgame.fr/v1/health` | HTTP 200, `{"status":"pass"}` |
+| 4 | `curl https://api.konfiturgame.fr/v1/health/version` | HTTP 200, `{"version":"1.9.0"}` |
 
 **Critères d'acceptation :**
 - [ ] HTTPS actif sur tous les domaines
@@ -458,7 +487,7 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 Cette checklist résume les critères bloquants à valider avant tout déploiement en production.
 
 ### Infrastructure
-- [ ] Smoke test passé (frontend 200, Appwrite `/health` pass)
+- [ ] Smoke test passé (frontend 200, Appwrite `/v1/health/version` répond)
 - [ ] TLS actif, redirection HTTP → HTTPS
 - [ ] Headers de sécurité présents (HSTS, CSP, X-Frame-Options)
 - [ ] Dashboard Traefik protégé par mot de passe (401 sans auth)
@@ -487,4 +516,4 @@ Cette checklist résume les critères bloquants à valider avant tout déploieme
 
 ---
 
-*KonfiturGame · Cahier de recettes · Mis à jour : 2026-06-28*
+*KonfiturGame · Cahier de recettes · Mis à jour : 2026-07-08*
