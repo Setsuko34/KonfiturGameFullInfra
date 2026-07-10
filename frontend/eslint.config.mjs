@@ -18,4 +18,12 @@ export default defineConfig([
       'react-hooks/purity': 'warn',
     },
   },
+  {
+    // Tests e2e Playwright : pas de code React ici. Le paramètre `use` de
+    // test.extend() est un faux positif de react-hooks/rules-of-hooks.
+    files: ['e2e/**'],
+    rules: {
+      'react-hooks/rules-of-hooks': 'off',
+    },
+  },
 ])
