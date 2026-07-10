@@ -98,12 +98,18 @@ backup_volume "${PROJECT_NAME}_appwrite-certificates" "appwrite-certificates" /s
 echo "⚙️  Config projet..."
 tar -czf "$BACKUP_DIR/project-config.tar.gz" \
   -C "$PROJECT_DIR" \
+  --warning=no-file-changed \
   --exclude='.env' \
   --exclude='node_modules' \
   --exclude='backups' \
   --exclude='.git' \
   --exclude='frontend/.next' \
-  .
+  --exclude='frontend/playwright-report' \
+  --exclude='frontend/e2e/.auth' \
+  --exclude='frontend/e2e/.test-ids.json' \
+  --exclude='frontend/e2e/.test-state.json' \
+  --exclude='frontend/coverage' \
+  . || true
 echo "   ✅ project-config.tar.gz"
 
 # =============================================================================

@@ -86,6 +86,15 @@ services:
       # → Google/Discord reçoivent https://localhost:80/... (redirect_uri_mismatch).
       # On désactive le force HTTPS pour que le scheme reste http:// en dev.
       _APP_OPTIONS_FORCE_HTTPS: disabled
+      # SSR : le frontend appelle Appwrite en http://appwrite/v1 (Host: appwrite). En 1.9
+      # le routeur rejette (401) tout Host absent de platform.hostnames, et node-appwrite 22
+      # (fetch natif) ne peut PAS forcer le Host (header interdit). _APP_OPTIONS_ROUTER_PROTECTION
+      # est devenu vestigial (défini mais non lu). Seul _APP_MIGRATION_HOST réinjecte un hostname
+      # dans platform.hostnames → on y déclare le nom de service interne pour autoriser le SSR.
+      _APP_MIGRATION_HOST: appwrite
+      # DEV uniquement : désactive le rate limiting (10 inscriptions/h/IP par défaut)
+      # qui fait échouer les runs e2e répétés sur les tests d'inscription.
+      _APP_OPTIONS_ABUSE: disabled
 
   # ────────────────────────────────────────────────────────
   # APPWRITE CONSOLE — SPA admin (container séparé depuis 1.7+)

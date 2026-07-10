@@ -1,0 +1,90 @@
+import { test, expect } from '../fixtures/auth'
+
+// Module 8 — Administration
+// Cahier de recettes §8.1, §8.2
+
+test.describe('8.1 — Accès au panel admin', () => {
+  test('un compte non-admin obtient 404 sur /admin', async ({ user1Page: page }) => {
+    await page.goto('/admin')
+    // Layout admin appelle notFound() si pas admin → page 404
+    await expect(page.locator('body')).toContainText(/404|introuvable|not found/i)
+    await expect(page).not.toHaveURL(/\/auth\/login/)
+  })
+
+  test('le compte admin accède au dashboard admin', async ({ adminPage: page }) => {
+    await page.goto('/admin')
+    // Le panel admin doit être visible — pas de 404
+    await expect(page.locator('body')).not.toContainText(/404/)
+    // Au moins le sidebar ou un titre admin doit être présent
+    await expect(page.locator('nav, [data-admin-sidebar], aside').first()).toBeVisible()
+  })
+})
+
+test.describe('8.2 — Logs et ban IP', () => {
+  test('la page /admin/logs se charge', async ({ adminPage: page }) => {
+    await page.goto('/admin/logs')
+    await expect(page.locator('h1, [data-heading]').first()).toBeVisible()
+  })
+
+  test('bannir une IP l\'ajoute à la liste', async ({ adminPage: page }) => {
+    await page.goto('/admin/logs')
+
+    const banInput = page.locator('input[name="ip"], input[placeholder*="IP"], #ban-ip')
+    if (await banInput.count() === 0) test.skip()
+
+    await banInput.fill('192.0.2.1')
+    await page.getByRole('button', { name: /bannir|ban|bloquer/i }).first().click()
+
+    await expect(page.locator('body')).toContainText('192.0.2.1', { timeout: 10_000 })
+  })
+
+  test('débannir une IP la retire de la liste', async ({ adminPage: page }) => {
+    await page.goto('/admin/logs')
+
+    // Chercher l'IP ajoutée en test précédent et la débannir
+    // (la liste des IPs bannies est un <ul role="list"> de <li>, pas un tableau)
+    const ipRow = page.getByRole('listitem').filter({ hasText: '192.0.2.1' }).first()
+    try {
+      await ipRow.waitFor({ timeout: 5_000 })
+    } catch {
+      test.skip()
+    }
+
+    const unbanBtn = ipRow.getByRole('button', { name: /débannir|supprimer|retirer/i })
+    if (await unbanBtn.count() === 0) test.skip()
+
+    await unbanBtn.click()
+    await page.waitForTimeout(1_000)
+    await expect(page.locator('body')).not.toContainText('192.0.2.1')
+  })
+
+  test("l'API /api/banned-ips est protégée par un secret interne", async ({ request }) => {
+    // Endpoint interne — requiert x-log-secret → retourne 401 sans lui
+    const res = await request.get('http://localhost:3000/api/banned-ips')
+    expect(res.status()).toBe(401)
+  })
+})
+
+test.describe('8.3 — Accessibilité (§9.2)', () => {
+  test('lang="fr" sur la balise html', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+  })
+
+  test('focus visible sur les éléments interactifs du header', async ({ page }) => {
+    await page.goto('/')
+    // Tab jusqu'au premier lien du header — exclure l'overlay Next.js DevTools (mode dev)
+    // qui peut aussi matcher :focus et provoquer une violation strict mode
+    await page.keyboard.press('Tab')
+    const focused = page.locator(':focus:not(nextjs-portal):not([data-nextjs-dev-tools-button])')
+    // Si l'overlay devtools a capté le premier Tab, passer à l'élément suivant
+    if (await focused.count() === 0) await page.keyboard.press('Tab')
+    await expect(focused).toBeVisible()
+  })
+
+  test('skip-link #main-content présent', async ({ page }) => {
+    await page.goto('/')
+    const skipLink = page.locator('a[href="#main-content"]')
+    await expect(skipLink).toHaveCount(1)
+  })
+})

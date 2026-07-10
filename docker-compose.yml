@@ -96,6 +96,12 @@ services:
       - _APP_DOMAIN_TARGET_A=
       - _APP_DOMAIN_TARGET_AAAA=
       - _APP_DOMAIN_FUNCTIONS=functions.${DOMAIN}
+      # SSR : le frontend appelle Appwrite en http://appwrite/v1 (Host: appwrite). En 1.9 le
+      # routeur rejette (401) tout Host absent de platform.hostnames, et node-appwrite 22
+      # (fetch natif) ne peut PAS forcer le Host (header interdit). _APP_OPTIONS_ROUTER_PROTECTION
+      # est vestigial (non lu) ; seul _APP_MIGRATION_HOST réinjecte un hostname dans la liste.
+      # Appwrite n'est joignable de l'extérieur que via Traefik (filtre déjà le Host) → sûr.
+      - _APP_MIGRATION_HOST=appwrite
       - _APP_CONSOLE_WHITELIST_ROOT=enabled
       - _APP_CONSOLE_WHITELIST_EMAILS=${ADMIN_EMAIL}
       - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
