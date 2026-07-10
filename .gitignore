@@ -50,6 +50,11 @@ frontend/test-results/
 frontend/playwright-report/
 
 # ═══════════════════════════════════════════════
+# TESTS UNITAIRES — rapport de couverture Vitest
+# ═══════════════════════════════════════════════
+frontend/coverage/
+
+# ═══════════════════════════════════════════════
 # CLAUDE CODE — config locale (chemins machine-spécifiques)
 # ═══════════════════════════════════════════════
 .claude/settings.local.json
