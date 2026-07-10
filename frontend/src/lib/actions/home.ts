@@ -4,18 +4,20 @@ import { Query } from 'node-appwrite'
 import { serverDatabases } from '@/lib/appwrite/server'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { mapDocToGameJam, mapDocToProject } from '@/lib/appwrite/types'
-import type { GameJam, PastWinner, SiteStats } from '@/types'
+import { getPopularProjects } from '@/lib/actions/projects'
+import type { GameJam, PastWinner, SiteStats, Project } from '@/types'
 
 export async function getHomePageData(): Promise<{
   ongoingJam: GameJam | null
   upcomingJams: GameJam[]
   winners: PastWinner[]
+  popularProjects: Project[]
   stats: SiteStats
 }> {
   try {
     const now = new Date()
 
-    const [featuredRes, ongoingStatusRes, upcomingStatusRes, winnerProjectsRes, jamsCountRes, participantsCountRes, projectsCountRes] =
+    const [featuredRes, ongoingStatusRes, upcomingStatusRes, winnerProjectsRes, jamsCountRes, participantsCountRes, projectsCountRes, popularProjects] =
       await Promise.all([
         // Jams mises en avant par l'admin
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
@@ -45,6 +47,7 @@ export async function getHomePageData(): Promise<{
           Query.equal('submitted', true),
           Query.limit(1),
         ]),
+        getPopularProjects(6),
       ])
 
     const featuredJams = featuredRes.documents.map(mapDocToGameJam)
@@ -110,13 +113,14 @@ export async function getHomePageData(): Promise<{
       countriesRepresented: 47, // pas de champ pays dans le schéma Appwrite
     }
 
-    return { ongoingJam, upcomingJams, winners, stats }
+    return { ongoingJam, upcomingJams, winners, popularProjects, stats }
   } catch {
     // Fallback si Appwrite inaccessible — retourne des données vides
     return {
       ongoingJam: null,
       upcomingJams: [],
       winners: [],
+      popularProjects: [],
       stats: { jamsOrganized: 0, participants: 0, projectsSubmitted: 0, countriesRepresented: 0 },
     }
   }

@@ -305,7 +305,7 @@ export default async function JamPage({ params }: Props) {
                         </p>
                         <div className="flex items-center gap-3">
                           <span className="label-tech" style={{ color: 'var(--primary)' }}>
-                            {project.votesCount} vote{project.votesCount !== 1 ? 's' : ''}
+                            {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
                           </span>
                           {project.winner && (
                             <span className="label-tech" style={{ color: 'var(--success)' }}>

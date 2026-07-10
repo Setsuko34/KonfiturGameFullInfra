@@ -55,7 +55,7 @@ export interface Project {
   repoUrl?: string
   submitted: boolean
   submissionDate?: Date
-  votesCount: number
+  likesCount: number
   coverImage?: string
   screenshotIds?: string[]
   reported?: boolean

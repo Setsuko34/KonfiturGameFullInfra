@@ -181,7 +181,7 @@ describe('mapDocToProject', () => {
     expect(project.title).toBe('Pixel Garden')
     expect(project.technologies).toEqual([])
     expect(project.submitted).toBe(false)
-    expect(project.votesCount).toBe(0)
+    expect(project.likesCount).toBe(0)
     expect(project.screenshotIds).toEqual([])
     expect(project.reported).toBe(false)
     expect(project.winner).toBe(false)
@@ -200,6 +200,14 @@ describe('mapDocToProject', () => {
   it("ne set pas submissionDate si submission_date est absent", () => {
     const project = mapDocToProject(makeDoc(baseProject))
     expect(project.submissionDate).toBeUndefined()
+  })
+
+  it('mappe likes_count réel en likesCount', () => {
+    const project = mapDocToProject(makeDoc({
+      ...baseProject,
+      likes_count: 5,
+    }))
+    expect(project.likesCount).toBe(5)
   })
 })
 

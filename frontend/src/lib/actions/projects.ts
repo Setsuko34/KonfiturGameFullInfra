@@ -2,6 +2,7 @@
 
 import { Query } from 'node-appwrite'
 import { serverDatabases } from '@/lib/appwrite/server'
+import { createSessionClient } from '@/lib/appwrite/session'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { mapDocToProject } from '@/lib/appwrite/types'
 import type { Project } from '@/types'
@@ -14,7 +15,7 @@ export async function getProjectsByJam(jamId: string): Promise<Project[]> {
       [
         Query.equal('jam_id', jamId),
         Query.equal('submitted', true),
-        Query.orderDesc('votes_count'),
+        Query.orderDesc('likes_count'),
         Query.limit(100),
       ]
     )
@@ -79,7 +80,7 @@ export async function submitProject(data: {
         repo_url: data.repoUrl,
         submitted: true,
         submission_date: new Date().toISOString(),
-        votes_count: 0,
+        likes_count: 0,
       }
     )
     return { success: true, projectId: doc.$id }
@@ -89,41 +90,58 @@ export async function submitProject(data: {
   }
 }
 
-export async function voteForProject(
-  projectId: string,
-  userId: string
-): Promise<{ success: boolean; error?: string }> {
+export async function toggleLike(
+  projectId: string
+): Promise<{ success: boolean; liked: boolean; likesCount: number; error?: string }> {
   try {
-    // Vérifier que l'utilisateur n'a pas déjà voté
-    const existing = await serverDatabases.listDocuments(
-      DATABASE_ID,
-      COLLECTIONS.VOTES,
-      [
-        Query.equal('project_id', projectId),
-        Query.equal('user_id', userId),
-        Query.limit(1),
-      ]
-    )
-    if (existing.documents.length > 0) {
-      return { success: false, error: 'Vous avez déjà voté pour ce projet.' }
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
+    // Vérifier si l'utilisateur a déjà liké ce projet
+    const existing = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.LIKES, [
+      Query.equal('project_id', projectId),
+      Query.equal('user_id', user.$id),
+      Query.limit(1),
+    ])
+    const wasLiked = existing.documents.length > 0
+
+    if (wasLiked) {
+      // Unlike
+      await serverDatabases.deleteDocument(DATABASE_ID, COLLECTIONS.LIKES, existing.documents[0].$id)
+    } else {
+      // Like
+      await serverDatabases.createDocument(DATABASE_ID, COLLECTIONS.LIKES, 'unique()', {
+        project_id: projectId,
+        user_id: user.$id,
+      })
     }
 
-    // Enregistrer le vote
-    await serverDatabases.createDocument(DATABASE_ID, COLLECTIONS.VOTES, 'unique()', {
-      project_id: projectId,
-      user_id: userId,
-    })
-
-    // Incrémenter le compteur
-    const project = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId)
+    // Recompter depuis la collection pour éviter toute race condition sur le compteur
+    const countRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.LIKES, [
+      Query.equal('project_id', projectId),
+      Query.limit(1),
+    ])
     await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId, {
-      votes_count: (project.votes_count ?? 0) + 1,
+      likes_count: countRes.total,
     })
 
-    return { success: true }
+    return { success: true, liked: !wasLiked, likesCount: countRes.total }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erreur inconnue'
-    return { success: false, error: msg }
+    return { success: false, liked: false, likesCount: 0, error: msg }
+  }
+}
+
+export async function hasUserLiked(projectId: string, userId: string): Promise<boolean> {
+  try {
+    const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.LIKES, [
+      Query.equal('project_id', projectId),
+      Query.equal('user_id', userId),
+      Query.limit(1),
+    ])
+    return res.documents.length > 0
+  } catch {
+    return false
   }
 }
 
@@ -167,5 +185,18 @@ export async function reportProject(
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erreur inconnue'
     return { success: false, error: msg }
+  }
+}
+
+export async function getPopularProjects(limit = 6): Promise<Project[]> {
+  try {
+    const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
+      Query.equal('submitted', true),
+      Query.orderDesc('likes_count'),
+      Query.limit(limit),
+    ])
+    return res.documents.map(mapDocToProject)
+  } catch {
+    return []
   }
 }

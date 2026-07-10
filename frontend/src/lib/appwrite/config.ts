@@ -12,7 +12,7 @@ export const COLLECTIONS = {
   CHAT_MESSAGES: 'chat_messages',
   ANNOUNCEMENTS: 'announcements',
   COMMENTS: 'comments',
-  VOTES: 'votes',
+  LIKES: 'likes',
   AUDIT_LOGS: 'audit_logs',
   BANNED_IPS: 'banned_ips',
 } as const

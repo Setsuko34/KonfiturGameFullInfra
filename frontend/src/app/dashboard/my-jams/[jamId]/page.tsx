@@ -99,7 +99,7 @@ export default async function ManageJamPage({ params }: Props) {
                 style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
                 <p className="font-semibold text-sm">{project.title}</p>
                 <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                  {project.votesCount} vote{project.votesCount !== 1 ? 's' : ''}
+                  {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
                   {project.submissionDate && ` · Soumis le ${project.submissionDate.toLocaleDateString('fr-FR')}`}
                 </p>
               </li>

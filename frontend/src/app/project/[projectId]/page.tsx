@@ -2,9 +2,10 @@ import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { getProjectById } from '@/lib/actions/projects'
+import { getProjectById, hasUserLiked } from '@/lib/actions/projects'
 import { generateProjectJsonLd, serializeJsonLd, truncateDescription } from '@/lib/seo'
 import { getCommentsByProject } from '@/lib/actions/comments'
+import { createSessionClient } from '@/lib/appwrite/session'
 import ProjectInteractions from './ProjectInteractions'
 
 interface Props {
@@ -49,6 +50,17 @@ export default async function ProjectPage({ params }: Props) {
 
   if (!project) notFound()
 
+  let initialLiked = false
+  if (project) {
+    try {
+      const { account } = await createSessionClient()
+      const user = await account.get()
+      initialLiked = await hasUserLiked(project.id, user.$id)
+    } catch {
+      initialLiked = false // visiteur non connecté
+    }
+  }
+
   return (
     <>
       <Header />
@@ -75,7 +87,8 @@ export default async function ProjectPage({ params }: Props) {
             </p>
             <ProjectInteractions
               projectId={project.id}
-              initialVotesCount={project.votesCount}
+              initialLikesCount={project.likesCount}
+              initialLiked={initialLiked}
               downloadUrl={project.downloadUrl}
               repoUrl={project.repoUrl}
               initialComments={initialComments}

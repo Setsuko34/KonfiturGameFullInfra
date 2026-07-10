@@ -69,7 +69,7 @@ export function mapDocToProject(doc: AppwriteDoc): Project {
     repoUrl: doc.repo_url,
     submitted: doc.submitted ?? false,
     submissionDate: doc.submission_date ? new Date(doc.submission_date) : undefined,
-    votesCount: doc.votes_count ?? 0,
+    likesCount: doc.likes_count ?? 0,
     coverImage: doc.cover_image_id,
     screenshotIds: doc.screenshot_ids ?? [],
     reported: doc.reported ?? false,

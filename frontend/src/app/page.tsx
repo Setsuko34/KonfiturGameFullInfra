@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { Users, Trophy, Gamepad2, Globe, ArrowRight, Zap } from 'lucide-react'
+import { Users, Trophy, Gamepad2, Globe, ArrowRight, Zap, Heart } from 'lucide-react'
 import { generateOrganizationJsonLd } from '@/lib/seo'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 }
 
 export default async function HomePage() {
-  const { ongoingJam, upcomingJams, winners, stats } = await getHomePageData()
+  const { ongoingJam, upcomingJams, winners, popularProjects, stats } = await getHomePageData()
 
   return (
     <>
@@ -246,6 +246,47 @@ export default async function HomePage() {
             </div>
           </div>
         </section>
+
+        {/* ═══ PROJETS POPULAIRES ═══ */}
+        {popularProjects.length > 0 && (
+          <section
+            className="px-4 sm:px-6 lg:px-8 py-16 border-b"
+            style={{ borderColor: 'var(--border)' }}
+            aria-labelledby="popular-heading"
+          >
+            <div className="max-w-7xl mx-auto">
+              <p className="label-tech mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                POPULARITÉ
+              </p>
+              <h2 id="popular-heading" className="text-2xl font-bold mb-8">
+                Projets les plus aimés
+              </h2>
+              <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {popularProjects.map(p => (
+                  <li key={p.id}>
+                    <Link
+                      href={`/project/${p.id}`}
+                      className="block p-5 border h-full transition-opacity hover:opacity-80"
+                      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                    >
+                      <p className="font-semibold mb-2 truncate">{p.title}</p>
+                      <p className="text-sm mb-3" style={{ color: 'var(--muted-foreground)' }}>
+                        {p.technologies.slice(0, 3).join(', ')}
+                      </p>
+                      <span
+                        className="inline-flex items-center gap-1 text-sm font-medium"
+                        style={{ color: 'var(--secondary)' }}
+                      >
+                        <Heart size={14} aria-hidden="true" fill="currentColor" />
+                        {p.likesCount} like{p.likesCount !== 1 ? 's' : ''}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
 
         {/* ═══ HALL OF FAME ═══ */}
         <section
