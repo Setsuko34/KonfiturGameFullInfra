@@ -30,7 +30,9 @@ export function loadTestIds(): TestIds {
 export type E2EState = {
   guildeInviteCode?: string
   guildeId?: string
+  guildeRegisteredJamId?: string
   projectId?: string
+  announcementPublished?: boolean
 }
 
 const STATE_FILE = path.resolve(process.cwd(), 'e2e/.test-state.json')

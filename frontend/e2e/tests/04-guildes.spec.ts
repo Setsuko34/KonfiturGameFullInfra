@@ -9,8 +9,8 @@ test.describe('3.1 — Créer une guilde', () => {
     await page.goto('/dashboard/team')
     await expect(page.locator('h1')).toBeVisible()
 
-    // Ouvrir le formulaire de création
-    await page.getByRole('button', { name: /créer une équipe/i }).click()
+    // Ouvrir le formulaire de création (deux boutons identiques : barre d'action + état vide)
+    await page.getByRole('button', { name: /créer une équipe/i }).first().click()
 
     // Remplir le formulaire
     const nameInput = page.locator('input[name="name"], input[placeholder*="nom"], #team-name')
@@ -52,7 +52,8 @@ test.describe('3.2 — Rejoindre une guilde via code', () => {
 
     await page.goto('/dashboard/team')
 
-    await page.getByRole('button', { name: /rejoindre/i }).click()
+    // "Rejoindre" (barre d'action) et "Rejoindre via code" (état vide) coexistent
+    await page.getByRole('button', { name: /rejoindre/i }).first().click()
 
     const codeInput = page.locator('input[name="code"], input[placeholder*="code"], #invite-code')
     await codeInput.fill(guildeInviteCode!)
@@ -67,7 +68,7 @@ test.describe('3.2 — Rejoindre une guilde via code', () => {
     const joinBtn = page.getByRole('button', { name: /rejoindre/i })
     if (await joinBtn.count() === 0) test.skip()
 
-    await joinBtn.click()
+    await joinBtn.first().click()
     const codeInput = page.locator('input[name="code"], input[placeholder*="code"], #invite-code')
     await codeInput.fill('KG-INVALIDE')
     await page.getByRole('button', { name: /valider|rejoindre|confirmer/i }).last().click()
@@ -77,41 +78,43 @@ test.describe('3.2 — Rejoindre une guilde via code', () => {
 })
 
 test.describe('3.3 — Inscrire une guilde à une jam', () => {
-  test('user1 inscrit sa guilde à la jam en cours', async ({ user1Page: page }) => {
+  test('user1 inscrit sa guilde à la jam à venir', async ({ user1Page: page }) => {
+    // Le CTA d'inscription n'apparaît que si la jam n'a pas commencé (canAct: now < startDate)
     const ids = loadTestIds()
-    await page.goto(`/jam/${ids.jamOngoingId}`)
+    await page.goto(`/jam/${ids.jamUpcomingId}`)
 
-    const inscribeBtn = page.getByRole('button', { name: /inscrire ma guilde|rejoindre/i })
-    if (await inscribeBtn.count() === 0) test.skip()
-
-    await inscribeBtn.click()
-
-    // Sélectionner la guilde dans la liste si une modale apparaît
-    const guildeOption = page.getByText('[E2E] Guilde Test')
-    if (await guildeOption.count() > 0) await guildeOption.click()
-
-    await page.getByRole('button', { name: /valider|inscrire|confirmer/i }).last().click()
-
-    await expect(page.locator('body')).toContainText('[E2E] Guilde Test', { timeout: 10_000 })
-  })
-
-  test('erreur si on tente d\'inscrire la même guilde une seconde fois', async ({ user1Page: page }) => {
-    const ids = loadTestIds()
-    await page.goto(`/jam/${ids.jamOngoingId}`)
-
-    const inscribeBtn = page.getByRole('button', { name: /inscrire ma guilde/i })
-    if (await inscribeBtn.count() === 0) {
-      // La guilde est déjà inscrite — le bouton ne devrait plus apparaître
-      // ou un message "déjà inscrit" est visible
-      await expect(page.locator('body')).toContainText(/déjà inscrit|already/i)
-      return
+    // Le select n'apparaît que si user1 est leader d'une guilde non inscrite à cette jam
+    // (waitFor : le count() immédiat rate l'élément si la page streame encore)
+    const teamSelect = page.getByRole('combobox', { name: /inscrire une de mes équipes/i })
+    try {
+      await teamSelect.waitFor({ timeout: 5_000 })
+    } catch {
+      test.skip()
     }
 
-    await inscribeBtn.click()
-    const guildeOption = page.getByText('[E2E] Guilde Test')
-    if (await guildeOption.count() > 0) await guildeOption.click()
-    await page.getByRole('button', { name: /valider|inscrire/i }).last().click()
+    // Retry : si selectOption s'exécute avant l'hydratation React, l'event change
+    // est perdu et le bouton reste désactivé — on re-sélectionne jusqu'à ce qu'il s'active
+    const inscrireBtn = page.getByRole('button', { name: 'Inscrire', exact: true })
+    await expect(async () => {
+      await teamSelect.selectOption({ label: '[E2E] Guilde Test' })
+      await expect(inscrireBtn).toBeEnabled({ timeout: 1_000 })
+    }).toPass({ timeout: 15_000 })
+    await inscrireBtn.click()
 
-    await expect(page.locator('[role="alert"]').first()).toBeVisible({ timeout: 5_000 })
+    // La guilde inscrite apparaît comme "TON ÉQUIPE" et dans la liste des équipes
+    await expect(page.locator('body')).toContainText('TON ÉQUIPE', { timeout: 10_000 })
+    await expect(page.locator('body')).toContainText('[E2E] Guilde Test')
+    saveState({ guildeRegisteredJamId: ids.jamUpcomingId })
+  })
+
+  test('impossible d\'inscrire la même guilde une seconde fois', async ({ user1Page: page }) => {
+    const { guildeRegisteredJamId } = loadState()
+    if (!guildeRegisteredJamId) test.skip()
+
+    await page.goto(`/jam/${guildeRegisteredJamId}`)
+
+    // La guilde étant déjà inscrite, le CTA d'inscription ne doit plus être proposé
+    await expect(page.locator('body')).toContainText('TON ÉQUIPE')
+    await expect(page.getByRole('combobox', { name: /inscrire une de mes équipes/i })).toHaveCount(0)
   })
 })

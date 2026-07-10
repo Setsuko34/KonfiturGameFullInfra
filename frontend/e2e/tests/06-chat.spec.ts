@@ -13,6 +13,10 @@ test.describe('5.1 — Envoi de messages', () => {
     const chatSection = page.locator('[data-chat], #chat, [aria-label*="chat" i]')
     if (await chatSection.count() === 0) test.skip()
 
+    // Le composant n'affiche les nouveaux messages que via l'écho realtime :
+    // attendre que la souscription WebSocket soit établie avant d'envoyer
+    await page.waitForTimeout(1_000)
+
     // Canal Général par défaut
     const msgInput = page.locator(
       'input[name="message"], textarea[name="message"], [data-chat-input], #chat-input'

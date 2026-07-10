@@ -61,6 +61,12 @@ export default async function globalTeardown() {
   await deleteAllDocs(databases, 'chat_messages', [Query.equal('author_id', 'e2e-user1')])
   await deleteAllDocs(databases, 'chat_messages', [Query.equal('author_id', 'e2e-user2')])
 
+  // Suppression des annonces E2E (orphelines après suppression des jams)
+  await deleteAllDocs(databases, 'announcements', [Query.startsWith('title', '[E2E]')])
+
+  // Suppression des projets E2E (orphelins après suppression des jams et équipes)
+  await deleteAllDocs(databases, 'projects', [Query.startsWith('title', '[E2E]')])
+
   // Suppression des utilisateurs de test
   await Promise.all(E2E_USER_IDS.map(id => users.delete(id).catch(() => {})))
 

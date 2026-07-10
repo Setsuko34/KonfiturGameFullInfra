@@ -1,4 +1,5 @@
 import { test, expect } from '../fixtures/auth'
+import { saveState, loadState } from '../fixtures/test-data'
 
 // Module 7 — Organisateur
 // Cahier de recettes §7.1, §7.2
@@ -52,36 +53,38 @@ test.describe('7.2 — Publier une annonce', () => {
   test('user1 publie une annonce importante pour sa jam', async ({ user1Page: page }) => {
     await page.goto('/dashboard/my-jams')
 
-    // Aller sur la gestion des annonces de la jam créée en 7.1
-    const jamLink = page.locator('a', { hasText: '[E2E] Jam Créée par User1' })
-    if (await jamLink.count() === 0) test.skip()
-    await jamLink.click()
+    // Aller sur la page de gestion via le lien "Gérer" de la ligne de la jam créée en 7.1
+    // (waitFor : le count() immédiat rate l'élément si la page streame encore)
+    const gererLink = page
+      .locator('tr', { hasText: '[E2E] Jam Créée par User1' })
+      .getByRole('link', { name: /gérer/i })
+    try {
+      await gererLink.waitFor({ timeout: 5_000 })
+    } catch {
+      test.skip()
+    }
+    await gererLink.click()
+    await page.waitForURL(/\/dashboard\/my-jams\/[^/]+$/)
 
-    // Naviguer vers la section annonces
-    const annoncesLink = page.getByRole('link', { name: /annonces?/i })
-      .or(page.getByRole('button', { name: /annonces?/i }))
-    if (await annoncesLink.count() > 0) await annoncesLink.first().click()
-
-    // Remplir le formulaire d'annonce
-    const titleInput = page.locator('input[name="title"], #announcement-title')
-    if (await titleInput.count() === 0) test.skip()
-
-    await titleInput.fill('[E2E] Annonce importante')
-    const contentInput = page.locator('textarea[name="content"], #announcement-content')
-    if (await contentInput.count() > 0) await contentInput.fill('Contenu de l\'annonce E2E.')
+    // Remplir le formulaire d'annonce (AnnouncementForm, présent sur la page de gestion)
+    await page.locator('#ann-title').fill('[E2E] Annonce importante')
+    await page.locator('#ann-content').fill('Contenu de l\'annonce E2E.')
 
     // Cocher "Important"
-    const importantCheck = page.locator('input[name="important"], #important, input[type="checkbox"]').first()
-    if (await importantCheck.count() > 0) {
-      const checked = await importantCheck.isChecked()
-      if (!checked) await importantCheck.check()
-    }
+    await page.getByLabel(/marquer comme important/i).check()
 
-    await page.getByRole('button', { name: /publier|créer|valider/i }).last().click()
-    await expect(page.locator('body')).toContainText('[E2E] Annonce importante', { timeout: 10_000 })
+    await page.getByRole('button', { name: 'Publier', exact: true }).click()
+
+    // Confirmation + annonce listée dans les annonces publiées
+    await expect(page.locator('body')).toContainText('Annonce publiée', { timeout: 10_000 })
+    await expect(page.locator('body')).toContainText('[E2E] Annonce importante')
+    saveState({ announcementPublished: true })
   })
 
   test('l\'annonce est visible sur la page de la jam', async ({ user1Page: page }) => {
+    const { announcementPublished } = loadState()
+    if (!announcementPublished) test.skip()
+
     await page.goto('/explore')
     const jamLink = page.locator('a', { hasText: '[E2E] Jam Créée par User1' })
     if (await jamLink.count() === 0) test.skip()

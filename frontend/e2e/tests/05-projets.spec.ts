@@ -1,67 +1,52 @@
 import { test, expect } from '../fixtures/auth'
-import { saveState, loadState } from '../fixtures/test-data'
-import path from 'path'
+import { loadTestIds, saveState, loadState } from '../fixtures/test-data'
 
 // Module 4 — Projets
 // Cahier de recettes §4.1, §4.2, §4.3
 
 test.describe('4.1 — Soumettre un projet', () => {
   test('user1 soumet un projet pour sa guilde inscrite', async ({ user1Page: page }) => {
+    const ids = loadTestIds()
     await page.goto('/dashboard/team')
 
-    // Chercher le bouton "Soumettre un projet" lié à la jam en cours
-    const submitBtn = page.getByRole('button', { name: /soumettre un projet/i })
-      .or(page.getByRole('link', { name: /soumettre un projet/i }))
-
-    if (await submitBtn.count() === 0) test.skip()
-    await submitBtn.first().click()
-
-    // Remplir le formulaire de soumission
-    await page.locator('input[name="title"], #project-title').fill('[E2E] Projet Test')
-    await page.locator('textarea[name="description"], #project-description').fill(
-      'Projet de test E2E pour le cahier de recettes.'
-    )
-
-    // Technologies (peut être un champ texte ou des tags)
-    const techInput = page.locator('input[name="technologies"], #technologies, input[placeholder*="techno"]')
-    if (await techInput.count() > 0) {
-      await techInput.fill('TypeScript, Next.js')
+    // Le formulaire de soumission n'apparaît que pour une jam en cours :
+    // inscrire la guilde à la jam ongoing via le TeamCard si ce n'est pas déjà fait
+    const submitTitle = page.locator('#proj-title')
+    if (await submitTitle.count() === 0) {
+      const jamSelect = page.getByRole('combobox', { name: /choisir une jam/i })
+      try {
+        await jamSelect.waitFor({ timeout: 5_000 })
+      } catch {
+        test.skip()
+      }
+      // Retry : si selectOption s'exécute avant l'hydratation React, l'event change
+      // est perdu et le bouton reste désactivé — on re-sélectionne jusqu'à ce qu'il s'active
+      const inscrireBtn = page.getByRole('button', { name: 'Inscrire', exact: true })
+      await expect(async () => {
+        await jamSelect.selectOption(ids.jamOngoingId)
+        await expect(inscrireBtn).toBeEnabled({ timeout: 1_000 })
+      }).toPass({ timeout: 15_000 })
+      await inscrireBtn.click()
+      await submitTitle.waitFor({ timeout: 10_000 })
     }
 
-    // URL optionnelle
-    const urlInput = page.locator('input[name="repo_url"], input[name="download_url"], #repo-url')
-    if (await urlInput.count() > 0) {
-      await urlInput.fill('https://github.com/example/e2e-test')
-    }
+    // Remplir le formulaire de soumission (SubmitProjectForm)
+    await submitTitle.fill('[E2E] Projet Test')
+    await page.locator('#proj-desc').fill('Projet de test E2E pour le cahier de recettes.')
+    await page.locator('#proj-tech').fill('TypeScript, Next.js')
+    await page.locator('#proj-repo').fill('https://github.com/example/e2e-test')
 
-    // Image de couverture (optionnelle en test)
-    const coverInput = page.locator('input[type="file"]')
-    if (await coverInput.count() > 0) {
-      // Crée un fichier PNG minimal pour le test
-      const testImagePath = path.resolve(process.cwd(), 'e2e/.auth/test-cover.png')
-      const { writeFileSync } = await import('fs')
-      // PNG 1x1 pixel transparent (89 bytes)
-      const pngBytes = Buffer.from(
-        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489' +
-        '0000000a49444154789c6260000000020001e221bc330000000049454e44ae426082',
-        'hex'
-      )
-      writeFileSync(testImagePath, pngBytes)
-      await coverInput.setInputFiles(testImagePath)
-    }
+    await page.getByRole('button', { name: /soumettre le projet/i }).click()
+    await expect(page.locator('body')).toContainText('PROJET SOUMIS', { timeout: 15_000 })
+    await expect(page.locator('body')).toContainText('[E2E] Projet Test')
 
-    await page.getByRole('button', { name: /soumettre|valider|publier/i }).last().click()
-
-    // Le projet doit être créé et visible
-    await expect(page.locator('body')).toContainText('[E2E] Projet Test', { timeout: 15_000 })
-
-    // Extraire l'ID du projet pour les tests suivants
+    // Récupérer l'ID du projet depuis la page de la jam pour les tests suivants
+    await page.goto(`/jam/${ids.jamOngoingId}`)
     const projectLink = page.locator('a[href*="/project/"]').first()
-    if (await projectLink.count() > 0) {
-      const href = await projectLink.getAttribute('href') ?? ''
-      const match = href.match(/\/project\/([^/]+)/)
-      if (match) saveState({ projectId: match[1] })
-    }
+    await projectLink.waitFor({ timeout: 10_000 })
+    const href = await projectLink.getAttribute('href') ?? ''
+    const match = href.match(/\/project\/([^/]+)/)
+    if (match) saveState({ projectId: match[1] })
   })
 
   test('le projet est accessible via /project/:id', async ({ user1Page: page }) => {
@@ -81,25 +66,27 @@ test.describe('4.3 — Commenter un projet', () => {
 
     await page.goto(`/project/${projectId}`)
 
-    const commentInput = page.locator('textarea[name="comment"], textarea[placeholder*="commentaire"], #comment-input')
-    if (await commentInput.count() === 0) test.skip()
+    const commentInput = page.locator('#comment-input')
+    try {
+      await commentInput.waitFor({ timeout: 5_000 })
+    } catch {
+      test.skip()
+    }
 
     await commentInput.fill('Commentaire E2E — test automatisé.')
-    await page.getByRole('button', { name: /commenter|envoyer|publier/i }).last().click()
+    await page.getByRole('button', { name: 'Commenter', exact: true }).click()
 
     await expect(page.locator('body')).toContainText('Commentaire E2E', { timeout: 10_000 })
   })
 
-  test('commenter sans être connecté redirige vers login', async ({ page }) => {
+  test('un visiteur non connecté est invité à se connecter pour commenter', async ({ page }) => {
     const { projectId } = loadState()
     if (!projectId) test.skip()
 
     await page.goto(`/project/${projectId}`)
-    const commentInput = page.locator('textarea[name="comment"], #comment-input')
-    if (await commentInput.count() > 0) {
-      await commentInput.fill('Test sans login')
-      await page.getByRole('button', { name: /commenter|envoyer/i }).last().click()
-      await expect(page).toHaveURL(/\/auth\/login/, { timeout: 5_000 })
-    }
+
+    // Pas de formulaire pour les anonymes — un lien de connexion est proposé à la place
+    await expect(page.getByRole('link', { name: /connectez-vous/i })).toBeVisible()
+    await expect(page.locator('#comment-input')).toHaveCount(0)
   })
 })

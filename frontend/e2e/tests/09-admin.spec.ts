@@ -42,8 +42,13 @@ test.describe('8.2 — Logs et ban IP', () => {
     await page.goto('/admin/logs')
 
     // Chercher l'IP ajoutée en test précédent et la débannir
-    const ipRow = page.locator('tr, [data-ip-row]').filter({ hasText: '192.0.2.1' }).first()
-    if (await ipRow.count() === 0) test.skip()
+    // (la liste des IPs bannies est un <ul role="list"> de <li>, pas un tableau)
+    const ipRow = page.getByRole('listitem').filter({ hasText: '192.0.2.1' }).first()
+    try {
+      await ipRow.waitFor({ timeout: 5_000 })
+    } catch {
+      test.skip()
+    }
 
     const unbanBtn = ipRow.getByRole('button', { name: /débannir|supprimer|retirer/i })
     if (await unbanBtn.count() === 0) test.skip()
@@ -68,9 +73,12 @@ test.describe('8.3 — Accessibilité (§9.2)', () => {
 
   test('focus visible sur les éléments interactifs du header', async ({ page }) => {
     await page.goto('/')
-    // Tab jusqu'au premier lien du header
+    // Tab jusqu'au premier lien du header — exclure l'overlay Next.js DevTools (mode dev)
+    // qui peut aussi matcher :focus et provoquer une violation strict mode
     await page.keyboard.press('Tab')
-    const focused = page.locator(':focus')
+    const focused = page.locator(':focus:not(nextjs-portal):not([data-nextjs-dev-tools-button])')
+    // Si l'overlay devtools a capté le premier Tab, passer à l'élément suivant
+    if (await focused.count() === 0) await page.keyboard.press('Tab')
     await expect(focused).toBeVisible()
   })
 

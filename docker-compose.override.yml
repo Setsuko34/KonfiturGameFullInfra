@@ -92,6 +92,9 @@ services:
       # est devenu vestigial (défini mais non lu). Seul _APP_MIGRATION_HOST réinjecte un hostname
       # dans platform.hostnames → on y déclare le nom de service interne pour autoriser le SSR.
       _APP_MIGRATION_HOST: appwrite
+      # DEV uniquement : désactive le rate limiting (10 inscriptions/h/IP par défaut)
+      # qui fait échouer les runs e2e répétés sur les tests d'inscription.
+      _APP_OPTIONS_ABUSE: disabled
 
   # ────────────────────────────────────────────────────────
   # APPWRITE CONSOLE — SPA admin (container séparé depuis 1.7+)
