@@ -27,7 +27,7 @@ const mockProject: Project = {
   description: 'Un jeu de jardinage pixelisé',
   technologies: ['Unity', 'C#'],
   submitted: true,
-  votesCount: 15,
+  likesCount: 15,
 }
 
 describe('generateJamJsonLd', () => {
@@ -69,6 +69,21 @@ describe('generateProjectJsonLd', () => {
     const ld = generateProjectJsonLd(mockProject, 'https://konfiturgame.fr')
     expect(ld.name).toBe(mockProject.title)
     expect(ld.description).toBe(mockProject.description)
+  })
+
+  it('inclut aggregateRating basé sur likesCount quand likesCount > 0', () => {
+    const ld = generateProjectJsonLd(mockProject, 'https://konfiturgame.fr')
+    expect(ld.aggregateRating).toEqual({
+      '@type': 'AggregateRating',
+      ratingCount: mockProject.likesCount,
+      ratingValue: mockProject.winner ? 5 : 4,
+      bestRating: 5,
+    })
+  })
+
+  it('omet aggregateRating quand likesCount vaut 0', () => {
+    const ld = generateProjectJsonLd({ ...mockProject, likesCount: 0 }, 'https://konfiturgame.fr')
+    expect(ld.aggregateRating).toBeUndefined()
   })
 })
 

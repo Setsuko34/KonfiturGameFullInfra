@@ -140,11 +140,18 @@ aenum() {
   create ".$2" "databases/$DB/collections/$1/attributes/enum" "$data"
 }
 
-# new_col ID NAME
+# aidx COL KEY TYPE '["attr1","attr2"]'
+aidx() {
+  create "index .$2" "databases/$DB/collections/$1/indexes" \
+    "$(jq -nc --arg k "$2" --arg t "$3" --argjson attrs "$4" '{key:$k, type:$t, attributes:$attrs}')"
+}
+
+# new_col ID NAME [EXTRA_PERMS_JSON_ARRAY]
 new_col() {
+  local extra="${3:-[]}"
   create "Collection $2" "databases/$DB/collections" \
-    "$(jq -nc --arg i "$1" --arg n "$2" \
-      '{collectionId:$i, name:$n, permissions:["read(\"any\")","create(\"users\")"]}')"
+    "$(jq -nc --arg i "$1" --arg n "$2" --argjson extra "$extra" \
+      '{collectionId:$i, name:$n, permissions:(["read(\"any\")","create(\"users\")"] + $extra)}')"
 }
 
 # ── Base de données ───────────────────────────────────────────────────────────
@@ -212,7 +219,7 @@ astr  projects download_url   2048  false
 astr  projects repo_url       2048  false
 abool projects submitted       true  false
 adt   projects submission_date false
-aint  projects votes_count    false  0
+aint  projects likes_count    false  0
 astr  projects cover_image_id  256  false
 astr  projects screenshot_ids  256  false  true  # array
 abool projects reported        false  false
@@ -252,11 +259,12 @@ astr comments content    2048   true
 wait_attrs comments
 
 echo
-echo '── votes ────────────────────────────'
-new_col votes votes
-astr votes project_id  36  true
-astr votes user_id     36  true
-wait_attrs votes
+echo '── likes ────────────────────────────'
+new_col likes likes '["delete(\"users\")"]'
+astr likes project_id  36  true
+astr likes user_id     36  true
+wait_attrs likes
+aidx likes uniq_project_user unique '["project_id","user_id"]'
 
 # ── Données de test ───────────────────────────────────────────────────────────
 echo

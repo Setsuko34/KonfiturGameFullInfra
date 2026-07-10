@@ -1,15 +1,16 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { ThumbsUp, Send, Flag, Download, Github, ExternalLink } from 'lucide-react'
+import { Heart, Send, Flag, Download, Github, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
-import { voteForProject, reportProject } from '@/lib/actions/projects'
+import { toggleLike, reportProject } from '@/lib/actions/projects'
 import { addComment } from '@/lib/actions/comments'
 import type { Comment } from '@/types'
 
 interface Props {
   projectId: string
-  initialVotesCount: number
+  initialLikesCount: number
+  initialLiked: boolean
   downloadUrl?: string
   repoUrl?: string
   initialComments: Comment[]
@@ -18,27 +19,28 @@ interface Props {
 
 export default function ProjectInteractions({
   projectId,
-  initialVotesCount,
+  initialLikesCount,
+  initialLiked,
   downloadUrl,
   repoUrl,
   initialComments,
   initialReported,
 }: Props) {
   const { user } = useAuth()
-  const [voted, setVoted] = useState(false)
-  const [votes, setVotes] = useState(initialVotesCount)
+  const [liked, setLiked] = useState(initialLiked)
+  const [likes, setLikes] = useState(initialLikesCount)
   const [comment, setComment] = useState('')
   const [comments, setComments] = useState<Comment[]>(initialComments)
   const [isReported, setIsReported] = useState(initialReported)
   const [isPending, startTransition] = useTransition()
 
-  const handleVote = () => {
-    if (!user || voted || isPending) return
+  const handleLike = () => {
+    if (!user || isPending) return
     startTransition(async () => {
-      const result = await voteForProject(projectId, user.$id)
+      const result = await toggleLike(projectId)
       if (result.success) {
-        setVoted(true)
-        setVotes(v => v + 1)
+        setLiked(result.liked)
+        setLikes(result.likesCount)
       }
     })
   }
@@ -69,18 +71,18 @@ export default function ProjectInteractions({
       {/* Boutons d'action */}
       <div className="flex flex-wrap gap-3 mb-8">
         <button
-          onClick={handleVote}
-          disabled={!user || voted || isPending}
+          onClick={handleLike}
+          disabled={!user || isPending}
           className="flex items-center gap-2 px-5 py-2.5 font-semibold text-sm transition-opacity disabled:opacity-50"
           style={{
-            background: voted ? 'var(--success)' : 'var(--primary)',
-            color: 'white',
+            background: liked ? 'var(--secondary)' : 'var(--primary)',
+            color: 'var(--primary-foreground)',
           }}
-          aria-label={voted ? `Vote enregistré — ${votes} votes` : `Voter pour ce projet — ${votes} votes actuels`}
-          aria-pressed={voted}
+          aria-label={liked ? `Retirer le like — ${likes} likes` : `Aimer ce projet — ${likes} likes actuels`}
+          aria-pressed={liked}
         >
-          <ThumbsUp size={15} aria-hidden="true" />
-          {votes} vote{votes !== 1 ? 's' : ''}{voted ? ' ✓' : ''}
+          <Heart size={15} aria-hidden="true" fill={liked ? 'currentColor' : 'none'} />
+          {likes} like{likes !== 1 ? 's' : ''}
         </button>
 
         {downloadUrl && (

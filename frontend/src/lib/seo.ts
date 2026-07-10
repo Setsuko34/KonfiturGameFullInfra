@@ -75,10 +75,10 @@ export function generateProjectJsonLd(project: Project, siteUrl: string): JsonLd
       : {}),
     ...(project.repoUrl ? { codeRepository: project.repoUrl } : {}),
     ...(project.downloadUrl ? { downloadUrl: project.downloadUrl } : {}),
-    aggregateRating: project.votesCount > 0
+    aggregateRating: project.likesCount > 0
       ? {
           '@type': 'AggregateRating',
-          ratingCount: project.votesCount,
+          ratingCount: project.likesCount,
           ratingValue: project.winner ? 5 : 4,
           bestRating: 5,
         }

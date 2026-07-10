@@ -449,12 +449,12 @@
                     "format": ""
                 },
                 {
-                    "key": "votes_count",
+                    "key": "likes_count",
                     "type": "integer",
                     "required": false,
                     "array": false,
                     "default": 0,
-                    "min": -9223372036854775808,
+                    "min": 0,
                     "max": 9223372036854775807
                 },
                 {
@@ -690,13 +690,14 @@
             "indexes": []
         },
         {
-            "$id": "votes",
+            "$id": "likes",
             "$permissions": [
                 "read(\"any\")",
-                "create(\"users\")"
+                "create(\"users\")",
+                "delete(\"users\")"
             ],
             "databaseId": "konfitur-db",
-            "name": "votes",
+            "name": "likes",
             "enabled": true,
             "rowSecurity": false,
             "columns": [
@@ -719,7 +720,18 @@
                     "encrypt": false
                 }
             ],
-            "indexes": []
+            "indexes": [
+                {
+                    "key": "uniq_project_user",
+                    "type": "unique",
+                    "status": "available",
+                    "columns": [
+                        "project_id",
+                        "user_id"
+                    ],
+                    "orders": []
+                }
+            ]
         },
         {
             "$id": "audit_logs",

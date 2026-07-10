@@ -177,7 +177,7 @@ export default async function TeamPage({ params }: Props) {
                       </div>
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <span className="label-tech" style={{ color: 'var(--primary)' }}>
-                          {project.votesCount} vote{project.votesCount !== 1 ? 's' : ''}
+                          {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
                         </span>
                         {project.winner && (
                           <span className="label-tech" style={{ color: 'var(--success)' }}>
