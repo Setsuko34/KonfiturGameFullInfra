@@ -42,6 +42,12 @@ export async function submitProject(data: {
     const { account } = await createSessionClient()
     const user = await account.get()
 
+    // La jam doit être en cours — le rendu est figé hors fenêtre (verrou serveur, l'UI ne fait que refléter)
+    const jam = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, data.jamId)
+    if (jam.status !== 'ongoing') {
+      return { success: false, error: 'La jam n\'est pas en cours — le projet est figé.' }
+    }
+
     // Appartenance à l'équipe
     const membership = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
       Query.equal('team_id', data.teamId),
@@ -52,14 +58,33 @@ export async function submitProject(data: {
       return { success: false, error: 'Tu ne fais pas partie de cette équipe.' }
     }
 
+    // Projet existant ? (un par couple team+jam) — AVANT le check fichiers, pour connaître les fichiers déjà liés
+    const existing = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
+      Query.equal('team_id', data.teamId),
+      Query.equal('jam_id', data.jamId),
+      Query.limit(1),
+    ])
+    const prev = existing.documents.length > 0 ? existing.documents[0] : null
+
+    // Fichiers déjà liés au projet (par champ correspondant — jamais cross-slot) :
+    // propriété vérifiée à la liaison initiale, exemptés du re-check et du re-grant
+    type Slot = 'build' | 'cover' | 'screenshot'
+    const isLinked = (id: string, slot: Slot): boolean => {
+      if (!prev) return false
+      if (slot === 'build') return prev.build_file_id === id
+      if (slot === 'cover') return prev.cover_image_id === id
+      return ((prev.screenshot_ids as string[] | undefined) ?? []).includes(id)
+    }
+
     // Vérifier la propriété de chaque fichier transmis (uploadé par cet utilisateur, bon bucket)
     const screenshots = (data.screenshotIds ?? []).slice(0, 3)
-    const fileChecks: Array<{ id: string; bucket: string }> = [
-      ...(data.buildFileId ? [{ id: data.buildFileId, bucket: BUCKETS.PROJECT_BUILDS }] : []),
-      ...(data.coverFileId ? [{ id: data.coverFileId, bucket: BUCKETS.PROJECT_ASSETS }] : []),
-      ...screenshots.map(id => ({ id, bucket: BUCKETS.PROJECT_ASSETS })),
+    const fileChecks: Array<{ id: string; bucket: string; slot: Slot }> = [
+      ...(data.buildFileId ? [{ id: data.buildFileId, bucket: BUCKETS.PROJECT_BUILDS, slot: 'build' as const }] : []),
+      ...(data.coverFileId ? [{ id: data.coverFileId, bucket: BUCKETS.PROJECT_ASSETS, slot: 'cover' as const }] : []),
+      ...screenshots.map(id => ({ id, bucket: BUCKETS.PROJECT_ASSETS, slot: 'screenshot' as const })),
     ]
-    for (const { id, bucket } of fileChecks) {
+    const newFiles = fileChecks.filter(({ id, slot }) => !isLinked(id, slot))
+    for (const { id, bucket } of newFiles) {
       const file = await serverStorage.getFile(bucket, id)
       const ownerRoles = ['read', 'update', 'delete'].map(a => `${a}("user:${user.$id}")`)
       const owned = file.$permissions.some(p => ownerRoles.includes(p))
@@ -67,13 +92,6 @@ export async function submitProject(data: {
         return { success: false, error: 'Fichier invalide ou non autorisé.' }
       }
     }
-
-    // Projet existant ? (un par couple team+jam)
-    const existing = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
-      Query.equal('team_id', data.teamId),
-      Query.equal('jam_id', data.jamId),
-      Query.limit(1),
-    ])
 
     const fields = {
       title: data.title,
@@ -89,15 +107,19 @@ export async function submitProject(data: {
     }
 
     let projectId: string
-    if (existing.documents.length > 0) {
-      const prev = existing.documents[0]
-      // Supprimer les anciens fichiers remplacés (jamais d'orphelin côté remplacement)
+    if (prev) {
+      // Supprimer les anciens fichiers remplacés OU retirés (jamais d'orphelin côté liés)
       const oldNew: Array<{ old?: string; next?: string; bucket: string }> = [
         { old: prev.build_file_id as string | undefined, next: data.buildFileId, bucket: BUCKETS.PROJECT_BUILDS },
         { old: prev.cover_image_id as string | undefined, next: data.coverFileId, bucket: BUCKETS.PROJECT_ASSETS },
+        ...((prev.screenshot_ids as string[] | undefined) ?? []).map(old => ({
+          old,
+          next: screenshots.includes(old) ? old : undefined,
+          bucket: BUCKETS.PROJECT_ASSETS,
+        })),
       ]
       for (const { old, next, bucket } of oldNew) {
-        if (old && next && old !== next) {
+        if (old && old !== next) {
           await serverStorage.deleteFile(bucket, old).catch(() => {}) // fichier déjà absent = OK
         }
       }
@@ -113,8 +135,9 @@ export async function submitProject(data: {
       projectId = doc.$id
     }
 
-    // Ouvrir la lecture publique des fichiers liés (l'uploader garde update/delete)
-    for (const { id, bucket } of fileChecks) {
+    // Ouvrir la lecture publique des fichiers NOUVELLEMENT liés (les fichiers déjà liés sont déjà
+    // publics ; re-granter transférerait update/delete au resoumetteur)
+    for (const { id, bucket } of newFiles) {
       await serverStorage.updateFile(bucket, id, undefined, [
         Permission.read(Role.any()),
         Permission.update(Role.user(user.$id)),

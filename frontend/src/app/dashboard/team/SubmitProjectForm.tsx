@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Send, Package, CheckCircle } from 'lucide-react'
+import { Send, Package, CheckCircle, Pencil } from 'lucide-react'
 import { submitProject } from '@/lib/actions/projects'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { BUCKETS } from '@/lib/appwrite/config'
@@ -84,6 +84,15 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
         <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
           {description || existingProject?.description}
         </p>
+        <button
+          type="button"
+          onClick={() => setSubmitted(false)}
+          className="flex items-center gap-2 mt-4 px-4 py-2 text-sm font-semibold border"
+          style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'transparent' }}
+        >
+          <Pencil size={13} aria-hidden="true" />
+          Modifier le projet
+        </button>
       </div>
     )
   }

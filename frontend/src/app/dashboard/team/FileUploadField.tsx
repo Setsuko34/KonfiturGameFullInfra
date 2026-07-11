@@ -24,6 +24,7 @@ export default function FileUploadField({
   const [fileName, setFileName] = useState<string | null>(null)
   const [progress, setProgress] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [uploadedInSession, setUploadedInSession] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
@@ -50,6 +51,7 @@ export default function FileUploadField({
       )
       setFileId(created.$id)
       setFileName(file.name)
+      setUploadedInSession(true)
       onUploaded(created.$id)
     } catch {
       setError('Échec de l\'upload. Réessaie.')
@@ -60,9 +62,12 @@ export default function FileUploadField({
   }
 
   const handleRemove = async () => {
-    if (fileId) await storage.deleteFile(bucketId, fileId).catch(() => {}) // déjà supprimé = OK
+    // Ne supprimer du storage que les fichiers uploadés dans cette session — un fichier initial
+    // (potentiellement uploadé par un coéquipier) est délié ici et supprimé par le serveur à la resoumission
+    if (fileId && uploadedInSession) await storage.deleteFile(bucketId, fileId).catch(() => {}) // déjà supprimé = OK
     setFileId(undefined)
     setFileName(null)
+    setUploadedInSession(false)
     onRemoved()
   }
 

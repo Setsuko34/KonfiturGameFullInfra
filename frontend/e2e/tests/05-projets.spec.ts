@@ -85,6 +85,28 @@ test.describe('4.1 — Soumettre un projet', () => {
     const res = await page.request.get(href!)
     expect(res.status()).toBe(200)
   })
+
+  test('un membre modifie le projet soumis (titre) et la modification est visible', async ({ user1Page: page }) => {
+    await page.goto('/dashboard/team')
+    const editBtn = page.getByRole('button', { name: /modifier le projet/i })
+    await expect(editBtn).toBeVisible({ timeout: 15_000 })
+    await editBtn.click()
+
+    const title = page.locator('#proj-title')
+    await expect(title).not.toHaveValue('') // formulaire prérempli depuis existingProject
+    await title.fill('Projet Édité E2E')
+    await page.getByRole('button', { name: /soumettre le projet/i }).click()
+
+    await expect(page.locator('body')).toContainText('PROJET SOUMIS', { timeout: 15_000 })
+    await expect(page.locator('body')).toContainText('Projet Édité E2E')
+
+    // Persistance serveur : /project/:id est rendu serveur depuis Appwrite —
+    // prouve que l'édition est persistée, pas seulement l'écho du state client
+    const { projectId } = loadState()
+    expect(projectId).toBeTruthy()
+    await page.goto(`/project/${projectId}`)
+    await expect(page.locator('body')).toContainText('Projet Édité E2E', { timeout: 15_000 })
+  })
 })
 
 test.describe('4.3 — Commenter un projet', () => {
