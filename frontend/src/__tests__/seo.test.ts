@@ -71,12 +71,22 @@ describe('generateProjectJsonLd', () => {
     expect(ld.description).toBe(mockProject.description)
   })
 
-  it('inclut aggregateRating basé sur likesCount quand likesCount > 0', () => {
+  it('inclut aggregateRating basé sur likesCount quand likesCount > 0, ratingValue 4 sans placement', () => {
     const ld = generateProjectJsonLd(mockProject, 'https://konfiturgame.fr')
     expect(ld.aggregateRating).toEqual({
       '@type': 'AggregateRating',
       ratingCount: mockProject.likesCount,
-      ratingValue: mockProject.winner ? 5 : 4,
+      ratingValue: 4,
+      bestRating: 5,
+    })
+  })
+
+  it('ratingValue vaut 5 quand le projet a un placement (podium)', () => {
+    const ld = generateProjectJsonLd({ ...mockProject, placement: 1 }, 'https://konfiturgame.fr')
+    expect(ld.aggregateRating).toEqual({
+      '@type': 'AggregateRating',
+      ratingCount: mockProject.likesCount,
+      ratingValue: 5,
       bestRating: 5,
     })
   })

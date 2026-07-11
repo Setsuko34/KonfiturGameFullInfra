@@ -6,7 +6,7 @@ const footerLinks = {
   Plateforme: [
     { label: 'Explorer les jams', href: '/explore' },
     { label: 'Créer une jam', href: '/dashboard' },
-    { label: 'Classements', href: '/explore?tab=rankings' },
+    { label: 'Classements', href: '/#winners-heading' },
   ],
   Communauté: [
     { label: 'Discord', href: '#' },

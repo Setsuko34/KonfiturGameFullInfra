@@ -6,6 +6,7 @@ import { ArrowLeft, Users, Send } from 'lucide-react'
 import type { Metadata } from 'next'
 import EditJamForm from './EditJamForm'
 import AnnouncementForm from './AnnouncementForm'
+import PlacementButtons from '@/components/PlacementButtons'
 
 interface Props { params: Promise<{ jamId: string }> }
 
@@ -26,6 +27,7 @@ export default async function ManageJamPage({ params }: Props) {
     notFound()
   }
   const { jam, teams, projects } = data!
+  const jamEnded = jam.endDate < new Date()
 
   return (
     <section aria-labelledby="manage-jam-heading">
@@ -86,22 +88,44 @@ export default async function ManageJamPage({ params }: Props) {
 
       {/* Projets soumis */}
       <div>
-        <h2 className="text-base font-bold mb-3">
+        <h2 className="text-base font-bold mb-1">
           Projets soumis ({projects.filter(p => p.submitted).length})
+          {!jamEnded && (
+            <span className="ml-2 text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>
+              — Podium ouvrable après la fin de la jam
+            </span>
+          )}
         </h2>
+        {jamEnded && (
+          <p className="text-xs mb-3" style={{ color: 'var(--muted-foreground)' }}>
+            Désigne le top 3 — reclique un rang pour le retirer
+          </p>
+        )}
         {projects.filter(p => p.submitted).length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Aucun projet soumis.</p>
+          <p className="text-sm mt-3" style={{ color: 'var(--muted-foreground)' }}>Aucun projet soumis.</p>
         ) : (
-          <ul className="space-y-2" role="list">
+          <ul className="space-y-2 mt-3" role="list">
             {projects.filter(p => p.submitted).map(project => (
               <li key={project.id}
-                className="px-4 py-3 border"
-                style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-                <p className="font-semibold text-sm">{project.title}</p>
-                <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
-                  {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
-                  {project.submissionDate && ` · Soumis le ${project.submissionDate.toLocaleDateString('fr-FR')}`}
-                </p>
+                className="px-4 py-3 border flex items-center justify-between"
+                style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+              >
+                <div>
+                  <Link
+                    href={`/project/${project.id}`}
+                    className="font-semibold text-sm transition-opacity hover:opacity-80"
+                    style={{ color: 'var(--primary)' }}
+                  >
+                    {project.title}
+                  </Link>
+                  <p className="text-xs mt-1" style={{ color: 'var(--muted-foreground)' }}>
+                    {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
+                    {project.submissionDate && ` · Soumis le ${project.submissionDate.toLocaleDateString('fr-FR')}`}
+                  </p>
+                </div>
+                {jamEnded && (
+                  <PlacementButtons projectId={project.id} placement={project.placement ?? 0} />
+                )}
               </li>
             ))}
           </ul>

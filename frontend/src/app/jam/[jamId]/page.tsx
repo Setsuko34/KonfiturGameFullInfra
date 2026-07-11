@@ -97,6 +97,12 @@ export default async function JamPage({ params }: Props) {
 
   const status = statusConfig[effectiveStatus]
 
+  // Podium désigné par l'organisateur (rang 1er→3e)
+  const podium = projects
+    .filter(p => (p.placement ?? 0) > 0)
+    .sort((a, b) => (a.placement ?? 0) - (b.placement ?? 0))
+  const teamNames = Object.fromEntries(teams.map(t => [t.id, t.name]))
+
   const tabs = [
     { id: 'info', label: 'Informations', icon: Info },
     { id: 'teams', label: 'Équipes', icon: Users },
@@ -270,6 +276,48 @@ export default async function JamPage({ params }: Props) {
                 </div>
               </section>
 
+              {/* Podium — encart mis en avant dès qu'un rang est attribué */}
+              {podium.length > 0 && (
+                <section
+                  aria-labelledby="podium-heading"
+                  className="p-5 border"
+                  style={{
+                    background: 'var(--card)',
+                    borderColor: 'var(--primary)',
+                    borderLeft: '3px solid var(--primary)',
+                  }}
+                >
+                  <p className="label-tech mb-1" style={{ color: 'var(--primary)' }}>PODIUM</p>
+                  <h2 id="podium-heading" className="text-xl font-bold mb-4">
+                    Palmarès de la jam
+                  </h2>
+                  <ol className="space-y-3">
+                    {podium.map(p => (
+                      <li key={p.id} className="flex items-center gap-3">
+                        <span
+                          className="label-tech w-10 flex-shrink-0"
+                          style={{ color: 'var(--success)' }}
+                        >
+                          ★ {p.placement}{p.placement === 1 ? 'er' : 'e'}
+                        </span>
+                        <Link
+                          href={`/project/${p.id}`}
+                          className="font-semibold text-sm truncate transition-opacity hover:opacity-80"
+                          style={{ color: 'var(--primary)' }}
+                        >
+                          {p.title}
+                        </Link>
+                        {teamNames[p.teamId] && (
+                          <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted-foreground)' }}>
+                            par {teamNames[p.teamId]}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+
               {/* Section Équipes */}
               <JamTeamsSection
                 jamId={jam.id}
@@ -307,11 +355,11 @@ export default async function JamPage({ params }: Props) {
                           <span className="label-tech" style={{ color: 'var(--primary)' }}>
                             {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
                           </span>
-                          {project.winner && (
+                          {project.placement ? (
                             <span className="label-tech" style={{ color: 'var(--success)' }}>
-                              ★ GAGNANT
+                              ★ {project.placement}{project.placement === 1 ? 'er' : 'e'}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                       </Link>
                     ))}

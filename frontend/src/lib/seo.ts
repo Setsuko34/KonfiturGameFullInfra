@@ -79,7 +79,7 @@ export function generateProjectJsonLd(project: Project, siteUrl: string): JsonLd
       ? {
           '@type': 'AggregateRating',
           ratingCount: project.likesCount,
-          ratingValue: project.winner ? 5 : 4,
+          ratingValue: (project.placement ?? 0) > 0 ? 5 : 4,
           bestRating: 5,
         }
       : undefined,

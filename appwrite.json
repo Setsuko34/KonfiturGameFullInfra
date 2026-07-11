@@ -483,11 +483,13 @@
                     "default": false
                 },
                 {
-                    "key": "winner",
-                    "type": "boolean",
+                    "key": "placement",
+                    "type": "integer",
                     "required": false,
                     "array": false,
-                    "default": false
+                    "default": 0,
+                    "min": 0,
+                    "max": 3
                 }
             ],
             "indexes": []

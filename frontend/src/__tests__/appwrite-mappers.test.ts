@@ -184,7 +184,7 @@ describe('mapDocToProject', () => {
     expect(project.likesCount).toBe(0)
     expect(project.screenshotIds).toEqual([])
     expect(project.reported).toBe(false)
-    expect(project.winner).toBe(false)
+    expect(project.placement).toBe(0)
   })
 
   it('convertit submission_date en Date si présente', () => {
@@ -208,6 +208,17 @@ describe('mapDocToProject', () => {
       likes_count: 5,
     }))
     expect(project.likesCount).toBe(5)
+  })
+
+  it('mappe placement réel et fallback placement à 0 si absent', () => {
+    const withPlacement = mapDocToProject(makeDoc({
+      ...baseProject,
+      placement: 2,
+    }))
+    expect(withPlacement.placement).toBe(2)
+
+    const withoutPlacement = mapDocToProject(makeDoc(baseProject))
+    expect(withoutPlacement.placement).toBe(0)
   })
 })
 
