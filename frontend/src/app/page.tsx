@@ -10,6 +10,8 @@ import WinnerCard from '@/components/WinnerCard'
 import StatBlock from '@/components/StatBlock'
 import CountdownTimer from '@/components/CountdownTimer'
 import { getHomePageData } from '@/lib/actions/home'
+import { storageFileUrl } from '@/lib/appwrite/file-url'
+import { BUCKETS } from '@/lib/appwrite/config'
 
 export const metadata: Metadata = {
   title: 'KonfiturGame — Plateforme Game Jam',
@@ -269,6 +271,13 @@ export default async function HomePage() {
                       className="block p-5 border h-full transition-opacity hover:opacity-80"
                       style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                     >
+                      {p.coverImage && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={storageFileUrl(BUCKETS.PROJECT_ASSETS, p.coverImage)}
+                          alt="" aria-hidden="true"
+                          className="w-full h-28 object-cover border-b mb-3"
+                          style={{ borderColor: 'var(--border)' }} />
+                      )}
                       <p className="font-semibold mb-2 truncate">{p.title}</p>
                       <p className="text-sm mb-3" style={{ color: 'var(--muted-foreground)' }}>
                         {p.technologies.slice(0, 3).join(', ')}

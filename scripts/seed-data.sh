@@ -232,6 +232,7 @@ adt   projects submission_date false
 aint  projects likes_count    false  0
 astr  projects cover_image_id  256  false
 astr  projects screenshot_ids  256  false  true  # array
+astr  projects build_file_id    36  false
 abool projects reported        false  false
 aint  projects placement       false  0      0    3
 wait_attrs projects

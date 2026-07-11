@@ -476,6 +476,15 @@
                     "encrypt": false
                 },
                 {
+                    "key": "build_file_id",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
                     "key": "reported",
                     "type": "boolean",
                     "required": false,
@@ -890,15 +899,38 @@
         },
         {
             "$id": "project-assets",
-            "$permissions": [],
-            "fileSecurity": false,
+            "$permissions": [
+                "create(\"users\")"
+            ],
+            "fileSecurity": true,
             "name": "Project Assets",
             "enabled": true,
             "maximumFileSize": 10485760,
-            "allowedFileExtensions": [],
+            "allowedFileExtensions": [
+                "jpg",
+                "jpeg",
+                "png",
+                "webp"
+            ],
             "compression": "gzip",
             "encryption": true,
             "antivirus": false
+        },
+        {
+            "$id": "project-builds",
+            "$permissions": [
+                "create(\"users\")"
+            ],
+            "fileSecurity": true,
+            "name": "Project Builds",
+            "enabled": true,
+            "maximumFileSize": 157286400,
+            "allowedFileExtensions": [
+                "zip"
+            ],
+            "compression": "none",
+            "encryption": false,
+            "antivirus": true
         },
         {
             "$id": "avatars",

@@ -72,6 +72,7 @@ export function mapDocToProject(doc: AppwriteDoc): Project {
     likesCount: doc.likes_count ?? 0,
     coverImage: doc.cover_image_id,
     screenshotIds: doc.screenshot_ids ?? [],
+    buildFileId: doc.build_file_id ?? undefined,
     reported: doc.reported ?? false,
     placement: doc.placement ?? 0,
   }

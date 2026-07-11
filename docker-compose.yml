@@ -113,7 +113,10 @@ services:
       - _APP_DB_PASS=${MARIADB_PASSWORD}
       - _APP_REDIS_HOST=redis
       - _APP_REDIS_PORT=6379
-      - _APP_STORAGE_LIMIT=30000000        # 30 MB max par fichier uploadé
+      - _APP_STORAGE_LIMIT=160000000      # 160 Mo max par fichier (bucket builds à 150 Mo)
+      - _APP_STORAGE_ANTIVIRUS=enabled
+      - _APP_STORAGE_ANTIVIRUS_HOST=clamav
+      - _APP_STORAGE_ANTIVIRUS_PORT=3310
       - _APP_STORAGE_PREVIEW_LIMIT=5000000  # 5 MB max pour la génération de miniatures
       - _APP_FUNCTIONS_RUNTIMES=node-20.0   # Limite aux seuls runtimes utilisés (économise le disque)
       - _APP_EXECUTOR_SECRET=${APPWRITE_EXECUTOR_SECRET}
@@ -228,6 +231,20 @@ services:
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis-data:/data
+    networks:
+      - appwrite-net
+
+  # ════════════════════════════════════════
+  # CLAMAV — Scan antivirus des fichiers uploadés (buckets fileSecurity)
+  # ════════════════════════════════════════
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: konfitur-clamav
+    restart: unless-stopped
+    volumes:
+      # Appwrite ne transmet qu'un chemin de fichier à clamd (pas le contenu) — clamd doit
+      # donc voir le même volume que le service appwrite, au même chemin.
+      - appwrite-uploads:/storage/uploads:ro
     networks:
       - appwrite-net
 

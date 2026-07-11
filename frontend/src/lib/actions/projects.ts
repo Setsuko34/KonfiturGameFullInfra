@@ -1,9 +1,9 @@
 'use server'
 
-import { Query } from 'node-appwrite'
-import { serverDatabases } from '@/lib/appwrite/server'
+import { Query, Permission, Role } from 'node-appwrite'
+import { serverDatabases, serverStorage } from '@/lib/appwrite/server'
 import { createSessionClient } from '@/lib/appwrite/session'
-import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
+import { DATABASE_ID, COLLECTIONS, BUCKETS } from '@/lib/appwrite/config'
 import { mapDocToProject } from '@/lib/appwrite/types'
 import type { Project } from '@/types'
 
@@ -33,60 +33,98 @@ export async function submitProject(data: {
   technologies: string[]
   downloadUrl?: string
   repoUrl?: string
+  coverFileId?: string
+  screenshotIds?: string[]
+  buildFileId?: string
 }): Promise<{ success: boolean; projectId?: string; error?: string }> {
   try {
-    // Vérifier si un projet existe déjà pour cette équipe dans cette jam
-    const existing = await serverDatabases.listDocuments(
-      DATABASE_ID,
-      COLLECTIONS.PROJECTS,
-      [
-        Query.equal('team_id', data.teamId),
-        Query.equal('jam_id', data.jamId),
-        Query.limit(1),
-      ]
-    )
+    // Identité serveur — jamais de userId client
+    const { account } = await createSessionClient()
+    const user = await account.get()
 
-    if (existing.documents.length > 0) {
-      // Mettre à jour le projet existant
-      const doc = await serverDatabases.updateDocument(
-        DATABASE_ID,
-        COLLECTIONS.PROJECTS,
-        existing.documents[0].$id,
-        {
-          title: data.title,
-          description: data.description,
-          technologies: data.technologies,
-          download_url: data.downloadUrl,
-          repo_url: data.repoUrl,
-          submitted: true,
-          submission_date: new Date().toISOString(),
-        }
-      )
-      return { success: true, projectId: doc.$id }
+    // Appartenance à l'équipe
+    const membership = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
+      Query.equal('team_id', data.teamId),
+      Query.equal('user_id', user.$id),
+      Query.limit(1),
+    ])
+    if (membership.documents.length === 0) {
+      return { success: false, error: 'Tu ne fais pas partie de cette équipe.' }
     }
 
-    // Créer un nouveau projet
-    const doc = await serverDatabases.createDocument(
-      DATABASE_ID,
-      COLLECTIONS.PROJECTS,
-      'unique()',
-      {
+    // Vérifier la propriété de chaque fichier transmis (uploadé par cet utilisateur, bon bucket)
+    const screenshots = (data.screenshotIds ?? []).slice(0, 3)
+    const fileChecks: Array<{ id: string; bucket: string }> = [
+      ...(data.buildFileId ? [{ id: data.buildFileId, bucket: BUCKETS.PROJECT_BUILDS }] : []),
+      ...(data.coverFileId ? [{ id: data.coverFileId, bucket: BUCKETS.PROJECT_ASSETS }] : []),
+      ...screenshots.map(id => ({ id, bucket: BUCKETS.PROJECT_ASSETS })),
+    ]
+    for (const { id, bucket } of fileChecks) {
+      const file = await serverStorage.getFile(bucket, id)
+      const ownerRoles = ['read', 'update', 'delete'].map(a => `${a}("user:${user.$id}")`)
+      const owned = file.$permissions.some(p => ownerRoles.includes(p))
+      if (!owned) {
+        return { success: false, error: 'Fichier invalide ou non autorisé.' }
+      }
+    }
+
+    // Projet existant ? (un par couple team+jam)
+    const existing = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
+      Query.equal('team_id', data.teamId),
+      Query.equal('jam_id', data.jamId),
+      Query.limit(1),
+    ])
+
+    const fields = {
+      title: data.title,
+      description: data.description,
+      technologies: data.technologies,
+      download_url: data.downloadUrl,
+      repo_url: data.repoUrl,
+      cover_image_id: data.coverFileId ?? null,
+      screenshot_ids: screenshots,
+      build_file_id: data.buildFileId ?? null,
+      submitted: true,
+      submission_date: new Date().toISOString(),
+    }
+
+    let projectId: string
+    if (existing.documents.length > 0) {
+      const prev = existing.documents[0]
+      // Supprimer les anciens fichiers remplacés (jamais d'orphelin côté remplacement)
+      const oldNew: Array<{ old?: string; next?: string; bucket: string }> = [
+        { old: prev.build_file_id as string | undefined, next: data.buildFileId, bucket: BUCKETS.PROJECT_BUILDS },
+        { old: prev.cover_image_id as string | undefined, next: data.coverFileId, bucket: BUCKETS.PROJECT_ASSETS },
+      ]
+      for (const { old, next, bucket } of oldNew) {
+        if (old && next && old !== next) {
+          await serverStorage.deleteFile(bucket, old).catch(() => {}) // fichier déjà absent = OK
+        }
+      }
+      const doc = await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.PROJECTS, prev.$id, fields)
+      projectId = doc.$id
+    } else {
+      const doc = await serverDatabases.createDocument(DATABASE_ID, COLLECTIONS.PROJECTS, 'unique()', {
         jam_id: data.jamId,
         team_id: data.teamId,
-        title: data.title,
-        description: data.description,
-        technologies: data.technologies,
-        download_url: data.downloadUrl,
-        repo_url: data.repoUrl,
-        submitted: true,
-        submission_date: new Date().toISOString(),
+        ...fields,
         likes_count: 0,
-      }
-    )
-    return { success: true, projectId: doc.$id }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
-    return { success: false, error: msg }
+      })
+      projectId = doc.$id
+    }
+
+    // Ouvrir la lecture publique des fichiers liés (l'uploader garde update/delete)
+    for (const { id, bucket } of fileChecks) {
+      await serverStorage.updateFile(bucket, id, undefined, [
+        Permission.read(Role.any()),
+        Permission.update(Role.user(user.$id)),
+        Permission.delete(Role.user(user.$id)),
+      ])
+    }
+
+    return { success: true, projectId }
+  } catch {
+    return { success: false, error: 'Une erreur est survenue lors de la soumission.' }
   }
 }
 

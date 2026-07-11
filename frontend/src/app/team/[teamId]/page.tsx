@@ -4,6 +4,8 @@ import { Crown, ExternalLink } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { getTeamById } from '@/lib/actions/teams'
+import { storageFileUrl } from '@/lib/appwrite/file-url'
+import { BUCKETS } from '@/lib/appwrite/config'
 import CopyInviteButton from './CopyInviteButton'
 
 const roleConfig = {
@@ -163,28 +165,37 @@ export default async function TeamPage({ params }: Props) {
                   <li key={project.id}>
                     <a
                       href={`/project/${project.id}`}
-                      className="flex items-center gap-2 p-5 border"
+                      className="block p-5 border"
                       style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                     >
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold">{project.title}</p>
-                        <p
-                          className="text-sm line-clamp-1"
-                          style={{ color: 'var(--muted-foreground)' }}
-                        >
-                          {project.description}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <span className="label-tech" style={{ color: 'var(--primary)' }}>
-                          {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
-                        </span>
-                        {project.placement ? (
-                          <span className="label-tech" style={{ color: 'var(--success)' }}>
-                            ★ {project.placement}{project.placement === 1 ? 'er' : 'e'}
+                      {project.coverImage && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={storageFileUrl(BUCKETS.PROJECT_ASSETS, project.coverImage)}
+                          alt="" aria-hidden="true"
+                          className="w-full h-28 object-cover border-b mb-3"
+                          style={{ borderColor: 'var(--border)' }} />
+                      )}
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold">{project.title}</p>
+                          <p
+                            className="text-sm line-clamp-1"
+                            style={{ color: 'var(--muted-foreground)' }}
+                          >
+                            {project.description}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="label-tech" style={{ color: 'var(--primary)' }}>
+                            {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
                           </span>
-                        ) : null}
-                        <ExternalLink size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
+                          {project.placement ? (
+                            <span className="label-tech" style={{ color: 'var(--success)' }}>
+                              ★ {project.placement}{project.placement === 1 ? 'er' : 'e'}
+                            </span>
+                          ) : null}
+                          <ExternalLink size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
+                        </div>
                       </div>
                     </a>
                   </li>
