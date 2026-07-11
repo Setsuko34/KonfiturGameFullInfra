@@ -11,8 +11,8 @@ L'infrastructure Appwrite est progressivement versionnée dans `appwrite.json` (
 | Phase | Ressource | État |
 |-------|-----------|------|
 | Phase 1 | Fonctions (`functions/**`) | Actif — CI déploie sur push `main` |
-| Phase 2 | Collections / Schéma | À activer — voir `docs/MISE-A-JOUR.md §7` |
-| Phase 3 | Buckets Storage | Non commencé |
+| Phase 2 | Tables / Schéma | Capturé dans `appwrite.json` — push manuel (`appwrite push tables`), job CI à activer (`docs/MISE-A-JOUR.md §7`) |
+| Phase 3 | Buckets + Teams | Capturés dans `appwrite.json` — push manuel |
 
 ## Rappel des URL de production
 
@@ -20,7 +20,7 @@ L'infrastructure Appwrite est progressivement versionnée dans `appwrite.json` (
 |-----|---------|
 | `https://konfiturgame.fr` | Frontend Next.js |
 | `https://api.konfiturgame.fr/console` | Console Appwrite |
-| `https://api.konfiturgame.fr/v1/health` | Healthcheck Appwrite |
+| `https://api.konfiturgame.fr/v1/health/version` | Ping public Appwrite (`/v1/health` complet : clé API requise) |
 | `https://traefik.konfiturgame.fr/dashboard/` | Dashboard Traefik (auth requise) |
 
 ## Commandes de première urgence
@@ -34,7 +34,7 @@ docker compose logs -f [service]
 ./scripts/backup.sh
 
 # Healthcheck
-curl -s https://api.konfiturgame.fr/v1/health | grep '"status":"pass"'
+curl -s https://api.konfiturgame.fr/v1/health/version | grep '"version"'
 curl -s -o /dev/null -w '%{http_code}' https://konfiturgame.fr   # → 200
 
 # Redémarrage d'urgence

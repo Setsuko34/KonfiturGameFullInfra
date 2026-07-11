@@ -33,7 +33,8 @@ KonfiturGame est une **plateforme web de game jams** (compétitions de création
 
 - Créer et rejoindre des game jams
 - Former des guildes (équipes persistantes réutilisables sur plusieurs jams)
-- Soumettre et voter pour des projets
+- Soumettre des projets, les liker et les commenter
+- Désigner un podium (top 3) par jam, côté organisateur
 - Chatter en temps réel pendant la jam
 - Gérer son profil utilisateur
 - Administrer la plateforme (utilisateurs, modération, logs, ban IP)
@@ -43,7 +44,9 @@ KonfiturGame est une **plateforme web de game jams** (compétitions de création
 | Composant | Technologie | Version |
 |-----------|-------------|---------|
 | Frontend | Next.js (App Router) | 16.2.9 |
-| Backend | Appwrite self-hosted | 1.8.0 |
+| Backend | Appwrite self-hosted | 1.9.0 |
+| Console Appwrite | appwrite/console (image séparée depuis 1.9) | 7.5.7 |
+| Exécution des fonctions | openruntimes/executor | 0.11.4 |
 | Reverse proxy | Traefik | v3.6.7 |
 | Base de données | MariaDB | 10.11 |
 | Cache / Realtime | Redis | 7-alpine |
@@ -102,12 +105,26 @@ L'application web. Génère les pages côté serveur (SSR), contient la logique 
 - `middleware.ts` — protection des routes `/dashboard/*` et `/admin/*`
 
 ### Appwrite
-Backend clé en main auto-hébergé. Fournit : Auth (email/password + OAuth2), Database NoSQL, Realtime (WebSocket), Storage.
+Backend clé en main auto-hébergé. Fournit : Auth (email/password + OAuth2), Database NoSQL, Realtime (WebSocket), Storage, Functions.
 
-> **Appwrite 1.8.0 post-migration :** si la console renvoie une erreur 500 "Unknown attribute: devKeys", lancer `docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate` puis `docker restart konfitur-appwrite`.
+> **Après toute montée de version Appwrite :** la migration de base est obligatoire — `docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate` puis flush Redis et redémarrage. Procédure complète : `MISE-A-JOUR.md §4`.
+
+### Appwrite Console
+Depuis Appwrite 1.9, la console web est une **image Docker séparée** (`appwrite/console`), servie sur `/console`. Elle ne fait que du statique — toute la logique passe par l'API `appwrite`.
 
 ### Appwrite Realtime
 Worker séparé gérant uniquement les connexions WebSocket. Le chat en direct passe exclusivement par lui. Routé séparément via le path `/v1/realtime`.
+
+### Workers Appwrite
+Depuis la 1.9, plusieurs workers dédiés sont requis (sans eux, certaines features échouent silencieusement) :
+
+| Service | Rôle |
+|---------|------|
+| `appwrite-worker-databases` | Création d'attributs et d'indexes |
+| `appwrite-worker-mails` | Envoi SMTP (vérification email, récupération mdp) |
+| `appwrite-worker-builds` | Compilation des fonctions |
+| `appwrite-worker-functions` | Exécution des fonctions (cron, triggers) |
+| `appwrite-executor` | Sandbox d'exécution des fonctions (image `openruntimes/executor`) |
 
 ### MariaDB
 Base de données d'Appwrite. On n'interagit jamais directement avec elle — tout passe par Appwrite.
@@ -115,7 +132,7 @@ Base de données d'Appwrite. On n'interagit jamais directement avec elle — tou
 ### Redis
 Cache et bus d'événements d'Appwrite.
 
-> **Redis sans `--requirepass` :** Appwrite 1.8.0 a un bug dans `Queue\Connection\Redis` — il n'envoie jamais la commande `AUTH`. Redis est isolé sur `appwrite-net` (non exposé), donc ce n'est pas un risque de sécurité.
+> **Redis sans `--requirepass` :** Appwrite (bug toujours présent en 1.9.0) n'envoie jamais la commande `AUTH` dans `Queue\Connection\Redis`. Redis est isolé sur `appwrite-net` (non exposé), donc ce n'est pas un risque de sécurité.
 
 ---
 
@@ -143,6 +160,10 @@ KonfiturGameFullInfra/
 │   ├── restore.sh              ← Restaure depuis un backup
 │   └── init-appwrite.sh        ← Crée uniquement la base de données (usage limité)
 │
+├── appwrite.json               ← Config Appwrite versionnée (tables, buckets, teams, fonctions)
+├── functions/
+│   └── update-jam-status/      ← Fonction Appwrite cron (statuts des jams, toutes les 5 min)
+│
 ├── .github/workflows/
 │   └── ci-cd.yml               ← Pipeline CI/CD complet (lint, tests, scan, déploiement)
 │
@@ -152,6 +173,7 @@ KonfiturGameFullInfra/
 │   ├── DEPLOIEMENT.md          ← Manuel de déploiement production
 │   ├── MISE-A-JOUR.md          ← Manuel de mise à jour (npm, Appwrite, Traefik…)
 │   ├── CAHIER-DE-RECETTES.md   ← Tests d'acceptation et checklist avant mise en prod
+│   ├── DOC_test_E2E.md         ← Documentation de la suite E2E Playwright
 │   ├── CI-CD.md                ← Guide pipeline CI/CD
 │   ├── DATABASE.md             ← Schéma ERD de la base de données
 │   ├── BRANCH-PROTECTION.md    ← Rulesets GitHub et gestion des branches
@@ -164,6 +186,12 @@ KonfiturGameFullInfra/
     ├── next.config.mjs
     ├── tsconfig.json
     ├── vitest.config.ts
+    ├── playwright.config.ts    ← Config E2E (baseURL, workers: 1, reporters)
+    ├── e2e/                    ← Tests end-to-end Playwright (voir docs/DOC_test_E2E.md)
+    │   ├── global-setup.ts     ← Crée users + jams de test avant le run
+    │   ├── global-teardown.ts  ← Nettoie toutes les données E2E après le run
+    │   ├── fixtures/           ← Contextes authentifiés (user1Page, adminPage…)
+    │   └── tests/              ← 9 specs : smoke, auth, navigation, guildes, projets, chat, profil, organisateur, admin
     └── src/
         ├── app/                ← Routes Next.js (App Router)
         ├── components/         ← Composants React réutilisables
@@ -206,7 +234,7 @@ src/app/
 │
 ├── project/[projectId]/
 │   ├── page.tsx                ← /project/:id — Page d'un projet soumis
-│   └── ProjectInteractions.tsx ← Votes et commentaires (Client)
+│   └── ProjectInteractions.tsx ← Likes et commentaires (Client)
 │
 ├── profile/[userId]/page.tsx   ← /profile/:id — Profil public d'un utilisateur
 │
@@ -277,13 +305,13 @@ src/lib/
 ├── actions/
 │   ├── jams.ts             ← CRUD jams
 │   ├── teams.ts            ← Guildes : créer, rejoindre, inscrire, gérer rôles
-│   ├── projects.ts         ← Soumettre un projet, voter, getProjectByTeamAndJam
+│   ├── projects.ts         ← Soumettre un projet, toggleLike, getPopularProjects, getProjectByTeamAndJam
 │   ├── chat.ts             ← Envoyer/épingler/signaler des messages
 │   ├── comments.ts         ← CRUD commentaires
 │   ├── announcements.ts    ← CRUD annonces
 │   ├── dashboard.ts        ← getUserTeams, getUserParticipations
 │   ├── home.ts             ← Stats page d'accueil (jams en cours, gagnants)
-│   ├── admin.ts            ← Actions admin (modération, featured)
+│   ├── admin.ts            ← Actions admin (modération, featured, setProjectPlacement)
 │   ├── logs.ts             ← Logs d'audit + ban/unban IP
 │   ├── profile.ts          ← Server Actions profil (nom, bio, mdp, suppression compte)
 │   └── profile.client.ts   ← Upload avatar (côté client)
@@ -294,35 +322,69 @@ src/lib/
 └── mockData.ts             ← Données de démonstration (fallback)
 ```
 
-### Tests (`src/__tests__/`)
+### Tests unitaires (`src/__tests__/`)
 
-| Fichier | Tests | Couvre |
-|---------|-------|--------|
-| `appwrite-mappers.test.ts` | 15 | Mappers Appwrite → types TS |
-| `profile-validators.test.ts` | 15 | validateUpdateProfile* |
-| `actions-profile.test.ts` | 10 | updateProfileName, updateProfileBio |
-| `actions-chat.test.ts` | 9 | sendMessage, pinMessage, reportMessage |
-| `actions-teams.test.ts` | 6 | createTeam, joinTeamByCode, getTeamsByJam |
-| `bot-detection.test.ts` | — | Détection bots (User-Agent + URL patterns) |
-| `seo.test.ts` | 8 | JSON-LD helpers |
+| Fichier | Couvre |
+|---------|--------|
+| `appwrite-mappers.test.ts` | Mappers Appwrite → types TS |
+| `profile-validators.test.ts` | validateUpdateProfile* |
+| `actions-profile.test.ts` | updateProfileName, updateProfileBio |
+| `actions-chat.test.ts` | sendMessage, pinMessage, reportMessage |
+| `actions-teams.test.ts` | createTeam, joinTeamByCode, getTeamsByJam |
+| `actions-projects.test.ts` | toggleLike (like/unlike, compteur jamais négatif) |
+| `actions-home.test.ts` | getHomePageData (placement réel des gagnants) |
+| `bot-detection.test.ts` | Détection bots (User-Agent + URL patterns) |
+| `seo.test.ts` | JSON-LD helpers |
+
+### Tests end-to-end (`e2e/`)
+
+Suite Playwright (Chromium headless, séquentielle) couvrant les parcours critiques : smoke, auth, navigation publique, guildes, projets, chat temps réel, profil, organisateur, admin.
+
+```bash
+cd frontend && pnpm e2e     # infra Docker requise (frontend :3000 + Appwrite :8080)
+```
+
+Documentation complète (fixtures, cycle de vie, pièges) : `docs/DOC_test_E2E.md`.
 
 ---
 
 ## 5. Choix techniques
 
-**Next.js App Router** — mélange de Server Components (fetch Appwrite côté serveur, SEO), Client Components (interactivité) et Server Actions (mutations sans API REST manuelle). Résultat : moins de code, pas de waterfall client.
+Sept choix structurants, avec le contexte, les alternatives envisagées et la justification retenue.
 
-**Appwrite self-hosted** — Auth, DB, Realtime, Storage en un seul service. On garde le contrôle des données sans dépendre d'un cloud externe.
+### Next.js 16 + App Router
 
-**Traefik** — découverte automatique des services Docker via labels, gestion Let's Encrypt native, middlewares de sécurité centralisés.
+**Alternatives envisagées :** SPA React + API REST séparée, Nuxt (Vue), Remix.
+**Retenu parce que :** le SSR natif est indispensable pour le SEO d'une plateforme publique (pages jams et projets indexables) et pour la performance perçue. Les Server Components réduisent le JavaScript envoyé au client — les pages de consultation (jam, projet, équipe) n'embarquent quasiment aucun JS applicatif. Les Server Actions fournissent des mutations typées de bout en bout **sans exposer d'API REST publique** : moins de surface d'attaque, pas de couche de sérialisation à maintenir, pas de waterfall client.
+**Trade-off assumé :** couplage au modèle mental App Router (frontière Server/Client Components à maîtriser).
 
-**Tailwind CSS v4** — utilise les CSS custom properties nativement. Le design system repose sur des variables (`--primary`, `--background`…) → changer le thème = changer une variable.
+### Appwrite plutôt qu'un backend custom
 
-**TypeScript strict** — `strict: true` dans `tsconfig.json`. Coût : quelques lignes en plus. Bénéfice : élimination d'une classe entière de bugs.
+**Alternatives envisagées :** backend Node.js/Express custom, Firebase, Supabase.
+**Retenu parce que :** Appwrite fournit Auth (email + OAuth2), base de données, temps réel (WebSocket), stockage et fonctions serverless en un seul service **open-source auto-hébergé** — un gain estimé à plusieurs mois de développement par rapport à un backend custom. Contrairement à Firebase, les données restent sur notre serveur : indépendance vis-à-vis des cloud providers américains et conformité RGPD facilitée (données en Europe, maîtrise complète).
+**Trade-off assumé :** on dépend du cycle de release d'Appwrite (les migrations de version demandent une procédure rigoureuse — voir `MISE-A-JOUR.md §4`).
 
-**pnpm** — plus rapide qu'npm/yarn. Ne jamais utiliser `npm` ou `yarn` dans ce projet.
+### Traefik
 
-**Guildes multi-jam** — l'architecture initiale avait `jam_id: string`. Migré vers `jam_ids: string[]` : une guilde peut s'inscrire à plusieurs jams sans se reformer. Les projets sont retrouvés par `(team_id, jam_id)`.
+**Alternatives envisagées :** Nginx + certbot, Caddy.
+**Retenu parce que :** auto-discovery des services Docker via labels (ajouter un service = ajouter des labels, pas de config à recharger), ACME/Let's Encrypt natif (renouvellement automatique sans cron), middlewares dynamiques centralisés (CSP, HSTS, rate limiting déclarés une fois dans `middlewares.yml` et appliqués par routeur).
+
+### Tailwind CSS v4
+
+**Alternatives envisagées :** CSS Modules, styled-components.
+**Retenu parce que :** utility-first avec purge automatique au build (CSS final minimal), excellente DX, et la v4 s'appuie nativement sur les CSS custom properties — le design system entier repose sur des variables (`--primary`, `--background`…) : changer le thème = changer une variable.
+
+### TypeScript strict
+
+`strict: true` dans `tsconfig.json`, zéro `any` toléré. Coût : quelques annotations en plus. Bénéfice : élimination d'une classe entière de bugs à la compilation et refactoring en confiance — les migrations `votes_count → likes_count` et `winner → placement` ont été guidées de bout en bout par le type-checker.
+
+### pnpm
+
+Plus rapide et plus économe en disque qu'npm/yarn (store global + hardlinks), lockfile strict (`--frozen-lockfile` en CI et dans le Dockerfile). **Ne jamais utiliser `npm` ou `yarn` dans ce projet.**
+
+### Guildes multi-jam plutôt qu'équipes éphémères
+
+**Choix produit, pas technique :** la plateforme est née dans la communauté FRVtubers — l'objectif est de favoriser la formation de **communautés durables**, pas d'équipes jetables. L'architecture initiale (`jam_id: string`, une équipe = une jam) a été migrée vers `jam_ids: string[]` : une guilde persiste et s'inscrit à plusieurs jams sans se reformer. Conséquence sur le schéma : les projets ne sont plus rattachés à l'équipe mais retrouvés par `(team_id, jam_id)` — une guilde soumet un projet différent par jam.
 
 ---
 
@@ -510,14 +572,14 @@ admin/layout   → vérifie appartenance équipe admin → si non : notFound() (
 ```
 Base de données : konfitur-db
 │
-├── game_jams       ← Les jams (titre, thème, dates, règles, statut…)
+├── game_jams       ← Les jams (titre, thème, dates, règles, statut, featured…)
 ├── teams           ← Les guildes (jam_ids[], nom, code invitation, chef)
 ├── team_members    ← Membres des guildes (rôle, is_leader)
-├── projects        ← Jeux soumis (retrouvés par team_id + jam_id)
+├── projects        ← Jeux soumis (likes_count, placement 0-3, retrouvés par team_id + jam_id)
 ├── chat_messages   ← Messages du chat en direct
 ├── announcements   ← Annonces des organisateurs
 ├── comments        ← Commentaires sur les projets
-├── votes           ← Votes (1 vote par user par projet)
+├── likes           ← Likes togglables (1 doc par couple user + projet)
 ├── audit_logs      ← Logs d'actions admin et erreurs
 └── banned_ips      ← IPs bannies par les admins
 ```
@@ -528,9 +590,9 @@ Base de données : konfitur-db
 
 | Bucket ID | Contenu | Taille max |
 |-----------|---------|-----------|
-| `jam-covers` | Images de couverture des jams | 5 Mo |
-| `project-assets` | Screenshots et builds | 20 Mo |
-| `avatars` | Photos de profil | 2 Mo |
+| `jam-covers` | Images de couverture des jams | 2 Mo |
+| `project-assets` | Screenshots et builds | 10 Mo |
+| `avatars` | Photos de profil | 1 Mo |
 
 ### Realtime (chat en direct)
 
@@ -761,7 +823,9 @@ docker compose up -d
 
 | Problème | Solution |
 |----------|----------|
-| Appwrite console → 500 "Unknown attribute: devKeys" | `docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate` puis `docker restart konfitur-appwrite` |
+| Appwrite → 500 "Unknown attribute: xyz" après montée de version | Migration incomplète : `docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate`, flush Redis, redémarrer. Si l'attribut manque encore : correction manuelle des métadonnées (voir `MISE-A-JOUR.md §4`) |
+| SSR renvoie 401 "router" après migration 1.9 | Ajouter `_APP_MIGRATION_HOST=appwrite` dans l'environnement du service `appwrite` (le hostname interne Docker doit être connu du routeur Appwrite) |
+| Les fonctions Appwrite ne se déploient/exécutent pas | Vérifier que `appwrite-worker-builds`, `appwrite-worker-functions` et `appwrite-executor` sont "Up" (`docker compose ps`) |
 | `node_modules` Docker corrompu (fichier texte) | `rm frontend/node_modules && git rm --cached frontend/node_modules` |
 | Tests `vitest` Permission denied sur host | `docker exec konfitur-frontend sh -c "cd /app && npx vitest run"` |
 | `pnpm-lock.yaml` EACCES sur WSL2 | Générer dans /tmp (voir section 16) |
@@ -797,4 +861,4 @@ SITE (prod)             → https://konfiturgame.fr
 
 ---
 
-*KonfiturGame · Next.js 16.2.9 · Appwrite 1.8.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-06-28*
+*KonfiturGame · Next.js 16.2.9 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-08*
