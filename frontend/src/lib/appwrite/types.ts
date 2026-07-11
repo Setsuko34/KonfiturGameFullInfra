@@ -29,7 +29,7 @@ export function mapDocToGameJam(doc: AppwriteDoc): GameJam {
     tags: doc.tags ?? [],
     organizer: doc.organizer ?? '',
     organizerId: doc.organizer_id,
-    coverImage: doc.cover_image_id,
+    coverImage: doc.cover_image_id ?? undefined,
     featured: doc.featured ?? false,
     featuredOrder: doc.featured_order,
   }
@@ -70,7 +70,7 @@ export function mapDocToProject(doc: AppwriteDoc): Project {
     submitted: doc.submitted ?? false,
     submissionDate: doc.submission_date ? new Date(doc.submission_date) : undefined,
     likesCount: doc.likes_count ?? 0,
-    coverImage: doc.cover_image_id,
+    coverImage: doc.cover_image_id ?? undefined,
     screenshotIds: doc.screenshot_ids ?? [],
     buildFileId: doc.build_file_id ?? undefined,
     reported: doc.reported ?? false,

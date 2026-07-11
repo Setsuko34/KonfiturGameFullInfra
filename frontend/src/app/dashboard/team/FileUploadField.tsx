@@ -82,7 +82,7 @@ export default function FileUploadField({
             {fileName ?? 'Fichier envoyé'}
           </span>
           <button type="button" onClick={handleRemove} aria-label={`Retirer ${label}`}
-            className="p-1" style={{ color: 'var(--muted-foreground)' }}>
+            className="p-1 cursor-pointer" style={{ color: 'var(--muted-foreground)' }}>
             <X size={13} aria-hidden="true" />
           </button>
         </div>
@@ -95,7 +95,7 @@ export default function FileUploadField({
         </div>
       ) : (
         <button type="button" onClick={() => inputRef.current?.click()}
-          className="w-full px-3 py-2 border text-sm flex items-center gap-2"
+          className="w-full px-3 py-2 border text-sm flex items-center gap-2 cursor-pointer"
           style={{ background: 'var(--input-background)', borderColor: 'var(--border)', color: 'var(--muted-foreground)' }}>
           <Upload size={14} aria-hidden="true" />
           Choisir un fichier (max {maxSizeMo} Mo)
@@ -103,7 +103,7 @@ export default function FileUploadField({
       )}
       <input ref={inputRef} type="file" accept={accept} className="sr-only"
         aria-label={label}
-        disabled={fileId !== undefined || progress !== null}
+        disabled={Boolean(fileId) || progress !== null}
         onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleFile(f) }} />
       {error && <p role="alert" className="text-xs mt-1" style={{ color: 'var(--secondary)' }}>{error}</p>}
     </div>
