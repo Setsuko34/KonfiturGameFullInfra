@@ -220,6 +220,13 @@ describe('mapDocToProject', () => {
     const withoutPlacement = mapDocToProject(makeDoc(baseProject))
     expect(withoutPlacement.placement).toBe(0)
   })
+
+  it('mappe build_file_id en buildFileId, undefined si absent', () => {
+    const withBuild = mapDocToProject(makeDoc({ ...baseProject, build_file_id: 'file-42' }))
+    expect(withBuild.buildFileId).toBe('file-42')
+    const without = mapDocToProject(makeDoc({ ...baseProject }))
+    expect(without.buildFileId).toBeUndefined()
+  })
 })
 
 // ────────────────────────────────────────

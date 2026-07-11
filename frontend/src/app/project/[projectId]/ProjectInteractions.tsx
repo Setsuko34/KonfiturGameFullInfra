@@ -5,6 +5,8 @@ import { Heart, Send, Flag, Download, Github, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { toggleLike, reportProject } from '@/lib/actions/projects'
 import { addComment } from '@/lib/actions/comments'
+import { storageFileUrl } from '@/lib/appwrite/file-url'
+import { BUCKETS } from '@/lib/appwrite/config'
 import type { Comment } from '@/types'
 
 interface Props {
@@ -12,6 +14,7 @@ interface Props {
   initialLikesCount: number
   initialLiked: boolean
   downloadUrl?: string
+  buildFileId?: string
   repoUrl?: string
   initialComments: Comment[]
   initialReported: boolean
@@ -22,6 +25,7 @@ export default function ProjectInteractions({
   initialLikesCount,
   initialLiked,
   downloadUrl,
+  buildFileId,
   repoUrl,
   initialComments,
   initialReported,
@@ -101,6 +105,18 @@ export default function ProjectInteractions({
           </a>
         )}
 
+        {buildFileId && (
+          <a
+            href={storageFileUrl(BUCKETS.PROJECT_BUILDS, buildFileId, 'download')}
+            className="flex items-center gap-2 px-5 py-2.5 font-semibold text-sm border"
+            style={{ borderColor: 'var(--border)', color: 'var(--foreground)' }}
+            aria-label="Télécharger le build du jeu (.zip)"
+          >
+            <Download size={15} aria-hidden="true" />
+            Télécharger le build (.zip)
+          </a>
+        )}
+
         {repoUrl && (
           <a
             href={repoUrl}
@@ -137,6 +153,12 @@ export default function ProjectInteractions({
           </button>
         )}
       </div>
+
+      {buildFileId && (
+        <p className="text-xs mb-8" style={{ color: 'var(--muted-foreground)' }}>
+          Archive fournie par l&apos;équipe — analyse antivirus partielle, prudence.
+        </p>
+      )}
 
       {/* Section commentaires */}
       <section aria-labelledby="comments-heading">

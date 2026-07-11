@@ -1,8 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { Send, Package, CheckCircle } from 'lucide-react'
+import { Send, Package, CheckCircle, Pencil } from 'lucide-react'
 import { submitProject } from '@/lib/actions/projects'
+import { useAuth } from '@/components/providers/AuthProvider'
+import { BUCKETS } from '@/lib/appwrite/config'
+import FileUploadField from './FileUploadField'
 import type { Project } from '@/types'
 
 interface Props {
@@ -12,6 +15,7 @@ interface Props {
 }
 
 export default function SubmitProjectForm({ jamId, teamId, existingProject }: Props) {
+  const { user } = useAuth()
   const [isPending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(!!existingProject?.submitted)
   const [error, setError] = useState<string | null>(null)
@@ -23,6 +27,15 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
   )
   const [repoUrl, setRepoUrl] = useState(existingProject?.repoUrl ?? '')
   const [downloadUrl, setDownloadUrl] = useState(existingProject?.downloadUrl ?? '')
+
+  const [coverFileId, setCoverFileId] = useState<string | undefined>(existingProject?.coverImage)
+  const [screenshotIds, setScreenshotIds] = useState<Array<string | undefined>>([
+    existingProject?.screenshotIds?.[0],
+    existingProject?.screenshotIds?.[1],
+    existingProject?.screenshotIds?.[2],
+  ])
+  const [buildFileId, setBuildFileId] = useState<string | undefined>(existingProject?.buildFileId)
+  const [uploadsBusy, setUploadsBusy] = useState(0)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -41,6 +54,9 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
         technologies,
         repoUrl: repoUrl.trim() || undefined,
         downloadUrl: downloadUrl.trim() || undefined,
+        coverFileId,
+        screenshotIds: screenshotIds.filter((id): id is string => Boolean(id)),
+        buildFileId,
       })
       if (result.success) {
         setSubmitted(true)
@@ -68,6 +84,15 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
         <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
           {description || existingProject?.description}
         </p>
+        <button
+          type="button"
+          onClick={() => setSubmitted(false)}
+          className="flex items-center gap-2 mt-4 px-4 py-2 text-sm font-semibold border"
+          style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'transparent' }}
+        >
+          <Pencil size={13} aria-hidden="true" />
+          Modifier le projet
+        </button>
       </div>
     )
   }
@@ -163,6 +188,29 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
           />
         </div>
 
+        {user && (
+          <div className="space-y-3">
+            <FileUploadField label="IMAGE DE COUVERTURE (optionnel)" bucketId={BUCKETS.PROJECT_ASSETS}
+              accept="image/jpeg,image/png,image/webp" maxSizeMo={10} userId={user.$id}
+              onUploaded={id => setCoverFileId(id)} onRemoved={() => setCoverFileId(undefined)}
+              onBusyChange={busy => setUploadsBusy(n => n + (busy ? 1 : -1))}
+              initialFileId={existingProject?.coverImage} />
+            <FileUploadField label="BUILD DU JEU — .ZIP (optionnel)" bucketId={BUCKETS.PROJECT_BUILDS}
+              accept=".zip" maxSizeMo={150} userId={user.$id}
+              onUploaded={id => setBuildFileId(id)} onRemoved={() => setBuildFileId(undefined)}
+              onBusyChange={busy => setUploadsBusy(n => n + (busy ? 1 : -1))}
+              initialFileId={existingProject?.buildFileId} />
+            {[0, 1, 2].map(i => (
+              <FileUploadField key={i} label={`SCREENSHOT ${i + 1} (optionnel)`} bucketId={BUCKETS.PROJECT_ASSETS}
+                accept="image/jpeg,image/png,image/webp" maxSizeMo={10} userId={user.$id}
+                onUploaded={id => setScreenshotIds(ids => ids.map((v, idx) => idx === i ? id : v))}
+                onRemoved={() => setScreenshotIds(ids => ids.map((v, idx) => idx === i ? undefined : v))}
+                onBusyChange={busy => setUploadsBusy(n => n + (busy ? 1 : -1))}
+                initialFileId={existingProject?.screenshotIds?.[i]} />
+            ))}
+          </div>
+        )}
+
         <div>
           <label
             htmlFor="proj-repo"
@@ -185,6 +233,18 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
             }}
           />
         </div>
+
+        <details className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
+          <summary className="cursor-pointer" style={{ color: 'var(--primary)' }}>
+            Publier sur itch.io — comment faire ?
+          </summary>
+          <ol className="mt-2 ml-4 space-y-1 list-decimal">
+            <li>Crée un compte sur itch.io puis « Upload new project »</li>
+            <li>Renseigne le titre et uploade ton .zip</li>
+            <li>Mets la visibilité sur « Public » et enregistre</li>
+            <li>Copie l&apos;URL publique du jeu et colle-la ci-dessous</li>
+          </ol>
+        </details>
 
         <div>
           <label
@@ -211,7 +271,7 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
 
         <button
           type="submit"
-          disabled={isPending || !title.trim() || !description.trim()}
+          disabled={isPending || !title.trim() || !description.trim() || uploadsBusy > 0}
           className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold disabled:opacity-40"
           style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
         >

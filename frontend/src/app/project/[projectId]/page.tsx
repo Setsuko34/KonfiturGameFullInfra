@@ -6,6 +6,8 @@ import { getProjectById, hasUserLiked } from '@/lib/actions/projects'
 import { generateProjectJsonLd, serializeJsonLd, truncateDescription } from '@/lib/seo'
 import { getCommentsByProject } from '@/lib/actions/comments'
 import { createSessionClient } from '@/lib/appwrite/session'
+import { storageFileUrl } from '@/lib/appwrite/file-url'
+import { BUCKETS } from '@/lib/appwrite/config'
 import ProjectInteractions from './ProjectInteractions'
 
 interface Props {
@@ -82,6 +84,15 @@ export default async function ProjectPage({ params }: Props) {
               PROJET
             </p>
             <h1 className="text-3xl sm:text-4xl font-bold mb-3">{project.title}</h1>
+            {project.coverImage && (
+              /* eslint-disable-next-line @next/next/no-img-element -- fichier storage externe à l'optimiseur Next */
+              <img
+                src={storageFileUrl(BUCKETS.PROJECT_ASSETS, project.coverImage)}
+                alt={`Couverture de ${project.title}`}
+                className="w-full max-h-72 object-cover border mb-6"
+                style={{ borderColor: 'var(--border)' }}
+              />
+            )}
             <p className="text-base mb-6" style={{ color: 'var(--muted-foreground)' }}>
               {project.description}
             </p>
@@ -90,6 +101,7 @@ export default async function ProjectPage({ params }: Props) {
               initialLikesCount={project.likesCount}
               initialLiked={initialLiked}
               downloadUrl={project.downloadUrl}
+              buildFileId={project.buildFileId}
               repoUrl={project.repoUrl}
               initialComments={initialComments}
               initialReported={project.reported ?? false}
@@ -101,22 +113,22 @@ export default async function ProjectPage({ params }: Props) {
           <div className="grid lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
               {/* Screenshots */}
-              {(project.screenshotIds ?? []).length > 0 && (
+              {(project.screenshotIds?.length ?? 0) > 0 && (
                 <section aria-labelledby="screenshots-heading">
                   <h2 id="screenshots-heading" className="text-xl font-bold mb-4">
                     Screenshots
                   </h2>
-                  <div className="grid grid-cols-2 gap-3">
-                    {(project.screenshotIds ?? []).map((id, i) => (
-                      <div
-                        key={id}
-                        className="aspect-video"
-                        style={{ background: 'var(--surface-elevated)' }}
-                        role="img"
-                        aria-label={`Screenshot ${i + 1}`}
-                      />
+                  <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6" aria-label="Captures d'écran">
+                    {project.screenshotIds!.map((id, i) => (
+                      <li key={id}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={storageFileUrl(BUCKETS.PROJECT_ASSETS, id)}
+                          alt={`Capture d'écran ${i + 1} de ${project.title}`}
+                          className="w-full aspect-video object-cover border"
+                          style={{ borderColor: 'var(--border)' }} />
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 </section>
               )}
             </div>

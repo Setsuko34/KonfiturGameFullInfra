@@ -11,6 +11,8 @@ import { getTeamsByJam } from '@/lib/actions/teams'
 import { getProjectsByJam } from '@/lib/actions/projects'
 import { getChatMessages } from '@/lib/actions/chat'
 import { getUserTeams, getCurrentUser } from '@/lib/actions/dashboard'
+import { storageFileUrl } from '@/lib/appwrite/file-url'
+import { BUCKETS } from '@/lib/appwrite/config'
 import JamTeamsSection from './JamTeamsSection'
 import JamCountdownClient from './JamCountdownClient'
 
@@ -344,6 +346,13 @@ export default async function JamPage({ params }: Props) {
                         className="p-4 border block"
                         style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                       >
+                        {project.coverImage && (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={storageFileUrl(BUCKETS.PROJECT_ASSETS, project.coverImage)}
+                            alt="" aria-hidden="true"
+                            className="w-full h-28 object-cover border-b mb-3"
+                            style={{ borderColor: 'var(--border)' }} />
+                        )}
                         <p className="font-semibold mb-1">{project.title}</p>
                         <p
                           className="text-sm mb-3 line-clamp-2"

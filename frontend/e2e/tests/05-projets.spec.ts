@@ -1,3 +1,4 @@
+import path from 'path'
 import { test, expect } from '../fixtures/auth'
 import { loadTestIds, saveState, loadState } from '../fixtures/test-data'
 
@@ -36,6 +37,21 @@ test.describe('4.1 — Soumettre un projet', () => {
     await page.locator('#proj-tech').fill('TypeScript, Next.js')
     await page.locator('#proj-repo').fill('https://github.com/example/e2e-test')
 
+    // Génère les fichiers de test (PNG 1x1 + zip vide valide)
+    const { writeFileSync } = await import('fs')
+    const pngPath = path.resolve(process.cwd(), 'e2e/.auth/test-cover.png')
+    writeFileSync(pngPath, Buffer.from(
+      '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489' +
+      '0000000a49444154789c6260000000020001e221bc330000000049454e44ae426082', 'hex'))
+    const zipPath = path.resolve(process.cwd(), 'e2e/.auth/test-build.zip')
+    writeFileSync(zipPath, Buffer.from('504b0506000000000000000000000000000000000000', 'hex')) // zip vide valide
+
+    // Upload cover puis build via les inputs sr-only des FileUploadField (ciblés par aria-label)
+    await page.getByLabel(/image de couverture/i).setInputFiles(pngPath)
+    await expect(page.locator('body')).toContainText('test-cover.png', { timeout: 15_000 })
+    await page.getByLabel(/build du jeu/i).setInputFiles(zipPath)
+    await expect(page.locator('body')).toContainText('test-build.zip', { timeout: 30_000 })
+
     await page.getByRole('button', { name: /soumettre le projet/i }).click()
     await expect(page.locator('body')).toContainText('PROJET SOUMIS', { timeout: 15_000 })
     await expect(page.locator('body')).toContainText('[E2E] Projet Test')
@@ -56,6 +72,40 @@ test.describe('4.1 — Soumettre un projet', () => {
     await page.goto(`/project/${projectId}`)
     await expect(page.locator('body')).toContainText('[E2E] Projet Test')
     await expect(page.locator('body')).toContainText('TypeScript')
+
+    // Cover affichée ET réellement chargée (pas un 404 masqué par toBeVisible)
+    const cover = page.locator('img[alt*="Couverture"]')
+    await expect(cover).toBeVisible()
+    expect(await cover.evaluate((el: HTMLImageElement) => el.naturalWidth)).toBeGreaterThan(0)
+
+    // Bouton de téléchargement du build — le lien doit réellement servir le fichier
+    const dl = page.getByRole('link', { name: /télécharger le build/i })
+    await expect(dl).toBeVisible()
+    const href = await dl.getAttribute('href')
+    const res = await page.request.get(href!)
+    expect(res.status()).toBe(200)
+  })
+
+  test('un membre modifie le projet soumis (titre) et la modification est visible', async ({ user1Page: page }) => {
+    await page.goto('/dashboard/team')
+    const editBtn = page.getByRole('button', { name: /modifier le projet/i })
+    await expect(editBtn).toBeVisible({ timeout: 15_000 })
+    await editBtn.click()
+
+    const title = page.locator('#proj-title')
+    await expect(title).not.toHaveValue('') // formulaire prérempli depuis existingProject
+    await title.fill('Projet Édité E2E')
+    await page.getByRole('button', { name: /soumettre le projet/i }).click()
+
+    await expect(page.locator('body')).toContainText('PROJET SOUMIS', { timeout: 15_000 })
+    await expect(page.locator('body')).toContainText('Projet Édité E2E')
+
+    // Persistance serveur : /project/:id est rendu serveur depuis Appwrite —
+    // prouve que l'édition est persistée, pas seulement l'écho du state client
+    const { projectId } = loadState()
+    expect(projectId).toBeTruthy()
+    await page.goto(`/project/${projectId}`)
+    await expect(page.locator('body')).toContainText('Projet Édité E2E', { timeout: 15_000 })
   })
 })
 

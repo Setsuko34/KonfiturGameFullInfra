@@ -58,6 +58,7 @@ export interface Project {
   likesCount: number
   coverImage?: string
   screenshotIds?: string[]
+  buildFileId?: string
   reported?: boolean
   placement?: number
 }

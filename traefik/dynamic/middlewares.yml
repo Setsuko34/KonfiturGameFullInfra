@@ -11,15 +11,15 @@ http:
         customFrameOptionsValue: "SAMEORIGIN"
         referrerPolicy: "strict-origin-when-cross-origin"
         permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
+        # TODO PROD: remplacer api.localhost par le vrai domaine API (ex: https://api.konfiturgame.fr)
+        # Traefik file provider ne substitue pas les variables d'env — modification manuelle requise
         contentSecurityPolicy: >
           default-src 'self';
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
           font-src 'self' https://fonts.gstatic.com;
-          img-src 'self' data: https://images.unsplash.com https://cloud.appwrite.io;
+          img-src 'self' data: https://images.unsplash.com https://cloud.appwrite.io https://api.localhost;
           connect-src 'self' https://api.localhost wss://api.localhost;
-          # TODO PROD: remplacer api.localhost par le vrai domaine (ex: api.mondomaine.fr)
-          # Traefik file provider ne substitue pas les variables d'env — modification manuelle requise
           frame-ancestors 'none';
 
     rate-limit:

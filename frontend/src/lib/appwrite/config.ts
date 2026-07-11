@@ -21,6 +21,7 @@ export const BUCKETS = {
   JAM_COVERS: 'jam-covers',
   PROJECT_ASSETS: 'project-assets',
   AVATARS: 'avatars',
+  PROJECT_BUILDS: 'project-builds',
 } as const
 
 export type CollectionId = typeof COLLECTIONS[keyof typeof COLLECTIONS]
