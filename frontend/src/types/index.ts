@@ -59,7 +59,7 @@ export interface Project {
   coverImage?: string
   screenshotIds?: string[]
   reported?: boolean
-  winner?: boolean
+  placement?: number
 }
 
 export interface Comment {

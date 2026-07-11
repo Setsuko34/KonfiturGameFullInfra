@@ -179,11 +179,11 @@ export default async function TeamPage({ params }: Props) {
                         <span className="label-tech" style={{ color: 'var(--primary)' }}>
                           {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
                         </span>
-                        {project.winner && (
+                        {project.placement ? (
                           <span className="label-tech" style={{ color: 'var(--success)' }}>
-                            ★ GAGNANT
+                            ★ {project.placement}{project.placement === 1 ? 'er' : 'e'}
                           </span>
-                        )}
+                        ) : null}
                         <ExternalLink size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
                       </div>
                     </a>

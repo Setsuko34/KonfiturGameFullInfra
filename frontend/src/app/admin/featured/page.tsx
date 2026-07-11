@@ -5,8 +5,8 @@ import {
   listJamsForCuration,
   listProjectsForJam,
   toggleJamFeatured,
-  setProjectWinner,
 } from '@/lib/actions/admin'
+import PlacementButtons from '@/components/PlacementButtons'
 
 export const metadata: Metadata = { title: 'Mise en avant' }
 
@@ -17,6 +17,7 @@ export default async function AdminFeaturedPage({ searchParams }: Props) {
   const jams = await listJamsForCuration()
   const selectedJam = selectedJamId ? jams.find(j => j.id === selectedJamId) : null
   const projects = selectedJamId ? await listProjectsForJam(selectedJamId) : []
+  const jamEnded = selectedJam ? selectedJam.endDate < new Date() : false
 
   return (
     <div>
@@ -102,13 +103,13 @@ export default async function AdminFeaturedPage({ searchParams }: Props) {
                   className="flex items-center justify-between p-3 border"
                   style={{
                     background: 'var(--card)',
-                    borderColor: project.winner ? 'var(--primary)' : 'var(--border)',
+                    borderColor: project.placement ? 'var(--primary)' : 'var(--border)',
                   }}
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <Trophy
                       size={14}
-                      style={{ color: project.winner ? 'var(--primary)' : 'var(--muted-foreground)', flexShrink: 0 }}
+                      style={{ color: project.placement ? 'var(--primary)' : 'var(--muted-foreground)', flexShrink: 0 }}
                       aria-hidden="true"
                     />
                     <div className="min-w-0">
@@ -118,19 +119,13 @@ export default async function AdminFeaturedPage({ searchParams }: Props) {
                       </p>
                     </div>
                   </div>
-                  <form action={setProjectWinner.bind(null, project.id, !project.winner)}>
-                    <button
-                      type="submit"
-                      className="px-2 py-1 text-xs border font-medium transition-opacity hover:opacity-80 flex-shrink-0"
-                      style={{
-                        background: project.winner ? 'var(--primary)' : 'transparent',
-                        borderColor: project.winner ? 'var(--primary)' : 'var(--border)',
-                        color: project.winner ? '#fff' : 'var(--muted-foreground)',
-                      }}
-                    >
-                      {project.winner ? 'Retirer gagnant' : 'Désigner gagnant'}
-                    </button>
-                  </form>
+                  {jamEnded ? (
+                    <PlacementButtons projectId={project.id} placement={project.placement ?? 0} />
+                  ) : (
+                    <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted-foreground)' }}>
+                      Podium ouvrable après la fin de la jam
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

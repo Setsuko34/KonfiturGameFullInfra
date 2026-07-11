@@ -99,14 +99,24 @@ astr() {
       '{key:$k, size:$sz, required:$req, array:$arr}')"
 }
 
-# aint COL KEY REQUIRED [DEFAULT]
+# aint COL KEY REQUIRED [DEFAULT] [MIN] [MAX]
 aint() {
   local data
+  local jq_args=(--arg k "$2" --argjson req "$3")
+  local filter='{key:$k, required:$req}'
   if [[ -n "${4:-}" ]]; then
-    data=$(jq -nc --arg k "$2" --argjson req "$3" --argjson def "$4" '{key:$k, required:$req, default:$def}')
-  else
-    data=$(jq -nc --arg k "$2" --argjson req "$3" '{key:$k, required:$req}')
+    jq_args+=(--argjson def "$4")
+    filter='{key:$k, required:$req, default:$def}'
   fi
+  if [[ -n "${5:-}" ]]; then
+    jq_args+=(--argjson min "$5")
+    filter="${filter%\}} , min:\$min}"
+  fi
+  if [[ -n "${6:-}" ]]; then
+    jq_args+=(--argjson max "$6")
+    filter="${filter%\}} , max:\$max}"
+  fi
+  data=$(jq -nc "${jq_args[@]}" "$filter")
   create ".$2" "databases/$DB/collections/$1/attributes/integer" "$data"
 }
 
@@ -223,7 +233,7 @@ aint  projects likes_count    false  0
 astr  projects cover_image_id  256  false
 astr  projects screenshot_ids  256  false  true  # array
 abool projects reported        false  false
-abool projects winner          false  false
+aint  projects placement       false  0      0    3
 wait_attrs projects
 
 echo

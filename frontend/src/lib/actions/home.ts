@@ -37,9 +37,9 @@ export async function getHomePageData(): Promise<{
           Query.limit(10),
         ]),
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
-          Query.equal('winner', true),
+          Query.greaterThan('placement', 0),
           Query.orderDesc('$createdAt'),
-          Query.limit(9),
+          Query.limit(50), // large : le tri par récence de jam + limite 5 jams se fait après jointure
         ]),
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [Query.limit(1)]),
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [Query.limit(1)]),
@@ -89,7 +89,7 @@ export async function getHomePageData(): Promise<{
     const jamsMap = Object.fromEntries(jamsRes.documents.map(d => [d.$id, mapDocToGameJam(d)]))
     const teamsMap = Object.fromEntries(teamsRes.documents.map(d => [d.$id, d.name as string]))
 
-    const winnersRaw: (PastWinner | null)[] = winnerProjects.map((p, i) => {
+    const winnersRaw: (PastWinner | null)[] = winnerProjects.map(p => {
       const jam = jamsMap[p.jamId]
       if (!jam) return null
       const winner: PastWinner = {
@@ -97,14 +97,21 @@ export async function getHomePageData(): Promise<{
         jamId: p.jamId,
         jamTitle: jam.title,
         jamYear: jam.endDate.getFullYear(),
-        placement: ((i % 3) + 1) as 1 | 2 | 3,
+        placement: (p.placement ?? 1) as 1 | 2 | 3,
         projectTitle: p.title,
         teamName: teamsMap[p.teamId] ?? 'Équipe inconnue',
         coverImage: p.coverImage,
       }
       return winner
     })
-    const winners: PastWinner[] = winnersRaw.filter((w): w is PastWinner => w !== null)
+    const allWinners: PastWinner[] = winnersRaw.filter((w): w is PastWinner => w !== null)
+
+    // Hall of Fame : jams les plus récemment terminées d'abord, rang 1er→3e dans chaque jam,
+    // limité aux 5 dernières jams terminées
+    const jamEndTime = (w: PastWinner) => jamsMap[w.jamId]?.endDate.getTime() ?? 0
+    allWinners.sort((a, b) => jamEndTime(b) - jamEndTime(a) || a.placement - b.placement)
+    const recentJamIds = new Set([...new Set(allWinners.map(w => w.jamId))].slice(0, 5))
+    const winners = allWinners.filter(w => recentJamIds.has(w.jamId))
 
     const stats: SiteStats = {
       jamsOrganized: jamsCountRes.total,

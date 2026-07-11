@@ -3,6 +3,7 @@
 import { ID, Query } from 'node-appwrite'
 import { revalidatePath } from 'next/cache'
 import { serverDatabases, serverUsers, serverTeams } from '@/lib/appwrite/server'
+import { createSessionClient } from '@/lib/appwrite/session'
 import { DATABASE_ID, COLLECTIONS, ADMIN_TEAM_ID } from '@/lib/appwrite/config'
 import {
   mapDocToGameJam,
@@ -219,7 +220,51 @@ export async function listProjectsForJam(jamId: string): Promise<Project[]> {
   return res.documents.map(mapDocToProject)
 }
 
-export async function setProjectWinner(projectId: string, winner: boolean) {
-  await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId, { winner })
-  revalidatePath('/admin/featured')
+export async function setProjectPlacement(
+  projectId: string,
+  placement: number,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
+    const projectDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId)
+    const jamId = projectDoc.jam_id as string
+    const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
+
+    const isOrganizer = user.$id === jamDoc.organizer_id
+    let isAdmin = false
+    if (!isOrganizer) {
+      const memberships = await serverTeams.listMemberships(ADMIN_TEAM_ID, [
+        Query.equal('userId', user.$id),
+        Query.limit(1),
+      ])
+      isAdmin = memberships.total > 0
+    }
+
+    if (!isOrganizer && !isAdmin) {
+      return { success: false, error: "Vous n'êtes pas autorisé à définir le classement de ce projet." }
+    }
+
+    const endDate = new Date(jamDoc.end_date as string)
+    if (Number.isNaN(endDate.getTime()) || endDate >= new Date()) {
+      return { success: false, error: 'La jam doit être terminée pour définir un classement.' }
+    }
+
+    const numericPlacement = Number(placement)
+    if (!Number.isFinite(numericPlacement)) {
+      return { success: false, error: 'Le classement fourni est invalide.' }
+    }
+    const clamped = Math.min(3, Math.max(0, Math.trunc(numericPlacement)))
+    await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId, {
+      placement: clamped,
+    })
+
+    revalidatePath('/admin/featured')
+    revalidatePath(`/dashboard/my-jams/${jamId}`)
+
+    return { success: true }
+  } catch {
+    return { success: false, error: 'Une erreur est survenue lors de la mise à jour du classement.' }
+  }
 }

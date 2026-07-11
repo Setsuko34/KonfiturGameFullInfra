@@ -41,7 +41,13 @@ test.describe('5.1 — Envoi de messages', () => {
       .or(page.getByText(/aide|help/i).first())
 
     if (await aidBtn.count() === 0) test.skip()
-    await aidBtn.first().click()
+
+    // Retry : le clic peut partir avant l'hydratation React (event perdu) —
+    // on reclique tant que le canal actif (placeholder de l'input) n'a pas basculé
+    await expect(async () => {
+      await aidBtn.first().click()
+      await expect(page.locator('#chat-input')).toHaveAttribute('placeholder', /#Aide/i, { timeout: 1_000 })
+    }).toPass({ timeout: 10_000 })
 
     // Le message du canal général ne doit pas apparaître dans ce canal
     await expect(page.locator('body')).not.toContainText('[E2E] Message test canal général')

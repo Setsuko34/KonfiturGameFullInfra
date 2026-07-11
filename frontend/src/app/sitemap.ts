@@ -75,7 +75,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         url: `${siteUrl}/project/${doc.$id}`,
         lastModified: new Date(doc.$updatedAt),
         changeFrequency: 'weekly' as const,
-        priority: d.winner ? 0.7 : 0.5,
+        priority: ((d.placement as number) ?? 0) > 0 ? 0.7 : 0.5,
       }
     })
   } catch {
