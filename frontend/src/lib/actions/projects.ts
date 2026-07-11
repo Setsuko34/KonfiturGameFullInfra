@@ -58,6 +58,13 @@ export async function submitProject(data: {
       return { success: false, error: 'Tu ne fais pas partie de cette équipe.' }
     }
 
+    // L'équipe doit être inscrite à la jam ciblée — sinon n'importe quelle équipe
+    // pourrait créer un projet dans une jam concurrente et polluer son classement
+    const team = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, data.teamId)
+    if (!((team.jam_ids as string[] | undefined) ?? []).includes(data.jamId)) {
+      return { success: false, error: 'Cette équipe n\'est pas inscrite à cette jam.' }
+    }
+
     // Projet existant ? (un par couple team+jam) — AVANT le check fichiers, pour connaître les fichiers déjà liés
     const existing = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
       Query.equal('team_id', data.teamId),
@@ -239,13 +246,16 @@ export async function reportProject(
   projectId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    // Identité serveur — un signalement anonyme non authentifié n'est pas accepté
+    const { account } = await createSessionClient()
+    await account.get()
+
     await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId, {
       reported: true,
     })
     return { success: true }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
-    return { success: false, error: msg }
+  } catch {
+    return { success: false, error: 'Une erreur est survenue lors du signalement.' }
   }
 }
 

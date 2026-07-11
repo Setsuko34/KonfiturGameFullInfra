@@ -20,7 +20,7 @@ vi.mock('@/lib/appwrite/session', () => ({
   createSessionClient: vi.fn(async () => ({ account: { get: mockAccountGet } })),
 }))
 
-import { toggleLike, submitProject } from '@/lib/actions/projects'
+import { toggleLike, submitProject, reportProject } from '@/lib/actions/projects'
 import { serverDatabases, serverStorage } from '@/lib/appwrite/server'
 
 const mockCreate = vi.mocked(serverDatabases.createDocument)
@@ -91,7 +91,11 @@ describe('submitProject — verrou fichiers', () => {
   const noProject = { documents: [], total: 0 }
 
   beforeEach(() => {
-    mockGet.mockResolvedValue({ $id: 'j1', status: 'ongoing' } as never)
+    mockGet.mockImplementation((async (_db: string, col: string) =>
+      col === 'game_jams'
+        ? { $id: 'j1', status: 'ongoing' }
+        : { $id: 't1', jam_ids: ['j1'] }
+    ) as never) // jam en cours + équipe inscrite par défaut
   })
 
   it("refuse si l'utilisateur n'est pas membre de l'équipe", async () => {
@@ -218,6 +222,34 @@ describe('submitProject — verrou fichiers', () => {
     expect(mockUpdate).not.toHaveBeenCalled()
     expect(mockDeleteFile).not.toHaveBeenCalled() // le vrai build b1 n'est pas supprimé
   })
+
+  it("refuse si l'équipe n'est pas inscrite à la jam", async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
+    mockGet.mockImplementation((async (_db: string, col: string) =>
+      col === 'game_jams'
+        ? { $id: 'j1', status: 'ongoing' }
+        : { $id: 't1', jam_ids: ['AUTRE-JAM'] } // équipe inscrite ailleurs, pas à j1
+    ) as never)
+    mockList.mockResolvedValueOnce(membership as never) // team_members
+    const res = await submitProject({ jamId: 'j1', teamId: 't1', title: 'X', description: 'D', technologies: [] })
+    expect(res.success).toBe(false)
+    expect(res.error).toBe('Cette équipe n\'est pas inscrite à cette jam.')
+    expect(mockCreate).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it("refuse si l'équipe n'a aucune jam (jam_ids vide)", async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
+    mockGet.mockImplementation((async (_db: string, col: string) =>
+      col === 'game_jams' ? { $id: 'j1', status: 'ongoing' } : { $id: 't1', jam_ids: [] }
+    ) as never)
+    mockList.mockResolvedValueOnce(membership as never)
+    const res = await submitProject({ jamId: 'j1', teamId: 't1', title: 'X', description: 'D', technologies: [] })
+    expect(res.success).toBe(false)
+    expect(res.error).toBe('Cette équipe n\'est pas inscrite à cette jam.')
+    expect(mockList).toHaveBeenCalledTimes(1) // s'arrête au check d'inscription, pas plus loin
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
 })
 
 describe('submitProject — verrou temporel', () => {
@@ -237,5 +269,31 @@ describe('submitProject — verrou temporel', () => {
     expect(res.error).toBe('La jam n\'est pas en cours — le projet est figé.')
     expect(mockList).not.toHaveBeenCalled() // le verrou court-circuite avant le check d'équipe
     expect(mockCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('reportProject', () => {
+  it('refuse sans session authentifiée', async () => {
+    mockAccountGet.mockRejectedValue(new Error('missing scope (account)'))
+    const res = await reportProject('proj-1')
+    expect(res.success).toBe(false)
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('ne fuit pas le message d\'erreur interne', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
+    mockUpdate.mockRejectedValue(new Error('Internal: connection to mariadb:3306 refused'))
+    const res = await reportProject('proj-1')
+    expect(res.success).toBe(false)
+    expect(res.error).not.toContain('mariadb')
+    expect(res.error).toBe('Une erreur est survenue lors du signalement.')
+  })
+
+  it('signale le projet avec une session valide', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
+    mockUpdate.mockResolvedValue({} as never)
+    const res = await reportProject('proj-1')
+    expect(res).toEqual({ success: true })
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'projects', 'proj-1', { reported: true })
   })
 })
