@@ -220,6 +220,7 @@ export default function TeamCard({
           <SubmitProjectForm
             key={jam.id}
             jamId={jam.id}
+            jamTitle={jam.title}
             teamId={team.id}
             existingProject={projectsByJam[jam.id] ?? null}
           />

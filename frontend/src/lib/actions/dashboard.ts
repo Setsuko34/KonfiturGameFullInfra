@@ -8,6 +8,7 @@ import { DATABASE_ID, COLLECTIONS, BUCKETS } from '@/lib/appwrite/config'
 import { mapDocToGameJam, mapDocToTeam, mapDocToTeamMember, mapDocToProject } from '@/lib/appwrite/types'
 import type { GameJam, Team, TeamMember, Project } from '@/types'
 import { validateUpdateJamData, type UpdateJamData } from '@/lib/validators'
+import { computeJamStatus } from '@/lib/jam-status'
 
 // ── Lecture session utilisateur ────────────────────────────────────────────
 
@@ -252,7 +253,7 @@ export async function updateJam(
     if (jamDoc.organizer_id !== user.$id) {
       return { success: false, error: 'Seul l\'organisateur peut modifier cette jam' }
     }
-    if (jamDoc.status === 'ended') {
+    if (computeJamStatus(new Date(jamDoc.start_date), new Date(jamDoc.end_date)) === 'ended') {
       return { success: false, error: 'Impossible de modifier une jam terminée' }
     }
 
