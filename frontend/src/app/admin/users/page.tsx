@@ -81,7 +81,10 @@ export default async function AdminUsersPage({ searchParams }: Props) {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <form action={u.status ? blockUser.bind(null, u.$id) : unblockUser.bind(null, u.$id)}>
+                  <form action={async () => {
+                    'use server'
+                    await (u.status ? blockUser(u.$id) : unblockUser(u.$id))
+                  }}>
                     <button
                       type="submit"
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border ml-auto transition-opacity hover:opacity-80"

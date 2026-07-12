@@ -6,6 +6,7 @@ import { createSessionClient } from '@/lib/appwrite/session'
 import { DATABASE_ID, COLLECTIONS, BUCKETS } from '@/lib/appwrite/config'
 import { mapDocToProject } from '@/lib/appwrite/types'
 import { computeJamStatus } from '@/lib/jam-status'
+import { isAdminUser, logAdminAction } from '@/lib/appwrite/guards'
 import type { Project } from '@/types'
 
 export async function getProjectsByJam(jamId: string): Promise<Project[]> {
@@ -258,6 +259,52 @@ export async function reportProject(
     return { success: true }
   } catch {
     return { success: false, error: 'Une erreur est survenue lors du signalement.' }
+  }
+}
+
+// Retire la soumission (submitted: false) — membre de l'équipe pendant la jam,
+// ou admin sans condition temporelle (la modération doit marcher après la jam)
+export async function unsubmitProject(
+  projectId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
+    const projectDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId)
+    const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, projectDoc.jam_id as string)
+
+    const membership = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
+      Query.equal('team_id', projectDoc.team_id as string),
+      Query.equal('user_id', user.$id),
+      Query.limit(1),
+    ])
+    const isMember = membership.documents.length > 0
+
+    let isAdmin = false
+    if (isMember) {
+      // Membre : même verrou temporel que submitProject
+      if (computeJamStatus(new Date(jamDoc.start_date), new Date(jamDoc.end_date)) !== 'ongoing') {
+        return { success: false, error: 'La jam n\'est pas en cours — le projet est figé.' }
+      }
+    } else {
+      isAdmin = await isAdminUser(user.$id)
+      if (!isAdmin) {
+        return { success: false, error: 'Tu ne fais pas partie de cette équipe.' }
+      }
+    }
+
+    await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.PROJECTS, projectId, {
+      submitted: false,
+    })
+
+    if (isAdmin) {
+      await logAdminAction(user.$id, `Retrait de la soumission « ${projectDoc.title} » (${projectId})`, `/project/${projectId}`)
+    }
+
+    return { success: true }
+  } catch {
+    return { success: false, error: 'Une erreur est survenue.' }
   }
 }
 

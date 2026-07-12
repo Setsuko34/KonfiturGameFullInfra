@@ -6,6 +6,7 @@ import { createSessionClient } from '@/lib/appwrite/session'
 import { serverDatabases } from '@/lib/appwrite/server'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { validateAnnouncementData } from '@/lib/validators'
+import { canActOnJam, logAdminAction } from '@/lib/appwrite/guards'
 
 // ── Créer une annonce (organisateur uniquement) ───────────────────────────
 
@@ -20,9 +21,10 @@ export async function createOrganizerAnnouncement(
     const { account } = await createSessionClient()
     const user = await account.get()
 
-    // Vérifier que l'utilisateur est bien l'organisateur
+    // Organisateur OU admin
     const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
-    if (jamDoc.organizer_id !== user.$id) {
+    const role = await canActOnJam(user.$id, jamDoc)
+    if (!role) {
       return { success: false, error: 'Seul l\'organisateur peut publier des annonces' }
     }
     await serverDatabases.createDocument(
@@ -36,6 +38,10 @@ export async function createOrganizerAnnouncement(
         important: data.important,
         author_id: user.$id}
     )
+
+    if (role === 'admin') {
+      await logAdminAction(user.$id, `Publication d'une annonce sur la jam « ${jamDoc.title} » (${jamId})`, `/jam/${jamId}`)
+    }
 
     revalidatePath(`/dashboard/my-jams/${jamId}`)
     revalidatePath(`/jam/${jamId}`)
@@ -56,9 +62,10 @@ export async function deleteOrganizerAnnouncement(
     const { account } = await createSessionClient()
     const user = await account.get()
 
-    // Vérifier propriété via la jam
+    // Propriété via la jam — organisateur OU admin
     const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
-    if (jamDoc.organizer_id !== user.$id) {
+    const role = await canActOnJam(user.$id, jamDoc)
+    if (!role) {
       return { success: false, error: 'Accès non autorisé' }
     }
 
@@ -69,6 +76,10 @@ export async function deleteOrganizerAnnouncement(
     }
 
     await serverDatabases.deleteDocument(DATABASE_ID, COLLECTIONS.ANNOUNCEMENTS, announcementId)
+
+    if (role === 'admin') {
+      await logAdminAction(user.$id, `Suppression d'une annonce de la jam « ${jamDoc.title} » (${jamId})`, `/jam/${jamId}`)
+    }
 
     revalidatePath(`/dashboard/my-jams/${jamId}`)
     revalidatePath(`/jam/${jamId}`)

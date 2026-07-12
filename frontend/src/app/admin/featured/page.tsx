@@ -65,7 +65,10 @@ export default async function AdminFeaturedPage({ searchParams }: Props) {
                   Gagnants
                 </Link>
                 {/* Featured toggle */}
-                <form action={toggleJamFeatured.bind(null, jam.id, !jam.featured, jam.featuredOrder)}>
+                <form action={async () => {
+                  'use server'
+                  await toggleJamFeatured(jam.id, !jam.featured, jam.featuredOrder)
+                }}>
                   <button
                     type="submit"
                     className="px-2 py-1 text-xs border font-medium transition-opacity hover:opacity-80"

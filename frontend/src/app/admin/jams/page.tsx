@@ -108,8 +108,18 @@ export default async function AdminJamsPage({ searchParams }: Props) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 justify-end">
+                      <Link
+                        href={`/admin/jams/${jam.id}`}
+                        className="text-sm underline"
+                        style={{ color: 'var(--primary)' }}
+                      >
+                        Gérer
+                      </Link>
                       {/* Featured toggle */}
-                      <form action={toggleJamFeatured.bind(null, jam.id, !jam.featured, jam.featuredOrder)}>
+                      <form action={async () => {
+                        'use server'
+                        await toggleJamFeatured(jam.id, !jam.featured, jam.featuredOrder)
+                      }}>
                         <button
                           type="submit"
                           title={jam.featured ? 'Retirer de la mise en avant' : 'Mettre en avant'}

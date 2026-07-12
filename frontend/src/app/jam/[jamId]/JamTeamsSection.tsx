@@ -46,7 +46,7 @@ export default function JamTeamsSection({
   const handleRegister = () => {
     if (!registerTeamId || !currentUser) return
     startTransition(async () => {
-      const res = await registerTeamToJam(registerTeamId, jamId, currentUser.id)
+      const res = await registerTeamToJam(registerTeamId, jamId)
       if (!res.success) setError(res.error ?? 'Erreur')
       else { setRegisterTeamId(''); router.refresh() }
     })

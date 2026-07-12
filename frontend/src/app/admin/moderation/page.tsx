@@ -55,7 +55,10 @@ export default async function AdminModerationPage() {
                     </p>
                   </div>
                   <div className="flex gap-2 flex-shrink-0">
-                    <form action={resolveMessageReport.bind(null, msg.id)}>
+                    <form action={async () => {
+                      'use server'
+                      await resolveMessageReport(msg.id)
+                    }}>
                       <button
                         type="submit"
                         title="Marquer comme résolu"
@@ -66,7 +69,10 @@ export default async function AdminModerationPage() {
                         <CheckCircle size={13} aria-hidden="true" />
                       </button>
                     </form>
-                    <form action={deleteMessage.bind(null, msg.id)}>
+                    <form action={async () => {
+                      'use server'
+                      await deleteMessage(msg.id)
+                    }}>
                       <button
                         type="submit"
                         title="Supprimer le message"
@@ -107,7 +113,10 @@ export default async function AdminModerationPage() {
                       {project.description}
                     </p>
                   </div>
-                  <form action={resolveProjectReport.bind(null, project.id)}>
+                  <form action={async () => {
+                    'use server'
+                    await resolveProjectReport(project.id)
+                  }}>
                     <button
                       type="submit"
                       title="Marquer comme résolu"

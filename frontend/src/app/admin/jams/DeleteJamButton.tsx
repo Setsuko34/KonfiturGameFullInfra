@@ -5,7 +5,7 @@ import { deleteJam } from '@/lib/actions/admin'
 
 export function DeleteJamButton({ jamId, jamTitle }: { jamId: string; jamTitle: string }) {
   return (
-    <form action={deleteJam.bind(null, jamId)}>
+    <form action={async () => { await deleteJam(jamId) }}>
       <button
         type="submit"
         title="Supprimer la jam"

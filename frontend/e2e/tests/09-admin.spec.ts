@@ -1,7 +1,8 @@
 import { test, expect } from '../fixtures/auth'
+import { loadTestIds } from '../fixtures/test-data'
 
 // Module 8 — Administration
-// Cahier de recettes §8.1, §8.2
+// Cahier de recettes §8.1, §8.2, §8.4 (superpouvoirs admin — chantier E)
 
 test.describe('8.1 — Accès au panel admin', () => {
   test('un compte non-admin obtient 404 sur /admin', async ({ user1Page: page }) => {
@@ -62,6 +63,34 @@ test.describe('8.2 — Logs et ban IP', () => {
     // Endpoint interne — requiert x-log-secret → retourne 401 sans lui
     const res = await request.get('http://localhost:3000/api/banned-ips')
     expect(res.status()).toBe(401)
+  })
+})
+
+test.describe('8.4 — Superpouvoirs admin (chantier E)', () => {
+  test("admin : édite une jam d'autrui depuis /admin/jams/[id] et l'action est journalisée", async ({ adminPage: page }) => {
+    const ids = loadTestIds()
+
+    // La jam est organisée par user1 — l'admin n'en est pas propriétaire
+    await page.goto(`/admin/jams/${ids.jamUser1Id}`)
+    await expect(page.locator('body')).toContainText('Mode administrateur', { timeout: 15_000 })
+
+    // Le formulaire d'édition est replié derrière « Modifier la jam »
+    await page.getByRole('button', { name: /modifier la jam/i }).click()
+    const desc = page.locator('#edit-description')
+    await desc.fill('Description éditée par un admin (e2e)')
+    await page.getByRole('button', { name: /enregistrer les modifications/i }).click()
+    await expect(page.locator('body')).toContainText('Jam mise à jour', { timeout: 15_000 })
+
+    // L'entrée d'audit apparaît dans les logs filtrés admin_action
+    await page.goto('/admin/logs?type=admin_action')
+    await expect(page.locator('body')).toContainText('Édition de la jam', { timeout: 15_000 })
+  })
+
+  test('le lien « Gérer » de /admin/jams mène à la page de gestion', async ({ adminPage: page }) => {
+    await page.goto('/admin/jams')
+    await page.getByRole('link', { name: 'Gérer' }).first().click()
+    await expect(page).toHaveURL(/\/admin\/jams\/[a-zA-Z0-9]+/, { timeout: 15_000 })
+    await expect(page.locator('body')).toContainText('Mode administrateur', { timeout: 15_000 })
   })
 })
 

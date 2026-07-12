@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Gamepad2, Eye, EyeOff } from 'lucide-react'
 import { OAuthProvider } from 'appwrite'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { logAuthEvent } from '@/lib/actions/logs'
 
 function GoogleIcon() {
   return (
@@ -53,6 +54,7 @@ function LoginForm() {
     setLoading(true)
     try {
       await login(email, password)
+      void logAuthEvent('login') // best effort — ne bloque jamais le redirect
       router.replace(redirect)
     } catch {
       setError('Email ou mot de passe incorrect. Veuillez réessayer.')

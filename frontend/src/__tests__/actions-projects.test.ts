@@ -13,6 +13,9 @@ vi.mock('@/lib/appwrite/server', () => ({
     updateFile: vi.fn(),
     deleteFile: vi.fn(),
   },
+  serverTeams: {
+    listMemberships: vi.fn(),
+  },
 }))
 
 const mockAccountGet = vi.fn()
@@ -20,14 +23,15 @@ vi.mock('@/lib/appwrite/session', () => ({
   createSessionClient: vi.fn(async () => ({ account: { get: mockAccountGet } })),
 }))
 
-import { toggleLike, submitProject, reportProject } from '@/lib/actions/projects'
-import { serverDatabases, serverStorage } from '@/lib/appwrite/server'
+import { toggleLike, submitProject, reportProject, unsubmitProject } from '@/lib/actions/projects'
+import { serverDatabases, serverStorage, serverTeams } from '@/lib/appwrite/server'
 
 const mockCreate = vi.mocked(serverDatabases.createDocument)
 const mockList = vi.mocked(serverDatabases.listDocuments)
 const mockUpdate = vi.mocked(serverDatabases.updateDocument)
 const mockDelete = vi.mocked(serverDatabases.deleteDocument)
 const mockGet = vi.mocked(serverDatabases.getDocument)
+const mockMemberships = vi.mocked(serverTeams.listMemberships)
 const mockGetFile = vi.mocked(serverStorage.getFile)
 const mockUpdateFile = vi.mocked(serverStorage.updateFile)
 const mockDeleteFile = vi.mocked(serverStorage.deleteFile)
@@ -327,5 +331,86 @@ describe('reportProject', () => {
     const res = await reportProject('proj-1')
     expect(res).toEqual({ success: true })
     expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'projects', 'proj-1', { reported: true })
+  })
+})
+
+describe('unsubmitProject', () => {
+  const PROJECT_DOC = { $id: 'p1', jam_id: 'j1', team_id: 't1', title: 'Mon Jeu', submitted: true }
+  const ENDED_JAM = {
+    $id: 'j1',
+    start_date: new Date(Date.now() - 3 * HOUR).toISOString(),
+    end_date: new Date(Date.now() - HOUR).toISOString(),
+  }
+
+  function routeDocs(jam: Record<string, unknown>) {
+    mockGet.mockImplementation((async (_db: string, col: string) =>
+      col === 'game_jams' ? jam : PROJECT_DOC
+    ) as never)
+  }
+
+  it('membre + jam en cours : succès, submitted repasse à false', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
+    routeDocs(ongoingJam)
+    mockList.mockResolvedValueOnce({ documents: [{ $id: 'm1' }], total: 1 } as never) // team_members
+    mockUpdate.mockResolvedValue({} as never)
+
+    const res = await unsubmitProject('p1')
+
+    expect(res).toEqual({ success: true })
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'projects', 'p1', { submitted: false })
+    expect(mockCreate).not.toHaveBeenCalled() // pas d'audit pour un membre
+  })
+
+  it('membre + jam terminée : refus message exact, projet figé', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
+    routeDocs(ENDED_JAM)
+    mockList.mockResolvedValueOnce({ documents: [{ $id: 'm1' }], total: 1 } as never)
+
+    const res = await unsubmitProject('p1')
+
+    expect(res).toEqual({ success: false, error: 'La jam n\'est pas en cours — le projet est figé.' })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('admin + jam terminée : succès + audit admin_action (modération post-jam)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' } as never)
+    routeDocs(ENDED_JAM)
+    mockList.mockResolvedValueOnce({ documents: [], total: 0 } as never) // pas membre
+    mockMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockUpdate.mockResolvedValue({} as never)
+    mockCreate.mockResolvedValue({} as never)
+
+    const res = await unsubmitProject('p1')
+
+    expect(res).toEqual({ success: true })
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'projects', 'p1', { submitted: false })
+    expect(mockCreate).toHaveBeenCalledWith('konfitur-db', 'audit_logs', expect.any(String),
+      expect.objectContaining({
+        type: 'admin_action',
+        user_id: 'admin-1',
+        message: 'Retrait de la soumission « Mon Jeu » (p1)',
+      }))
+  })
+
+  it('tiers (ni membre ni admin) : refus message exact, aucune écriture', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'tiers' } as never)
+    routeDocs(ongoingJam)
+    mockList.mockResolvedValueOnce({ documents: [], total: 0 } as never)
+    mockMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+
+    const res = await unsubmitProject('p1')
+
+    expect(res).toEqual({ success: false, error: 'Tu ne fais pas partie de cette équipe.' })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('sans session : refus, aucun appel DB', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+
+    const res = await unsubmitProject('p1')
+
+    expect(res.success).toBe(false)
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })
