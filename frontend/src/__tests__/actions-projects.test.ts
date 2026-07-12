@@ -86,6 +86,14 @@ describe('toggleLike', () => {
   })
 })
 
+// Le statut est calculé depuis les dates (le champ `status` stocké est ignoré)
+const HOUR = 3600_000
+const ongoingJam = {
+  $id: 'j1',
+  start_date: new Date(Date.now() - HOUR).toISOString(),
+  end_date: new Date(Date.now() + HOUR).toISOString(),
+}
+
 describe('submitProject — verrou fichiers', () => {
   const membership = { documents: [{ $id: 'm1' }], total: 1 }
   const noProject = { documents: [], total: 0 }
@@ -93,7 +101,7 @@ describe('submitProject — verrou fichiers', () => {
   beforeEach(() => {
     mockGet.mockImplementation((async (_db: string, col: string) =>
       col === 'game_jams'
-        ? { $id: 'j1', status: 'ongoing' }
+        ? ongoingJam
         : { $id: 't1', jam_ids: ['j1'] }
     ) as never) // jam en cours + équipe inscrite par défaut
   })
@@ -227,7 +235,7 @@ describe('submitProject — verrou fichiers', () => {
     mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
     mockGet.mockImplementation((async (_db: string, col: string) =>
       col === 'game_jams'
-        ? { $id: 'j1', status: 'ongoing' }
+        ? ongoingJam
         : { $id: 't1', jam_ids: ['AUTRE-JAM'] } // équipe inscrite ailleurs, pas à j1
     ) as never)
     mockList.mockResolvedValueOnce(membership as never) // team_members
@@ -241,7 +249,7 @@ describe('submitProject — verrou fichiers', () => {
   it("refuse si l'équipe n'a aucune jam (jam_ids vide)", async () => {
     mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
     mockGet.mockImplementation((async (_db: string, col: string) =>
-      col === 'game_jams' ? { $id: 'j1', status: 'ongoing' } : { $id: 't1', jam_ids: [] }
+      col === 'game_jams' ? ongoingJam : { $id: 't1', jam_ids: [] }
     ) as never)
     mockList.mockResolvedValueOnce(membership as never)
     const res = await submitProject({ jamId: 'j1', teamId: 't1', title: 'X', description: 'D', technologies: [] })
@@ -253,8 +261,12 @@ describe('submitProject — verrou fichiers', () => {
 })
 
 describe('submitProject — verrou temporel', () => {
-  it('refuse la soumission si la jam est terminée', async () => {
-    mockGet.mockResolvedValue({ $id: 'j1', status: 'ended' } as never)
+  it('refuse la soumission si la jam est terminée (dates passées)', async () => {
+    mockGet.mockResolvedValue({
+      $id: 'j1',
+      start_date: new Date(Date.now() - 2 * HOUR).toISOString(),
+      end_date: new Date(Date.now() - HOUR).toISOString(),
+    } as never)
     const res = await submitProject({ jamId: 'j1', teamId: 't1', title: 'X', description: 'D', technologies: [] })
     expect(res.success).toBe(false)
     expect(res.error).toBe('La jam n\'est pas en cours — le projet est figé.')
@@ -262,13 +274,33 @@ describe('submitProject — verrou temporel', () => {
     expect(mockUpdate).not.toHaveBeenCalled()
   })
 
-  it("refuse la soumission si la jam n'a pas commencé", async () => {
-    mockGet.mockResolvedValue({ $id: 'j1', status: 'upcoming' } as never)
+  it("refuse la soumission si la jam n'a pas commencé (dates futures)", async () => {
+    mockGet.mockResolvedValue({
+      $id: 'j1',
+      start_date: new Date(Date.now() + HOUR).toISOString(),
+      end_date: new Date(Date.now() + 2 * HOUR).toISOString(),
+    } as never)
     const res = await submitProject({ jamId: 'j1', teamId: 't1', title: 'X', description: 'D', technologies: [] })
     expect(res.success).toBe(false)
     expect(res.error).toBe('La jam n\'est pas en cours — le projet est figé.')
     expect(mockList).not.toHaveBeenCalled() // le verrou court-circuite avant le check d'équipe
     expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it("accepte si les dates disent en cours, même avec un champ status stocké obsolète", async () => {
+    // Régression : le champ status en base n'est jamais mis à jour au démarrage de la jam
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' } as never)
+    mockGet.mockImplementation((async (_db: string, col: string) =>
+      col === 'game_jams'
+        ? { ...ongoingJam, status: 'upcoming' } // statut stocké obsolète
+        : { $id: 't1', jam_ids: ['j1'] }
+    ) as never)
+    mockList
+      .mockResolvedValueOnce({ documents: [{ $id: 'm1' }], total: 1 } as never) // team_members
+      .mockResolvedValueOnce({ documents: [], total: 0 } as never) // pas de projet existant
+    mockCreate.mockResolvedValue({ $id: 'p1' } as never)
+    const res = await submitProject({ jamId: 'j1', teamId: 't1', title: 'X', description: 'D', technologies: [] })
+    expect(res).toEqual({ success: true, projectId: 'p1' })
   })
 })
 

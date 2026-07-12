@@ -5,6 +5,7 @@ import { serverDatabases, serverStorage } from '@/lib/appwrite/server'
 import { createSessionClient } from '@/lib/appwrite/session'
 import { DATABASE_ID, COLLECTIONS, BUCKETS } from '@/lib/appwrite/config'
 import { mapDocToProject } from '@/lib/appwrite/types'
+import { computeJamStatus } from '@/lib/jam-status'
 import type { Project } from '@/types'
 
 export async function getProjectsByJam(jamId: string): Promise<Project[]> {
@@ -42,9 +43,10 @@ export async function submitProject(data: {
     const { account } = await createSessionClient()
     const user = await account.get()
 
-    // La jam doit être en cours — le rendu est figé hors fenêtre (verrou serveur, l'UI ne fait que refléter)
+    // La jam doit être en cours — statut calculé depuis les dates, comme l'UI
+    // (le champ `status` stocké n'est jamais mis à jour au démarrage de la jam)
     const jam = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, data.jamId)
-    if (jam.status !== 'ongoing') {
+    if (computeJamStatus(new Date(jam.start_date), new Date(jam.end_date)) !== 'ongoing') {
       return { success: false, error: 'La jam n\'est pas en cours — le projet est figé.' }
     }
 

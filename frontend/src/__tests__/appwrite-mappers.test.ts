@@ -227,6 +227,15 @@ describe('mapDocToProject', () => {
     const without = mapDocToProject(makeDoc({ ...baseProject }))
     expect(without.buildFileId).toBeUndefined()
   })
+
+  it('normalise cover_image_id null en undefined (jamais null)', () => {
+    // Depuis le chantier D, une soumission sans cover écrit cover_image_id: null —
+    // null !== undefined désactivait l'input du FileUploadField (bouton visible, clic mort)
+    const withCover = mapDocToProject(makeDoc({ ...baseProject, cover_image_id: 'cov-1' }))
+    expect(withCover.coverImage).toBe('cov-1')
+    const withNull = mapDocToProject(makeDoc({ ...baseProject, cover_image_id: null }))
+    expect(withNull.coverImage).toBeUndefined()
+  })
 })
 
 // ────────────────────────────────────────

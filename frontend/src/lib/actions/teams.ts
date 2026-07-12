@@ -5,6 +5,7 @@ import { serverDatabases } from '@/lib/appwrite/server'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { mapDocToTeam, mapDocToTeamMember, mapDocToGameJam, mapDocToProject } from '@/lib/appwrite/types'
 import type { Team, TeamMember, GameJam, Project } from '@/types'
+import { computeJamStatus } from '@/lib/jam-status'
 
 // ── Génération du code d'invitation ──────────────────────────────────────────
 
@@ -184,9 +185,10 @@ export async function registerTeamToJam(
       return { success: false, error: 'Cette équipe est déjà inscrite à cette jam.' }
     }
 
-    // Vérifier que la jam existe et est upcoming/ongoing
+    // Vérifier que la jam existe et est upcoming/ongoing — statut calculé depuis
+    // les dates (le champ `status` stocké n'est pas mis à jour automatiquement)
     const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
-    if (!['upcoming', 'ongoing'].includes(jamDoc.status)) {
+    if (computeJamStatus(new Date(jamDoc.start_date), new Date(jamDoc.end_date)) === 'ended') {
       return { success: false, error: 'Impossible de rejoindre une jam terminée.' }
     }
 

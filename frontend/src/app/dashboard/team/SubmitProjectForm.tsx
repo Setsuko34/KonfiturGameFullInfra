@@ -10,11 +10,12 @@ import type { Project } from '@/types'
 
 interface Props {
   jamId: string
+  jamTitle: string
   teamId: string
   existingProject: Project | null
 }
 
-export default function SubmitProjectForm({ jamId, teamId, existingProject }: Props) {
+export default function SubmitProjectForm({ jamId, jamTitle, teamId, existingProject }: Props) {
   const { user } = useAuth()
   const [isPending, startTransition] = useTransition()
   const [submitted, setSubmitted] = useState(!!existingProject?.submitted)
@@ -78,7 +79,7 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
       >
         <div className="flex items-center gap-2 mb-2">
           <CheckCircle size={16} style={{ color: 'var(--success)' }} aria-hidden="true" />
-          <p className="label-tech" style={{ color: 'var(--success)' }}>PROJET SOUMIS</p>
+          <p className="label-tech" style={{ color: 'var(--success)' }}>PROJET SOUMIS — {jamTitle}</p>
         </div>
         <p className="font-bold text-base">{title || existingProject?.title}</p>
         <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
@@ -101,7 +102,7 @@ export default function SubmitProjectForm({ jamId, teamId, existingProject }: Pr
     <div className="p-5 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
       <h2 className="text-base font-bold mb-4 flex items-center gap-2">
         <Package size={16} aria-hidden="true" />
-        Soumettre mon projet
+        Soumettre mon projet — {jamTitle}
       </h2>
 
       {error && (
