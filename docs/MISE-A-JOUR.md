@@ -440,7 +440,7 @@ docker compose -f docker-compose.yml up -d redis
 | Phase | Ressource | État | Déploiement |
 |-------|-----------|------|-------------|
 | Phase 1 | Fonctions (`functions/**`) | Actif | CI — push `main` |
-| Phase 2 | Tables / Schéma (10 collections) | **Capturé dans `appwrite.json`** | Manuel (`appwrite push tables`) — job CI `deploy-schema` à activer |
+| Phase 2 | Tables / Schéma (10 collections) | **Capturé dans `appwrite.json`** | CI — push `main` (job `deploy-schema`, si `appwrite.json` modifié) |
 | Phase 3 | Buckets + Teams | **Capturés dans `appwrite.json`** | Manuel (`appwrite push buckets` / `push teams`) |
 
 ### Commandes CLI — migrations de schéma
@@ -549,9 +549,11 @@ appwrite push functions --force
 
 ---
 
-### Activer le job CI `deploy-schema` (déploiement automatique du schéma)
+### Job CI `deploy-schema` (déploiement automatique du schéma)
 
-> À faire une fois. Prérequis : le schéma de prod est stable et capturé dans `appwrite.json` (fait).
+> **Activé le 2026-07-14** dans `ci-cd.yml`. La CI pousse le schéma (`appwrite push tables --force`) à chaque push sur `main` modifiant `appwrite.json`.
+
+Prérequis opérationnel restant (à faire une fois si pas déjà fait) :
 
 ```bash
 # 1. Étendre la clé API CI pour inclure le schéma
@@ -559,15 +561,6 @@ appwrite push functions --force
 
 # 2. Mettre à jour le secret GitHub
 gh secret set APPWRITE_API_KEY --body "<nouvelle-clé-avec-scopes-databases>"
-
-# 3. Activer le job deploy-schema dans .github/workflows/ci-cd.yml
-# Remplacer : if: github.ref == 'refs/heads/__disabled__'
-# Par la même condition if: que le job deploy-functions
-# Remplacer : echo "Phase 2 non activée"
-# Par : appwrite push tables --force
-# (précédé des mêmes étapes checkout + setup-node + install cli + appwrite client)
-
-# 4. Commit + push → la CI déploiera le schéma automatiquement à chaque modification
 ```
 
 **Après activation :** ne plus modifier le schéma directement dans la console sans répercuter dans `appwrite.json` (workflow : console → `appwrite pull tables` → `git diff` → commit → push `main` → CI déploie).
@@ -669,7 +662,7 @@ docker compose -f docker-compose.yml up -d --build frontend
 
 ---
 
-## Versions de référence (2026-06-28)
+## Versions de référence (2026-07-14)
 
 | Composant | Version actuelle | Fichier de référence |
 |-----------|-----------------|---------------------|
@@ -684,8 +677,9 @@ docker compose -f docker-compose.yml up -d --build frontend
 | Traefik | v3.6.7 | `docker-compose.yml` |
 | MariaDB | 10.11 | `docker-compose.yml` |
 | Redis | 7-alpine | `docker-compose.yml` |
+| ClamAV | 1.4 | `docker-compose.yml` |
 | Node.js (build) | 20-alpine | `frontend/Dockerfile` |
 
 ---
 
-*KonfiturGame · Manuel de mise à jour · Mis à jour : 2026-07-08*
+*KonfiturGame · Manuel de mise à jour · Mis à jour : 2026-07-14*

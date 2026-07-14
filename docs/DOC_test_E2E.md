@@ -237,6 +237,13 @@ Formulaire de création jam — IDs réels des champs :
 - `/admin/logs` se charge
 - Bannir / débannir une IP
 - API `/api/banned-ips` retourne **401** (endpoint interne protégé par `x-log-secret`)
+- **8.4 — Superpouvoirs admin (chantier E)** : édition d'une jam d'autrui depuis `/admin/jams/[id]` + vérification du log `admin_action` ; lien « Gérer » de `/admin/jams`
+- **8.5 — Corrections dashboard (chantier F)** :
+  - Le filtre des logs **discrimine** réellement les types (asserte la présence du type filtré ET l'absence des autres — leçon chantier E : ne jamais tester qu'un filtre par la seule présence)
+  - « Gagnants » (`/admin/featured?jam=…`) affiche la section podium de la jam sélectionnée
+  - `/admin/teams` : navigation via la sidebar, rename d'une équipe + vérification de l'audit (`Renommage de l'équipe`) — `test.skip()` conditionnel si la guilde `[E2E] Guilde Test` est absente (run ciblé de 09 sans 04)
+
+> Baseline suite complète : **65 passed + 1 skipped** (juillet 2026).
 
 ---
 
@@ -259,7 +266,7 @@ Endpoint interne consommé par `proxy.ts`. Requiert le header `x-log-secret` (va
 `/v1/health` requiert le scope `health.read` (API key) → 401 depuis un client non authentifié.
 Utiliser `/v1/health/version` pour un ping public.
 
-### Playwright et React 18
+### Playwright et React 19
 `fill()` sur un champ déclenche `onChange` mais pas toujours `onFocus`. Pour des champs avec logique `onFocus` (ex : `passwordTouched`), appeler `.click()` avant `.fill()`.
 
 ---
@@ -277,4 +284,4 @@ Teste `users.list()`, `users.create()` et `databases.listDocuments()` avec les v
 
 ---
 
-*KonfiturGame · Tests E2E Playwright · Mis à jour : 2026-07-08*
+*KonfiturGame · Tests E2E Playwright · Mis à jour : 2026-07-14*

@@ -140,7 +140,7 @@ erDiagram
 | `slug` | String(256) | Oui | URL-friendly |
 | `theme` | String(512) | Oui | |
 | `description` | String(4096) | Oui | |
-| `status` | Enum | Oui | `upcoming`, `ongoing`, `ended` — mis à jour par la fonction `update-jam-status` |
+| `status` | Enum | Oui | `upcoming`, `ongoing`, `ended` — le code calcule le statut réel depuis les dates à la lecture (`computeJamStatus`, source de vérité : `start_date`/`end_date`) ; la colonne stockée est synchronisée par la fonction `update-jam-status` (cron 5 min) |
 | `type` | Enum | Oui | `solo`, `team`, `both` |
 | `start_date` | DateTime | Oui | |
 | `end_date` | DateTime | Oui | |
@@ -264,11 +264,12 @@ Permissions : `read("team:admin")` uniquement.
 
 ## Buckets de stockage
 
-| Bucket ID | Contenu | Taille max |
-|-----------|---------|-----------|
-| `jam-covers` | Images de couverture des jams | 2 Mo |
-| `project-assets` | Screenshots et builds | 10 Mo |
-| `avatars` | Photos de profil | 1 Mo |
+| Bucket ID | Contenu | Taille max | Notes |
+|-----------|---------|-----------|-------|
+| `jam-covers` | Images de couverture des jams | 2 Mo | jpg/jpeg/png/webp |
+| `project-assets` | Covers et screenshots des projets | 10 Mo | jpg/jpeg/png/webp, file security |
+| `project-builds` | Builds jouables des projets | 150 Mo | zip uniquement, antivirus ClamAV activé |
+| `avatars` | Photos de profil | 1 Mo | jpg/jpeg/png/webp |
 
 Les buckets sont versionnés dans `appwrite.json` (section `buckets`).
 
@@ -307,7 +308,7 @@ appwrite push all
 2. `appwrite pull tables` → capture dans `appwrite.json`
 3. `git diff appwrite.json` → vérifier le changement
 4. Mettre à jour les types TypeScript (`frontend/src/lib/appwrite/types.ts`, `frontend/src/types/index.ts`) et ce document
-5. Commit → la CI pourra déployer le schéma une fois la Phase 2 activée (voir `CI-CD.md`)
+5. Commit + push sur `main` → la CI déploie le schéma automatiquement (job `deploy-schema`, voir `CI-CD.md`)
 
 Pour la migration de **version** d'Appwrite (montée 1.x → 1.y, `cli.php migrate`), voir `MISE-A-JOUR.md §4`.
 
@@ -339,4 +340,4 @@ Les utilisateurs ne sont pas dans `konfitur-db` — ils sont gérés nativement 
 
 ---
 
-*KonfiturGame · Appwrite 1.9.0 · Base : `konfitur-db` · Mis à jour : 2026-07-08*
+*KonfiturGame · Appwrite 1.9.0 · Base : `konfitur-db` · Mis à jour : 2026-07-14*

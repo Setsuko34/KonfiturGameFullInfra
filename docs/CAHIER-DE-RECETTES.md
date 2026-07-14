@@ -427,6 +427,18 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 
 ---
 
+### 8.2 bis — Filtre des logs
+
+| # | Étape | Résultat attendu |
+|---|-------|-----------------|
+| 1 | Aller sur `/admin/logs?type=auth` | Seules les entrées `auth` sont listées — **aucune** entrée d'un autre type |
+| 2 | Aller sur `/admin/logs?type=admin_action` | Seules les entrées `admin_action` sont listées |
+
+**Critères d'acceptation :**
+- [ ] Le filtre discrimine réellement (absence des autres types, pas seulement présence du type filtré)
+
+---
+
 ### 8.3 Désigner le podium d'une jam
 
 **Prérequis :** 4.1 (projet soumis), jam en statut `ended`  
@@ -445,6 +457,25 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 - [ ] `placement` est borné à [0, 3] dans Appwrite
 - [ ] Le podium est indépendant du nombre de likes
 - [ ] La home affiche le rang stocké, pas un rang calculé
+
+---
+
+### 8.4 Superpouvoirs admin (jams, équipes, soumissions)
+
+**Prérequis :** 8.1, une jam créée par un autre utilisateur  
+**Bloquant :** non
+
+| # | Étape | Résultat attendu |
+|---|-------|-----------------|
+| 1 | Aller sur `/admin/jams`, cliquer « Gérer » sur une jam d'autrui | Page `/admin/jams/:id` : édition + équipes + projets |
+| 2 | Modifier la description de la jam et valider | Modification appliquée |
+| 3 | Aller sur `/admin/logs?type=admin_action` | Entrée « Édition de la jam … » visible |
+| 4 | Depuis `/admin/teams`, rechercher une équipe et la renommer | Nouveau nom affiché, entrée « Renommage de l'équipe … » dans les logs |
+| 5 | Sur `/admin/moderation`, un projet signalé | Liens « Voir le projet » / « Gérer la jam » + bouton « Retirer la soumission » |
+
+**Critères d'acceptation :**
+- [ ] Toute action admin sur une ressource dont il n'est pas propriétaire crée une entrée `admin_action`
+- [ ] `/admin/teams` liste toutes les équipes (y compris les guildes sans jam) avec recherche par nom
 
 ---
 
@@ -516,4 +547,4 @@ Cette checklist résume les critères bloquants à valider avant tout déploieme
 
 ---
 
-*KonfiturGame · Cahier de recettes · Mis à jour : 2026-07-08*
+*KonfiturGame · Cahier de recettes · Mis à jour : 2026-07-14*

@@ -19,6 +19,9 @@
 - [x] Commentaires sur les projets
 - [x] Likes togglables sur les projets + classement popularité (tri in-jam et section « Projets les plus aimés » sur la home) — collection `likes`, compteur `likes_count`
 - [x] Podium top 3 par jam (`placement` 1/2/3) désigné par l'organisateur après la fin de la jam — remplace l'ancien booléen `winner` et le placement factice de la home
+- [x] Superpouvoirs admin (chantier E) — édition de n'importe quelle jam (`/admin/jams/[id]`), gestion des équipes (renommer, retirer un membre, dissoudre), retrait de soumission ; toutes les actions journalisées (`admin_action`)
+- [x] Corrections dashboard admin (chantier F) — fix `await searchParams` (Next 16, 5 pages), filtres logs fonctionnels, sélection « Gagnants », modération actionnable (liens + retrait de soumission), page `/admin/teams` (recherche + actions)
+- [x] Garde admin sur les actions de lecture/écriture de `logs.ts` (`getRecentLogs`, `getCountryStats`, `getBannedIPs`, `banIP`, `unbanIP`) — endpoints `'use server'` désormais réservés aux admins
 
 ### À faire
 
@@ -40,15 +43,23 @@
 | `profile-validators.test.ts` | validateUpdateProfile* (bug NaN corrigé) |
 | `actions-profile.test.ts` | updateProfileName, updateProfileBio |
 | `actions-chat.test.ts` | sendMessage, pinMessage, reportMessage |
-| `actions-teams.test.ts` | createTeam, joinTeamByCode, getTeamsByJam |
-| `actions-projects.test.ts` | toggleLike (like/unlike, compteur jamais négatif) |
+| `actions-teams.test.ts` | createTeam, joinTeamByCode, getTeamsByJam, renameTeam, deleteTeam, removeMemberFromTeam (doubles gardes admin/leader) |
+| `actions-projects.test.ts` | toggleLike (like/unlike, compteur jamais négatif), unsubmitProject |
 | `actions-home.test.ts` | getHomePageData (placement réel des gagnants) |
+| `actions-admin.test.ts` | Actions admin (listAllJams, listAllTeams, refus non-admin avec message exact) |
+| `actions-logs.test.ts` | getCountryStats, logAuthEvent, gardes admin des actions logs |
+| `actions-dashboard.test.ts` | Actions dashboard |
+| `actions-announcements.test.ts` | Annonces |
+| `guards.test.ts` | Gardes d'accès |
+| `file-url.test.ts` | Helpers URLs de fichiers |
 | `bot-detection.test.ts` | Détection bots (User-Agent + URL patterns) |
 | `seo.test.ts` | JSON-LD helpers |
 
+> État : **196 tests** répartis sur 15 fichiers (juillet 2026). Exécution dans le container : `docker exec konfitur-frontend sh -c "cd /app && npx vitest run"`.
+
 ### End-to-end (Playwright — `frontend/e2e/`)
 
-- [x] Suite E2E Playwright : 9 specs (smoke, auth, navigation, guildes, projets, chat, profil, organisateur, admin) — voir `docs/DOC_test_E2E.md`
+- [x] Suite E2E Playwright : 9 specs (smoke, auth, navigation, guildes, projets, chat, profil, organisateur, admin) — 65 tests + 1 skip — voir `docs/DOC_test_E2E.md`
 - [x] Vérification du realtime (Appwrite WebSocket) — `06-chat.spec.ts` : user2 voit le message de user1 sans rechargement
 
 ### À faire — Tests
@@ -71,7 +82,7 @@
 - [ ] Configurer la rotation des logs Docker (`daemon.json`)
 - [ ] Mettre en place la surveillance et les alertes
 - [ ] Activer les jobs Semgrep / audit dépendances / lint Docker en mode bloquant (après tri des faux positifs)
-- [ ] Activer la Phase 2 CI/CD : déploiement du schéma Appwrite depuis le pipeline
+- [x] Activer la Phase 2 CI/CD : déploiement du schéma Appwrite depuis le pipeline (job `deploy-schema` — reste à vérifier les scopes `databases.*` de la clé API CI)
 
 ---
 

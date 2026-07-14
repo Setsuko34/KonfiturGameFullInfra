@@ -12,6 +12,7 @@ Protections de branche : `docs/BRANCH-PROTECTION.md`
   - `frontend/**` → rebuild + restart du service `frontend` sur le VPS (SSH)
   - `docker-compose.yml`, `traefik/**` → `docker compose up -d` complet sur le VPS (SSH)
   - `appwrite.json`, `functions/**` → `appwrite push functions` depuis le runner CI
+  - `appwrite.json` → `appwrite push tables --force` depuis le runner CI (job `deploy-schema`)
 - **Issues automatiques** : `deploy-failure` (échec de déploiement ou healthcheck), `security-report` (issue unique mise à jour avec les findings non bloquants).
 
 ---
@@ -26,7 +27,7 @@ Créer dans Settings → Secrets and variables → Actions (ou `gh secret set <N
 | `VPS_USER` | Utilisateur SSH de déploiement |
 | `VPS_SSH_KEY` | Clé **privée** ed25519 dédiée au déploiement |
 | `VPS_APP_DIR` | Chemin du repo sur le VPS (ex: `/opt/KonfiturGameFullInfra`) |
-| `APPWRITE_API_KEY` | Clé API Appwrite de **prod**, scope functions uniquement |
+| `APPWRITE_API_KEY` | Clé API Appwrite de **prod**, scopes `functions.read/write` + `databases.read/write` (deploy-functions et deploy-schema) |
 
 `GITHUB_TOKEN` est fourni automatiquement par GitHub Actions — ne pas créer manuellement.
 
@@ -61,7 +62,7 @@ git -C <VPS_APP_DIR> fetch origin   # doit réussir sans mot de passe
 
 ### 3. Clé API Appwrite de prod
 
-Console Appwrite prod → Project → API keys → créer une clé avec le scope `functions` uniquement :
+Console Appwrite prod → Project → API keys → créer une clé avec les scopes `functions.read`, `functions.write`, `databases.read`, `databases.write` :
 
 ```bash
 gh secret set APPWRITE_API_KEY --body "<la-clé>"
@@ -111,11 +112,14 @@ Tous les jobs de déploiement attendent les 4 contrôles bloquants. La détectio
 - Healthcheck frontend identique.
 
 **`Déploiement Appwrite functions`** — déclenché si `appwrite.json` ou `functions/**` est modifié.
-- S'exécute sur le runner CI (pas SSH) : installe `appwrite-cli@10` (npm global, exception à pnpm — runner éphémère).
+- S'exécute sur le runner CI (pas SSH) : installe `appwrite-cli@17.3.1` (npm global, exception à pnpm — runner éphémère).
 - Configure le client avec `APPWRITE_API_KEY`, endpoint et project-id.
 - `appwrite push functions --force`.
 
-**`Déploiement schéma Appwrite (phase 2 — désactivé)`** — job présent mais inactif (`if: github.ref == 'refs/heads/__disabled__'`). Voir section Phase 2.
+**`Déploiement schéma Appwrite`** — déclenché si `appwrite.json` est modifié (filtre `schema` dédié : un changement limité à `functions/**` ne re-pousse pas le schéma).
+- Mêmes étapes que deploy-functions (runner CI, `appwrite-cli@17.3.1`, client configuré avec `APPWRITE_API_KEY`).
+- `appwrite push tables --force` — `appwrite.json` est la source de vérité du schéma (voir `MISE-A-JOUR.md §7`).
+- Prérequis : la clé API de prod porte les scopes `databases.read`/`databases.write`.
 
 ### Issues automatiques
 
@@ -159,11 +163,10 @@ git reset --hard origin/main
 
 ## Phase 2 — schéma Appwrite dans la CI
 
-Le schéma (tables, buckets, teams) est **déjà capturé** dans `appwrite.json`. Reste à activer le job :
+**Activée (2026-07-14)** : le job `deploy-schema` pousse `appwrite push tables --force` sur push `main` quand `appwrite.json` change (la commande `push collections` est dépréciée depuis la CLI 17). Son échec alimente l'issue `deploy-failure` comme les autres jobs de déploiement.
 
-1. Dans `ci-cd.yml`, job `deploy-schema` : remplacer `if: github.ref == 'refs/heads/__disabled__'` par la même condition que `deploy-functions`, et utiliser `appwrite push tables --force` (la commande `push collections` est dépréciée depuis la CLI 17).
-2. La clé API de prod doit gagner les scopes `databases.read`/`databases.write`.
-3. Les scripts shell de schéma (`init-appwrite.sh`, `update-schema-phase1.sh`) deviennent obsolètes (`seed-data.sh` reste utile pour les données de test).
+- **Prérequis opérationnel** : la clé API de prod (`APPWRITE_API_KEY`) doit porter les scopes `databases.read`/`databases.write` — sinon le job échoue au push.
+- Les scripts shell de schéma (`init-appwrite.sh`, `update-schema-phase1.sh`) sont obsolètes (`seed-data.sh` reste utile pour les données de test).
 
 Procédure détaillée : `MISE-A-JOUR.md §7`.
 
@@ -178,11 +181,11 @@ Les jobs Semgrep / audit dépendances / Docker sont non bloquants (`continue-on-
 ## Notes diverses
 
 - **Tests E2E hors CI** : la suite Playwright (`pnpm e2e`) nécessite l'infrastructure Docker complète (frontend + Appwrite + données de test) — elle ne tourne **pas** dans le pipeline. L'exécuter localement avant de merger (voir `docs/DOC_test_E2E.md`).
-- **Version Appwrite CLI épinglée** : le workflow épingle `appwrite-cli@10` (`ci-cd.yml`, job deploy-functions) — **obsolète depuis le passage du serveur en 1.9.0** : à mettre à jour vers `appwrite-cli@17.3.1` (une CLI incompatible provoque des erreurs "Route not found" — tableau de compatibilité dans `MISE-A-JOUR.md §4`). Revalider à chaque upgrade Appwrite.
+- **Version Appwrite CLI épinglée** : le workflow épingle `appwrite-cli@17.3.1` (`ci-cd.yml`, jobs deploy-functions et deploy-schema), compatible serveur 1.9.0 (une CLI incompatible provoque des erreurs "Route not found" — tableau de compatibilité dans `MISE-A-JOUR.md §4`). Revalider à chaque upgrade Appwrite.
 - **Force-push sans ancêtre commun** : paths-filter considère alors tous les fichiers comme modifiés → redéploiement complet. Ne pas force-pusher sur `main` inutilement.
 - **Concurrence** : un seul run à la fois par branche (`concurrency` au niveau workflow) ; les runs de PR sont annulés si un nouveau push arrive, les runs de push sur `main` attendent.
 - **gitleaks-action v3** : gratuit pour les comptes personnels ; une licence est requise pour les organisations GitHub.
 
 ---
 
-*KonfiturGame · Pipeline CI/CD · Mis à jour : 2026-07-08*
+*KonfiturGame · Pipeline CI/CD · Mis à jour : 2026-07-14*

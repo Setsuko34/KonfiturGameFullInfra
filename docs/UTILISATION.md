@@ -311,13 +311,25 @@ Le panneau admin est accessible à l'adresse `/admin`. L'accès est réservé au
 
 ### Gestion des jams (`/admin/jams`)
 
-- Liste de toutes les jams
+- Liste de toutes les jams, filtrable par statut
+- **Gérer** une jam (`/admin/jams/[id]`) — superpouvoirs admin :
+  - Modifier n'importe quelle jam (description, règles, prix, tags, participants max), même sans en être l'organisateur
+  - Gérer les équipes inscrites : renommer, retirer un membre, dissoudre
+  - Retirer la soumission d'un projet
 - Supprimer une jam (action irréversible)
+
+> Toute action admin sur une ressource dont il n'est pas propriétaire est **journalisée** (`admin_action`, visible dans `/admin/logs`).
+
+### Gestion des équipes (`/admin/teams`)
+
+- Liste de **toutes** les équipes et guildes, indépendamment des jams (recherche par nom, pagination)
+- Renommer une équipe, retirer un membre, dissoudre une guilde — actions journalisées
 
 ### Modération (`/admin/moderation`)
 
-- Voir les messages et projets signalés
-- Prendre des mesures (suppression de contenu)
+- Voir les messages et projets signalés, avec liens de contexte (jam du message, page du projet, gestion de la jam)
+- **Retirer la soumission** d'un projet signalé directement depuis la carte
+- Marquer un signalement comme résolu
 
 ### Mise en avant et podium (`/admin/featured`)
 
@@ -333,7 +345,7 @@ Le panneau admin est accessible à l'adresse `/admin`. L'accès est réservé au
 
 ### Logs et monitoring (`/admin/logs`)
 
-- Voir les logs d'audit (connexions, actions, erreurs)
+- Voir les logs d'audit (connexions, actions, erreurs), **filtrables par type** (`?type=auth`, `admin_action`…)
 - Consulter les statistiques de trafic par pays
 - **Bannir une IP** manuellement
 - **Débannir une IP**
@@ -353,4 +365,4 @@ Le panneau admin est accessible à l'adresse `/admin`. L'accès est réservé au
 
 ---
 
-*KonfiturGame · Manuel d'utilisation · Mis à jour : 2026-07-08*
+*KonfiturGame · Manuel d'utilisation · Mis à jour : 2026-07-14*
