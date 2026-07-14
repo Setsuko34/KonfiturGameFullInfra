@@ -8,18 +8,34 @@ vi.mock('@/lib/appwrite/server', () => ({
     updateDocument: vi.fn(),
     deleteDocument: vi.fn(),
   },
+  serverTeams: {
+    listMemberships: vi.fn(),
+  },
 }))
 
+const mockAccountGet = vi.fn()
 vi.mock('@/lib/appwrite/session', () => ({
-  createSessionClient: vi.fn(),
+  createSessionClient: vi.fn(async () => ({ account: { get: mockAccountGet } })),
 }))
 
-import { createTeam, joinTeamByCode, getTeamsByJam } from '@/lib/actions/teams'
-import { serverDatabases } from '@/lib/appwrite/server'
+import {
+  createTeam,
+  joinTeamByCode,
+  getTeamsByJam,
+  updateMemberRole,
+  removeMemberFromTeam,
+  deleteTeam,
+  renameTeam,
+  registerTeamToJam,
+} from '@/lib/actions/teams'
+import { serverDatabases, serverTeams } from '@/lib/appwrite/server'
 
 const mockCreate = vi.mocked(serverDatabases.createDocument)
 const mockList = vi.mocked(serverDatabases.listDocuments)
 const mockUpdate = vi.mocked(serverDatabases.updateDocument)
+const mockGet = vi.mocked(serverDatabases.getDocument)
+const mockDelete = vi.mocked(serverDatabases.deleteDocument)
+const mockMemberships = vi.mocked(serverTeams.listMemberships)
 
 function makeTeamDoc(fields: Record<string, unknown>) {
   return {
@@ -46,9 +62,14 @@ function makeMemberDoc(fields: Record<string, unknown>) {
 }
 
 beforeEach(() => {
+  // mockReset (pas clearAllMocks) : purge aussi les files mockResolvedValueOnce
   mockCreate.mockReset()
   mockList.mockReset()
   mockUpdate.mockReset()
+  mockGet.mockReset()
+  mockDelete.mockReset()
+  mockMemberships.mockReset()
+  mockAccountGet.mockReset()
 })
 
 // ── createTeam ──────────────────────────────────────────────────────────────
@@ -146,5 +167,275 @@ describe('getTeamsByJam', () => {
     const teams = await getTeamsByJam('jam-1')
     expect(teams).toHaveLength(1)
     expect(teams[0].jamIds).toContain('jam-1')
+  })
+})
+
+// ── Actions à identité session (leader OU admin) ────────────────────────────
+
+const TEAM_DOC = () => makeTeamDoc({ jam_ids: [], name: 'Crew', invite_code: 'KG-AAAAAAAA', leader_id: 'leader-1' })
+
+function expectAudit(userId: string) {
+  expect(mockCreate).toHaveBeenCalledWith('konfitur-db', 'audit_logs', expect.any(String),
+    expect.objectContaining({ type: 'admin_action', user_id: userId }))
+}
+
+describe('updateMemberRole — session + double garde', () => {
+  it('leader : succès sans check admin', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'leader-1' })
+    mockGet
+      .mockResolvedValueOnce(TEAM_DOC() as never)
+      .mockResolvedValueOnce(makeMemberDoc({ user_id: 'u-2', is_leader: false }) as never)
+    mockUpdate.mockResolvedValue({} as never)
+
+    const res = await updateMemberRole('member-1', 'team-1', 'artist')
+
+    expect(res.success).toBe(true)
+    expect(mockMemberships).not.toHaveBeenCalled()
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('admin non-leader : succès + audit', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockGet
+      .mockResolvedValueOnce(TEAM_DOC() as never)
+      .mockResolvedValueOnce(makeMemberDoc({ user_id: 'u-2', is_leader: false }) as never)
+    mockUpdate.mockResolvedValue({} as never)
+    mockCreate.mockResolvedValue({} as never)
+
+    const res = await updateMemberRole('member-1', 'team-1', 'artist')
+
+    expect(res.success).toBe(true)
+    expectAudit('admin-1')
+  })
+
+  it('tiers : refus message exact, aucune écriture', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'tiers' })
+    mockMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+    mockGet.mockResolvedValueOnce(TEAM_DOC() as never)
+
+    const res = await updateMemberRole('member-1', 'team-1', 'artist')
+
+    expect(res).toEqual({ success: false, error: 'Seul le leader peut modifier les rôles.' })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('sans session : refus, aucun appel DB', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+
+    const res = await updateMemberRole('member-1', 'team-1', 'artist')
+
+    expect(res.success).toBe(false)
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+})
+
+describe('removeMemberFromTeam — session + double garde', () => {
+  it('self-leave : un membre non-leader se retire lui-même (ni leader ni admin)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'u-2' })
+    mockGet
+      .mockResolvedValueOnce(TEAM_DOC() as never)
+      .mockResolvedValueOnce(makeMemberDoc({ user_id: 'u-2', is_leader: false }) as never)
+    mockDelete.mockResolvedValue({} as never)
+
+    const res = await removeMemberFromTeam('member-1', 'team-1')
+
+    expect(res.success).toBe(true)
+    expect(mockMemberships).not.toHaveBeenCalled()
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('leader : retire un membre, succès sans audit', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'leader-1' })
+    mockGet
+      .mockResolvedValueOnce(TEAM_DOC() as never)
+      .mockResolvedValueOnce(makeMemberDoc({ user_id: 'u-2', is_leader: false }) as never)
+    mockDelete.mockResolvedValue({} as never)
+
+    const res = await removeMemberFromTeam('member-1', 'team-1')
+
+    expect(res.success).toBe(true)
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('admin : retire un membre non-leader + audit', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockGet
+      .mockResolvedValueOnce(TEAM_DOC() as never)
+      .mockResolvedValueOnce(makeMemberDoc({ user_id: 'u-2', name: 'Bob', is_leader: false }) as never)
+    mockDelete.mockResolvedValue({} as never)
+    mockCreate.mockResolvedValue({} as never)
+
+    const res = await removeMemberFromTeam('member-1', 'team-1')
+
+    expect(res.success).toBe(true)
+    expectAudit('admin-1')
+  })
+
+  it('admin ne peut pas retirer le leader : message exact', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockGet
+      .mockResolvedValueOnce(TEAM_DOC() as never)
+      .mockResolvedValueOnce(makeMemberDoc({ user_id: 'leader-1', is_leader: true }) as never)
+
+    const res = await removeMemberFromTeam('member-1', 'team-1')
+
+    expect(res).toEqual({ success: false, error: 'Le leader ne peut pas quitter son équipe (supprimez-la à la place).' })
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it('tiers : refus message exact, aucune suppression', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'tiers' })
+    mockMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+    mockGet
+      .mockResolvedValueOnce(TEAM_DOC() as never)
+      .mockResolvedValueOnce(makeMemberDoc({ user_id: 'u-2', is_leader: false }) as never)
+
+    const res = await removeMemberFromTeam('member-1', 'team-1')
+
+    expect(res).toEqual({ success: false, error: 'Action non autorisée.' })
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it('sans session : refus, aucun appel DB', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+
+    const res = await removeMemberFromTeam('member-1', 'team-1')
+
+    expect(res.success).toBe(false)
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+})
+
+describe('deleteTeam — session + double garde', () => {
+  it('leader : dissout son équipe sans audit', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'leader-1' })
+    mockGet.mockResolvedValueOnce(TEAM_DOC() as never)
+    mockList.mockResolvedValue({ documents: [], total: 0 } as never)
+    mockDelete.mockResolvedValue({} as never)
+
+    const res = await deleteTeam('team-1')
+
+    expect(res.success).toBe(true)
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('admin : dissolution + audit', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockGet.mockResolvedValueOnce(TEAM_DOC() as never)
+    mockList.mockResolvedValue({ documents: [], total: 0 } as never)
+    mockDelete.mockResolvedValue({} as never)
+    mockCreate.mockResolvedValue({} as never)
+
+    const res = await deleteTeam('team-1')
+
+    expect(res.success).toBe(true)
+    expectAudit('admin-1')
+  })
+
+  it('tiers : refus message exact, aucune suppression', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'tiers' })
+    mockMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+    mockGet.mockResolvedValueOnce(TEAM_DOC() as never)
+
+    const res = await deleteTeam('team-1')
+
+    expect(res).toEqual({ success: false, error: 'Seul le leader peut supprimer une équipe.' })
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it('sans session : refus, aucun appel DB', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+
+    const res = await deleteTeam('team-1')
+
+    expect(res.success).toBe(false)
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+})
+
+describe('renameTeam — session + double garde + validation', () => {
+  it('leader : renomme, nom trimé, sans audit', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'leader-1' })
+    mockGet.mockResolvedValueOnce(TEAM_DOC() as never)
+    mockUpdate.mockResolvedValue({} as never)
+
+    const res = await renameTeam('team-1', '  Nouveau nom  ')
+
+    expect(res.success).toBe(true)
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'teams', 'team-1', { name: 'Nouveau nom' })
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('nom trop court/long : refus message exact, aucune écriture', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'leader-1' })
+
+    for (const bad of ['ab', 'x'.repeat(51)]) {
+      const res = await renameTeam('team-1', bad)
+      expect(res).toEqual({ success: false, error: 'Le nom doit faire entre 3 et 50 caractères.' })
+    }
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('admin : renomme + audit', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockGet.mockResolvedValueOnce(TEAM_DOC() as never)
+    mockUpdate.mockResolvedValue({} as never)
+    mockCreate.mockResolvedValue({} as never)
+
+    const res = await renameTeam('team-1', 'Renommée par admin')
+
+    expect(res.success).toBe(true)
+    expectAudit('admin-1')
+  })
+
+  it('tiers : refus message exact', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'tiers' })
+    mockMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+    mockGet.mockResolvedValueOnce(TEAM_DOC() as never)
+
+    const res = await renameTeam('team-1', 'Nom valide')
+
+    expect(res).toEqual({ success: false, error: 'Seul le leader peut renommer l\'équipe.' })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('sans session : refus, aucun appel DB', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+
+    const res = await renameTeam('team-1', 'Nom valide')
+
+    expect(res.success).toBe(false)
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+})
+
+describe('registerTeamToJam — identité session (leader only, pas de pouvoir admin)', () => {
+  it('non-leader : refus message exact, aucune écriture', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'u-2' })
+    mockGet.mockResolvedValueOnce(TEAM_DOC() as never)
+
+    const res = await registerTeamToJam('team-1', 'jam-1')
+
+    expect(res).toEqual({ success: false, error: 'Seul le leader peut inscrire une équipe.' })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('sans session : refus, aucun appel DB', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+
+    const res = await registerTeamToJam('team-1', 'jam-1')
+
+    expect(res.success).toBe(false)
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })

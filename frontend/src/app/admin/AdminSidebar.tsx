@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import {
-  LayoutDashboard, Users, List,
+  LayoutDashboard, Users, List, UsersRound,
   AlertTriangle, Megaphone, Star, LogOut, Home, Activity,
 } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
@@ -68,6 +68,7 @@ export default function AdminSidebar() {
           </p>
           <SidebarNavLink href="/admin/users" icon={Users} label="Utilisateurs" {...ADMIN_LINK_STYLE} />
           <SidebarNavLink href="/admin/jams" icon={List} label="Jams" {...ADMIN_LINK_STYLE} />
+          <SidebarNavLink href="/admin/teams" icon={UsersRound} label="Équipes" {...ADMIN_LINK_STYLE} />
 
           <p
             className="px-3 pt-4 pb-1 text-[9px] tracking-widest uppercase border-t mt-3"

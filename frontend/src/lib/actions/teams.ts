@@ -2,10 +2,12 @@
 
 import { Query } from 'node-appwrite'
 import { serverDatabases } from '@/lib/appwrite/server'
+import { createSessionClient } from '@/lib/appwrite/session'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { mapDocToTeam, mapDocToTeamMember, mapDocToGameJam, mapDocToProject } from '@/lib/appwrite/types'
 import type { Team, TeamMember, GameJam, Project } from '@/types'
 import { computeJamStatus } from '@/lib/jam-status'
+import { canActOnTeam, logAdminAction } from '@/lib/appwrite/guards'
 
 // ── Génération du code d'invitation ──────────────────────────────────────────
 
@@ -170,13 +172,14 @@ export async function getTeamsByJam(jamId: string): Promise<Team[]> {
 
 export async function registerTeamToJam(
   teamId: string,
-  jamId: string,
-  currentUserId: string
+  jamId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
     const teamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId)
 
-    if (teamDoc.leader_id !== currentUserId) {
+    if (teamDoc.leader_id !== user.$id) {
       return { success: false, error: 'Seul le leader peut inscrire une équipe.' }
     }
 
@@ -223,12 +226,15 @@ export async function registerTeamToJam(
 export async function updateMemberRole(
   teamMemberId: string,
   teamId: string,
-  role: 'dev' | 'artist' | 'sound' | 'designer' | 'writer',
-  currentUserId: string
+  role: 'dev' | 'artist' | 'sound' | 'designer' | 'writer'
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
     const teamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId)
-    if (teamDoc.leader_id !== currentUserId) {
+    const actorRole = await canActOnTeam(user.$id, teamDoc)
+    if (!actorRole) {
       return { success: false, error: 'Seul le leader peut modifier les rôles.' }
     }
 
@@ -238,6 +244,11 @@ export async function updateMemberRole(
     }
 
     await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, teamMemberId, { role })
+
+    if (actorRole === 'admin') {
+      await logAdminAction(user.$id, `Changement du rôle de ${memberDoc.name} → ${role} dans l'équipe « ${teamDoc.name} » (${teamId})`, `/team/${teamId}`)
+    }
+
     return { success: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erreur inconnue'
@@ -249,17 +260,20 @@ export async function updateMemberRole(
 
 export async function removeMemberFromTeam(
   teamMemberId: string,
-  teamId: string,
-  currentUserId: string
+  teamId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
     const teamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId)
     const memberDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, teamMemberId)
 
-    const isSelf = memberDoc.user_id === currentUserId
-    const isLeader = teamDoc.leader_id === currentUserId
+    // Autorisé : le membre lui-même (self-leave), le leader, ou un admin
+    const isSelf = memberDoc.user_id === user.$id
+    const actorRole = isSelf ? null : await canActOnTeam(user.$id, teamDoc)
 
-    if (!isSelf && !isLeader) {
+    if (!isSelf && !actorRole) {
       return { success: false, error: 'Action non autorisée.' }
     }
     if (memberDoc.is_leader) {
@@ -267,6 +281,11 @@ export async function removeMemberFromTeam(
     }
 
     await serverDatabases.deleteDocument(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, teamMemberId)
+
+    if (actorRole === 'admin') {
+      await logAdminAction(user.$id, `Retrait de ${memberDoc.name} de l'équipe « ${teamDoc.name} » (${teamId})`, `/team/${teamId}`)
+    }
+
     return { success: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erreur inconnue'
@@ -277,12 +296,15 @@ export async function removeMemberFromTeam(
 // ── deleteTeam ────────────────────────────────────────────────────────────────
 
 export async function deleteTeam(
-  teamId: string,
-  currentUserId: string
+  teamId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
     const teamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId)
-    if (teamDoc.leader_id !== currentUserId) {
+    const actorRole = await canActOnTeam(user.$id, teamDoc)
+    if (!actorRole) {
       return { success: false, error: 'Seul le leader peut supprimer une équipe.' }
     }
 
@@ -298,10 +320,48 @@ export async function deleteTeam(
     )
 
     await serverDatabases.deleteDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId)
+
+    if (actorRole === 'admin') {
+      await logAdminAction(user.$id, `Dissolution de l'équipe « ${teamDoc.name} » (${teamId})`, `/team/${teamId}`)
+    }
+
     return { success: true }
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Erreur inconnue'
     return { success: false, error: msg }
+  }
+}
+
+// ── renameTeam ────────────────────────────────────────────────────────────────
+
+export async function renameTeam(
+  teamId: string,
+  name: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
+    const trimmed = name.trim()
+    if (trimmed.length < 3 || trimmed.length > 50) {
+      return { success: false, error: 'Le nom doit faire entre 3 et 50 caractères.' }
+    }
+
+    const teamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId)
+    const actorRole = await canActOnTeam(user.$id, teamDoc)
+    if (!actorRole) {
+      return { success: false, error: 'Seul le leader peut renommer l\'équipe.' }
+    }
+
+    await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId, { name: trimmed })
+
+    if (actorRole === 'admin') {
+      await logAdminAction(user.$id, `Renommage de l'équipe « ${teamDoc.name} » → « ${trimmed} » (${teamId})`, `/team/${teamId}`)
+    }
+
+    return { success: true }
+  } catch {
+    return { success: false, error: 'Une erreur est survenue.' }
   }
 }
 

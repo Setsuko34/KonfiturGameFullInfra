@@ -9,6 +9,7 @@ import { mapDocToGameJam, mapDocToTeam, mapDocToTeamMember, mapDocToProject } fr
 import type { GameJam, Team, TeamMember, Project } from '@/types'
 import { validateUpdateJamData, type UpdateJamData } from '@/lib/validators'
 import { computeJamStatus } from '@/lib/jam-status'
+import { canActOnJam, logAdminAction } from '@/lib/appwrite/guards'
 
 // ── Lecture session utilisateur ────────────────────────────────────────────
 
@@ -123,8 +124,8 @@ export async function getOrganizedJamDetails(jamId: string): Promise<{
 
   const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
 
-  // Vérifier que l'utilisateur est bien l'organisateur
-  if (jamDoc.organizer_id !== user.$id) {
+  // Organisateur OU admin (page /admin/jams/[jamId]) — lecture, pas d'audit
+  if (!(await canActOnJam(user.$id, jamDoc))) {
     throw new Error('Accès non autorisé')
   }
 
@@ -250,7 +251,8 @@ export async function updateJam(
     const user = await getCurrentUser()
     const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
 
-    if (jamDoc.organizer_id !== user.$id) {
+    const role = await canActOnJam(user.$id, jamDoc)
+    if (!role) {
       return { success: false, error: 'Seul l\'organisateur peut modifier cette jam' }
     }
     if (computeJamStatus(new Date(jamDoc.start_date), new Date(jamDoc.end_date)) === 'ended') {
@@ -265,6 +267,10 @@ export async function updateJam(
     if (data.tags !== undefined) patch.tags = data.tags
 
     await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId, patch)
+
+    if (role === 'admin') {
+      await logAdminAction(user.$id, `Édition de la jam « ${jamDoc.title} » (${jamId})`, `/jam/${jamId}`)
+    }
 
     revalidatePath(`/dashboard/my-jams/${jamId}`)
     revalidatePath(`/jam/${jamId}`)

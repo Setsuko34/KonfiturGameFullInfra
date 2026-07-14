@@ -57,7 +57,7 @@ export default function TeamCard({
 
   const handleRoleChange = (memberId: string, role: string) => {
     startTransition(async () => {
-      const res = await updateMemberRole(memberId, team.id, role as never, currentUserId)
+      const res = await updateMemberRole(memberId, team.id, role as never)
       if (!res.success) setError(res.error ?? 'Erreur')
       else router.refresh()
     })
@@ -65,7 +65,7 @@ export default function TeamCard({
 
   const handleRemoveMember = (memberId: string) => {
     startTransition(async () => {
-      const res = await removeMemberFromTeam(memberId, team.id, currentUserId)
+      const res = await removeMemberFromTeam(memberId, team.id)
       if (!res.success) setError(res.error ?? 'Erreur')
       else router.refresh()
     })
@@ -73,7 +73,7 @@ export default function TeamCard({
 
   const handleDeleteTeam = () => {
     startTransition(async () => {
-      const res = await deleteTeam(team.id, currentUserId)
+      const res = await deleteTeam(team.id)
       if (!res.success) setError(res.error ?? 'Erreur')
       else router.refresh()
     })
@@ -82,7 +82,7 @@ export default function TeamCard({
   const handleRegisterToJam = () => {
     if (!registerJamId) return
     startTransition(async () => {
-      const res = await registerTeamToJam(team.id, registerJamId, currentUserId)
+      const res = await registerTeamToJam(team.id, registerJamId)
       if (!res.success) setError(res.error ?? 'Erreur')
       else { setRegisterJamId(''); router.refresh() }
     })

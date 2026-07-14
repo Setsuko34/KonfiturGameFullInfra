@@ -145,7 +145,10 @@ export default async function AdminAnnouncementsPage() {
                       {ann.createdAt.toLocaleDateString('fr-FR')}
                     </p>
                   </div>
-                  <form action={deleteAnnouncement.bind(null, ann.id)}>
+                  <form action={async () => {
+                    'use server'
+                    await deleteAnnouncement(ann.id)
+                  }}>
                     <button
                       type="submit"
                       title="Supprimer l'annonce"

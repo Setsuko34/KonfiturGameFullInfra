@@ -20,6 +20,7 @@ export type TestIds = {
   jamOngoingId: string
   jamUpcomingId: string
   jamEndedId: string
+  jamUser1Id: string
 }
 
 export function loadTestIds(): TestIds {

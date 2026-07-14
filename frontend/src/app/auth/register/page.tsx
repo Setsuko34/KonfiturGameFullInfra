@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { Gamepad2, Eye, EyeOff, Check } from 'lucide-react'
 import { OAuthProvider } from 'appwrite'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { logAuthEvent } from '@/lib/actions/logs'
 
 const passwordRequirements = [
   { test: (p: string) => p.length >= 8, label: 'Au moins 8 caractères' },
@@ -59,6 +60,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register(email, password, name)
+      void logAuthEvent('register') // best effort — ne bloque jamais la suite
       // La mise à jour de `user` déclenche le useEffect ci-dessus
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''

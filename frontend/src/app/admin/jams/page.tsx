@@ -6,7 +6,7 @@ import { DeleteJamButton } from './DeleteJamButton'
 
 export const metadata: Metadata = { title: 'Jams' }
 
-type Props = { searchParams: { [key: string]: string | string[] | undefined } }
+type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }
 
 const STATUS_LABELS: Record<string, string> = {
   upcoming: 'À venir',
@@ -15,8 +15,9 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export default async function AdminJamsPage({ searchParams }: Props) {
-  const status = Array.isArray(searchParams.status) ? searchParams.status[0] : searchParams.status
-  const pageParam = Array.isArray(searchParams.page) ? searchParams.page[0] : searchParams.page
+  const sp = await searchParams
+  const status = Array.isArray(sp.status) ? sp.status[0] : sp.status
+  const pageParam = Array.isArray(sp.page) ? sp.page[0] : sp.page
   const page = Math.max(0, parseInt(pageParam ?? '0', 10) || 0)
   const jams = await listAllJams(status, page)
 
@@ -108,8 +109,18 @@ export default async function AdminJamsPage({ searchParams }: Props) {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 justify-end">
+                      <Link
+                        href={`/admin/jams/${jam.id}`}
+                        className="text-sm underline"
+                        style={{ color: 'var(--primary)' }}
+                      >
+                        Gérer
+                      </Link>
                       {/* Featured toggle */}
-                      <form action={toggleJamFeatured.bind(null, jam.id, !jam.featured, jam.featuredOrder)}>
+                      <form action={async () => {
+                        'use server'
+                        await toggleJamFeatured(jam.id, !jam.featured, jam.featuredOrder)
+                      }}>
                         <button
                           type="submit"
                           title={jam.featured ? 'Retirer de la mise en avant' : 'Mettre en avant'}

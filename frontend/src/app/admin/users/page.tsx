@@ -5,11 +5,12 @@ import { listUsers, blockUser, unblockUser } from '@/lib/actions/admin'
 
 export const metadata: Metadata = { title: 'Utilisateurs' }
 
-type Props = { searchParams: { [key: string]: string | string[] | undefined } }
+type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }
 
 export default async function AdminUsersPage({ searchParams }: Props) {
-  const page = Math.max(0, parseInt(String(Array.isArray(searchParams.page) ? searchParams.page[0] : (searchParams.page ?? '0')), 10) || 0)
-  const search = (Array.isArray(searchParams.q) ? searchParams.q[0] : searchParams.q) ?? ''
+  const sp = await searchParams
+  const page = Math.max(0, parseInt(String(Array.isArray(sp.page) ? sp.page[0] : (sp.page ?? '0')), 10) || 0)
+  const search = (Array.isArray(sp.q) ? sp.q[0] : sp.q) ?? ''
   const result = await listUsers(page, search)
 
   return (
@@ -81,7 +82,10 @@ export default async function AdminUsersPage({ searchParams }: Props) {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <form action={u.status ? blockUser.bind(null, u.$id) : unblockUser.bind(null, u.$id)}>
+                  <form action={async () => {
+                    'use server'
+                    await (u.status ? blockUser(u.$id) : unblockUser(u.$id))
+                  }}>
                     <button
                       type="submit"
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border ml-auto transition-opacity hover:opacity-80"

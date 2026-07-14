@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { getRecentLogs, getCountryStats, getBannedIPs } from '@/lib/actions/logs'
 import BanIPForm from './BanIPForm'
 import UnbanButton from './UnbanButton'
@@ -20,11 +21,25 @@ const typeColor: Record<string, string> = {
   error: 'var(--secondary)',
   bot_blocked: 'var(--secondary)',
   ban_applied: 'var(--success)',
+  admin_action: 'var(--secondary)',
 }
 
-export default async function AdminLogsPage() {
+const TYPE_FILTERS = [
+  { label: 'Tous', value: undefined },
+  { label: 'connection', value: 'connection' },
+  { label: 'auth', value: 'auth' },
+  { label: 'error', value: 'error' },
+  { label: 'bot_blocked', value: 'bot_blocked' },
+  { label: 'admin_action', value: 'admin_action' },
+]
+
+type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }
+
+export default async function AdminLogsPage({ searchParams }: Props) {
+  const sp = await searchParams
+  const type = Array.isArray(sp.type) ? sp.type[0] : sp.type
   const [logs, countryStats, bannedIPs] = await Promise.all([
-    getRecentLogs(undefined, 0),
+    getRecentLogs(type, 0),
     getCountryStats(),
     getBannedIPs(),
   ])
@@ -67,11 +82,28 @@ export default async function AdminLogsPage() {
               <Activity size={13} aria-hidden="true" />
               Logs récents (50 derniers)
             </h2>
+            {/* Filtres par type */}
+            <div className="flex flex-wrap gap-2 mb-3">
+              {TYPE_FILTERS.map(f => (
+                <Link
+                  key={f.label}
+                  href={f.value ? `/admin/logs?type=${f.value}` : '/admin/logs'}
+                  className="px-3 py-1.5 text-xs font-mono border transition-opacity hover:opacity-80"
+                  style={{
+                    borderColor: type === f.value ? 'var(--primary)' : 'var(--border)',
+                    color: type === f.value ? 'var(--primary)' : 'var(--muted-foreground)',
+                    background: type === f.value ? 'rgba(79, 106, 255, 0.1)' : 'transparent',
+                  }}
+                >
+                  {f.label}
+                </Link>
+              ))}
+            </div>
             <div className="border overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
               <table className="w-full text-xs" role="grid">
                 <thead>
                   <tr style={{ background: 'var(--surface-elevated)' }}>
-                    {['Type', 'IP', 'Pays', 'Chemin', 'Date'].map(h => (
+                    {['Type', 'Message', 'IP', 'Pays', 'Chemin', 'Date'].map(h => (
                       <th key={h} scope="col"
                         className="text-left px-3 py-2 font-semibold tracking-wider"
                         style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)' }}>
@@ -85,6 +117,9 @@ export default async function AdminLogsPage() {
                     <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
                       <td className="px-3 py-2 font-mono font-semibold" style={{ color: typeColor[log.type] ?? 'var(--foreground)' }}>
                         {log.type}
+                      </td>
+                      <td className="px-3 py-2 max-w-[260px] truncate" title={log.message}>
+                        {log.message ?? '—'}
                       </td>
                       <td className="px-3 py-2 font-mono" style={{ color: 'var(--muted-foreground)' }}>
                         {log.ip ?? '—'}
@@ -102,7 +137,7 @@ export default async function AdminLogsPage() {
                   ))}
                   {logs.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-3 py-6 text-center" style={{ color: 'var(--muted-foreground)' }}>
+                      <td colSpan={6} className="px-3 py-6 text-center" style={{ color: 'var(--muted-foreground)' }}>
                         Aucun log disponible
                       </td>
                     </tr>

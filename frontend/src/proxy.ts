@@ -117,12 +117,6 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  // ── 4. Logger les connexions (async, non bloquant) ────────────────────────
-  if (!shouldSkip(pathname)) {
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
-    if (siteUrl) logAsync(request, siteUrl, 'connection')
-  }
-
   return NextResponse.next()
 }
 

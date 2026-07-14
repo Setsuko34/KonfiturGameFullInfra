@@ -90,9 +90,9 @@ export default async function globalSetup() {
     console.warn(`⚠ createMembership admin: ${err.message} (team ${ADMIN_TEAM_ID} existe-t-elle dans Appwrite ?)`)
   })
 
-  // Création des 3 jams de référence
+  // Création des 4 jams de référence
   const ts = Date.now()
-  const [jamOngoing, jamUpcoming, jamEnded] = await Promise.all([
+  const [jamOngoing, jamUpcoming, jamEnded, jamUser1] = await Promise.all([
     databases.createDocument(DB, 'game_jams', ID.unique(), {
       title: '[E2E] Jam En Cours',
       slug: `e2e-ongoing-${ts}`,
@@ -131,6 +131,20 @@ export default async function globalSetup() {
       organizer_id: TEST_USERS.admin.id,
       status: 'ended',
     }),
+    // Jam organisée par user1 — l'admin e2e n'en est PAS l'organisateur
+    // (nécessaire pour tester le chemin admin non-propriétaire + audit)
+    databases.createDocument(DB, 'game_jams', ID.unique(), {
+      title: '[E2E] Jam User1',
+      slug: `e2e-user1-${ts}`,
+      theme: 'Modération',
+      description: 'Jam de test E2E organisée par user1.',
+      type: 'both',
+      start_date: days(-2),
+      end_date: days(8),
+      duration: '10 jours',
+      organizer_id: TEST_USERS.user1.id,
+      status: 'ongoing',
+    }),
   ])
 
   // Sauvegarde des IDs
@@ -138,6 +152,7 @@ export default async function globalSetup() {
     jamOngoingId: jamOngoing.$id,
     jamUpcomingId: jamUpcoming.$id,
     jamEndedId: jamEnded.$id,
+    jamUser1Id: jamUser1.$id,
   }, null, 2))
 
   // Réinitialisation de l'état partagé entre tests
