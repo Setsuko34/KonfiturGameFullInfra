@@ -5,11 +5,12 @@ import { listUsers, blockUser, unblockUser } from '@/lib/actions/admin'
 
 export const metadata: Metadata = { title: 'Utilisateurs' }
 
-type Props = { searchParams: { [key: string]: string | string[] | undefined } }
+type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }
 
 export default async function AdminUsersPage({ searchParams }: Props) {
-  const page = Math.max(0, parseInt(String(Array.isArray(searchParams.page) ? searchParams.page[0] : (searchParams.page ?? '0')), 10) || 0)
-  const search = (Array.isArray(searchParams.q) ? searchParams.q[0] : searchParams.q) ?? ''
+  const sp = await searchParams
+  const page = Math.max(0, parseInt(String(Array.isArray(sp.page) ? sp.page[0] : (sp.page ?? '0')), 10) || 0)
+  const search = (Array.isArray(sp.q) ? sp.q[0] : sp.q) ?? ''
   const result = await listUsers(page, search)
 
   return (

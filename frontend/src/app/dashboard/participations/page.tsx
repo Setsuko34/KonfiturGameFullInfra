@@ -16,15 +16,16 @@ const STATUS_LABELS: Record<StatusFilter, string> = {
 }
 
 interface Props {
-  searchParams: { status?: string }
+  searchParams: Promise<{ status?: string }>
 }
 
 export default async function ParticipationsPage({ searchParams }: Props) {
+  const { status } = await searchParams
   const { jams } = await getUserParticipations()
 
   const validFilters: StatusFilter[] = ['all', 'ongoing', 'upcoming', 'ended']
-  const activeFilter: StatusFilter = validFilters.includes(searchParams.status as StatusFilter)
-    ? (searchParams.status as StatusFilter)
+  const activeFilter: StatusFilter = validFilters.includes(status as StatusFilter)
+    ? (status as StatusFilter)
     : 'all'
 
   const filteredJams: GameJam[] =

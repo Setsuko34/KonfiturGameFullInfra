@@ -10,8 +10,10 @@ import {
   mapDocToProject,
   mapDocToChatMessage,
   mapDocToAnnouncement,
+  mapDocToTeam,
+  mapDocToTeamMember,
 } from '@/lib/appwrite/types'
-import type { GameJam, Project, ChatMessage, Announcement } from '@/types'
+import type { GameJam, Project, ChatMessage, Announcement, Team, TeamMember } from '@/types'
 import { isAdminUser, logAdminAction } from '@/lib/appwrite/guards'
 
 // Toute action de ce fichier est un endpoint public : la garde du layout ne suffit pas.
@@ -159,6 +161,36 @@ export async function toggleJamFeatured(jamId: string, featured: boolean, featur
   revalidatePath('/admin/jams')
   revalidatePath('/admin/featured')
   return { success: true }
+}
+
+// ── Gestion des équipes ────────────────────────────────────────────────────
+
+export async function listAllTeams(search = '', page = 0): Promise<Team[]> {
+  await requireAdminOrThrow()
+  const queries: string[] = [
+    Query.orderDesc('$createdAt'),
+    Query.limit(25),
+    Query.offset(page * 25),
+  ]
+  if (search) queries.push(Query.contains('name', search))
+  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAMS, queries)
+  const teams = res.documents.map(mapDocToTeam)
+
+  if (teams.length > 0) {
+    // Membres de tout le lot en UNE requête (25 équipes × ~20 membres max < limite 500)
+    const membersRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
+      Query.equal('team_id', teams.map(t => t.id)),
+      Query.limit(500),
+    ])
+    const byTeam = new Map<string, TeamMember[]>()
+    for (const doc of membersRes.documents) {
+      const list = byTeam.get(doc.team_id as string) ?? []
+      list.push(mapDocToTeamMember(doc))
+      byTeam.set(doc.team_id as string, list)
+    }
+    for (const team of teams) team.members = byTeam.get(team.id) ?? []
+  }
+  return teams
 }
 
 // ── Modération ─────────────────────────────────────────────────────────────

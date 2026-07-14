@@ -33,10 +33,11 @@ const TYPE_FILTERS = [
   { label: 'admin_action', value: 'admin_action' },
 ]
 
-type Props = { searchParams: { [key: string]: string | string[] | undefined } }
+type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }
 
 export default async function AdminLogsPage({ searchParams }: Props) {
-  const type = Array.isArray(searchParams.type) ? searchParams.type[0] : searchParams.type
+  const sp = await searchParams
+  const type = Array.isArray(sp.type) ? sp.type[0] : sp.type
   const [logs, countryStats, bannedIPs] = await Promise.all([
     getRecentLogs(type, 0),
     getCountryStats(),

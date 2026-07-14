@@ -10,10 +10,11 @@ import PlacementButtons from '@/components/PlacementButtons'
 
 export const metadata: Metadata = { title: 'Mise en avant' }
 
-type Props = { searchParams: { [key: string]: string | string[] | undefined } }
+type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefined }> }
 
 export default async function AdminFeaturedPage({ searchParams }: Props) {
-  const selectedJamId = Array.isArray(searchParams.jam) ? searchParams.jam[0] : searchParams.jam
+  const sp = await searchParams
+  const selectedJamId = Array.isArray(sp.jam) ? sp.jam[0] : sp.jam
   const jams = await listJamsForCuration()
   const selectedJam = selectedJamId ? jams.find(j => j.id === selectedJamId) : null
   const projects = selectedJamId ? await listProjectsForJam(selectedJamId) : []

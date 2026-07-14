@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { Query } from 'node-appwrite'
 
 vi.mock('@/lib/appwrite/server', () => ({
   serverDatabases: {
@@ -35,6 +36,7 @@ import {
   deleteJam,
   deleteMessage,
   listAllJams,
+  listAllTeams,
 } from '@/lib/actions/admin'
 import { serverDatabases, serverTeams, serverUsers } from '@/lib/appwrite/server'
 
@@ -42,6 +44,7 @@ const mockGetDocument = vi.mocked(serverDatabases.getDocument)
 const mockUpdateDocument = vi.mocked(serverDatabases.updateDocument)
 const mockDeleteDocument = vi.mocked(serverDatabases.deleteDocument)
 const mockCreateDocument = vi.mocked(serverDatabases.createDocument)
+const mockListDocuments = vi.mocked(serverDatabases.listDocuments)
 const mockListMemberships = vi.mocked(serverTeams.listMemberships)
 const mockCreateMembership = vi.mocked(serverTeams.createMembership)
 const mockUpdateStatus = vi.mocked(serverUsers.updateStatus)
@@ -245,5 +248,46 @@ describe('requireAdmin — actions verrouillées', () => {
     mockAccountGet.mockResolvedValue({ $id: 'user-lambda' })
     mockListMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
     await expect(listAllJams()).rejects.toThrow('Accès réservé aux administrateurs.')
+  })
+})
+
+describe('listAllTeams', () => {
+  it('refuse un non-admin (throw message exact)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-lambda' })
+    mockListMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+    await expect(listAllTeams()).rejects.toThrow('Accès réservé aux administrateurs.')
+  })
+
+  it('retourne les équipes avec leurs membres groupés en une requête', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockListDocuments
+      .mockResolvedValueOnce({ total: 2, documents: [
+        { $id: 't1', jam_ids: [], name: 'Alpha', invite_code: 'KG-AAAAAAAA', leader_id: 'u1' },
+        { $id: 't2', jam_ids: [], name: 'Beta', invite_code: 'KG-BBBBBBBB', leader_id: 'u2' },
+      ] } as never)
+      .mockResolvedValueOnce({ total: 3, documents: [
+        { $id: 'm1', team_id: 't1', user_id: 'u1', name: 'Alice', role: 'dev', is_leader: true },
+        { $id: 'm2', team_id: 't1', user_id: 'u3', name: 'Carol', role: 'artist', is_leader: false },
+        { $id: 'm3', team_id: 't2', user_id: 'u2', name: 'Bob', role: 'dev', is_leader: true },
+      ] } as never)
+
+    const teams = await listAllTeams()
+
+    expect(teams).toHaveLength(2)
+    expect(teams[0].members).toHaveLength(2)
+    expect(teams[1].members.map(m => m.name)).toEqual(['Bob'])
+    expect(mockListDocuments).toHaveBeenCalledTimes(2) // pas de N+1
+  })
+
+  it('filtre par nom avec Query.contains quand search est fourni', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockListDocuments.mockResolvedValue({ total: 0, documents: [] } as never)
+
+    await listAllTeams('alpha')
+
+    expect(mockListDocuments).toHaveBeenCalledWith('konfitur-db', 'teams',
+      expect.arrayContaining([Query.contains('name', 'alpha')]))
   })
 })

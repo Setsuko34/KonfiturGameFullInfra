@@ -68,9 +68,21 @@ function mapDocToBannedIP(doc: {
   }
 }
 
+// ── Garde admin ────────────────────────────────────────────────────────────
+// Toute fonction exportée de ce fichier 'use server' est un endpoint public :
+// les logs exposent IPs, user agents et user IDs → accès réservé aux admins.
+async function requireAdminOrThrow(): Promise<void> {
+  const { account } = await createSessionClient()
+  const user = await account.get()
+  const memberships = await serverTeams.listMemberships(ADMIN_TEAM_ID)
+  const isAdmin = memberships.memberships.some(m => m.userId === user.$id)
+  if (!isAdmin) throw new Error('Accès réservé aux administrateurs')
+}
+
 // ── Lecture des logs ───────────────────────────────────────────────────────
 
 export async function getRecentLogs(type?: string, page = 0): Promise<AuditLog[]> {
+  await requireAdminOrThrow()
   const queries: string[] = [
     Query.orderDesc('$createdAt'),
     Query.limit(50),
@@ -85,6 +97,7 @@ export async function getRecentLogs(type?: string, page = 0): Promise<AuditLog[]
 // ── Stats par pays ─────────────────────────────────────────────────────────
 
 export async function getCountryStats(): Promise<{ country: string; count: number }[]> {
+  await requireAdminOrThrow()
   const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
     Query.equal('type', 'auth'),
     Query.orderDesc('$createdAt'),
@@ -153,6 +166,7 @@ export async function logAuthEvent(kind: 'login' | 'register'): Promise<void> {
 // ── Gestion IPs bannies ────────────────────────────────────────────────────
 
 export async function getBannedIPs(): Promise<BannedIP[]> {
+  await requireAdminOrThrow()
   const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.BANNED_IPS, [
     Query.orderDesc('$createdAt'),
     Query.limit(200),
@@ -167,6 +181,8 @@ export async function banIP(ip: string, reason: string): Promise<{ success: bool
   if (!/^[\d.:a-fA-F]+$/.test(cleaned)) return { success: false, error: 'Format IP invalide' }
 
   try {
+    // Garde dans le try : un non-admin reçoit { success: false, error } via le catch
+    await requireAdminOrThrow()
     const existing = await serverDatabases.listDocuments(
       DATABASE_ID, COLLECTIONS.BANNED_IPS, [Query.equal('ip', cleaned), Query.limit(1)]
     )
@@ -185,17 +201,13 @@ export async function banIP(ip: string, reason: string): Promise<{ success: bool
 }
 
 export async function unbanIP(bannedIPId: string): Promise<void> {
+  await requireAdminOrThrow()
   await serverDatabases.deleteDocument(DATABASE_ID, COLLECTIONS.BANNED_IPS, bannedIPId)
   revalidatePath('/admin/logs')
 }
 
 export async function clearOldLogs(olderThanDays = 30): Promise<{ deleted: number }> {
-  // Vérification admin — seuls les membres de l'équipe admin peuvent purger les logs
-  const { account } = await createSessionClient()
-  const user = await account.get()
-  const memberships = await serverTeams.listMemberships(ADMIN_TEAM_ID)
-  const isAdmin = memberships.memberships.some(m => m.userId === user.$id)
-  if (!isAdmin) throw new Error('Accès réservé aux administrateurs')
+  await requireAdminOrThrow()
 
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString()
   const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, [
