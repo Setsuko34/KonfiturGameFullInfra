@@ -36,6 +36,7 @@ Traefik v3.6.7 (ports 80 / 443)
          │
          ├── appwrite ──► MariaDB 10.11  (appwrite-net)
          ├── appwrite ──► Redis 7        (appwrite-net)
+         ├── appwrite ──► ClamAV 1.4     (scan antivirus des uploads)
          └── workers  ──► databases · mails · builds · functions
                           + appwrite-executor 0.11.4 (sandbox fonctions)
 ```
@@ -175,7 +176,7 @@ docker compose -f docker-compose.yml up -d
 
 Ordre de démarrage (géré par `depends_on`) :
 1. `mariadb` + `redis`
-2. `appwrite` + `appwrite-console` + `appwrite-realtime` + les workers (`databases`, `mails`, `builds`, `functions`) + `appwrite-executor`
+2. `appwrite` + `appwrite-console` + `appwrite-realtime` + les workers (`databases`, `mails`, `builds`, `functions`) + `appwrite-executor` + `clamav`
 3. `frontend`
 4. `traefik` (en parallèle)
 
@@ -208,8 +209,8 @@ Settings → Platforms → Add Platform → **Web** → Hostname : `konfiturgame
 | Section | État actuel | Déploiement |
 |---------|-------------|-------------|
 | `functions` | `update-jam-status` (cron toutes les 5 min, node-20) | CI auto sur push `main` |
-| `tables` | Capturé — 10 collections dans `appwrite.json` | `appwrite push tables` manuel (job CI `deploy-schema` à activer, voir `CI-CD.md`) |
-| `buckets` | Capturé — 3 buckets dans `appwrite.json` | `appwrite push buckets` manuel |
+| `tables` | Capturé — 10 collections dans `appwrite.json` | CI auto sur push `main` si `appwrite.json` modifié (job `deploy-schema`, voir `CI-CD.md`) |
+| `buckets` | Capturé — 4 buckets dans `appwrite.json` | `appwrite push buckets` manuel |
 | `teams` | Capturé — team `admins` | `appwrite push teams` manuel |
 
 ### 4.5 — Installer et configurer l'Appwrite CLI
@@ -231,7 +232,7 @@ appwrite client \
 # Schéma (10 collections) — 'collections' est déprécié, utiliser 'tables'
 appwrite push tables --force
 
-# Buckets Storage (jam-covers 2 Mo, project-assets 10 Mo, avatars 1 Mo)
+# Buckets Storage (jam-covers 2 Mo, project-assets 10 Mo, project-builds 150 Mo, avatars 1 Mo)
 appwrite push buckets
 
 # Team admins (accès /admin)
@@ -262,7 +263,7 @@ Settings → API Keys → **Create API Key** :
 | Usage | Scopes minimaux |
 |-------|----------------|
 | Clé `.env` (backend Next.js) | `databases.read`, `databases.write`, `storage.read`, `storage.write`, `users.read`, `users.write` |
-| Clé CI GitHub (`APPWRITE_API_KEY` secret) | `functions.read`, `functions.write` — à étendre avec `databases.read`, `databases.write` lors de l'activation du job `deploy-schema` (voir `CI-CD.md`) |
+| Clé CI GitHub (`APPWRITE_API_KEY` secret) | `functions.read`, `functions.write`, `databases.read`, `databases.write` (requis par le job `deploy-schema`, voir `CI-CD.md`) |
 
 Copier la clé backend dans `.env` → `APPWRITE_API_KEY`.
 Clé CI → `gh secret set APPWRITE_API_KEY --body "<la-clé>"`.
@@ -587,4 +588,4 @@ SITE                   → https://konfiturgame.fr
 
 ---
 
-*KonfiturGame · Next.js 16.2.9 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-08*
+*KonfiturGame · Next.js 16.2.9 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-14*

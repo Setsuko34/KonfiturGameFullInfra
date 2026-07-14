@@ -37,7 +37,7 @@ KonfiturGame est une **plateforme web de game jams** (compétitions de création
 - Désigner un podium (top 3) par jam, côté organisateur
 - Chatter en temps réel pendant la jam
 - Gérer son profil utilisateur
-- Administrer la plateforme (utilisateurs, modération, logs, ban IP)
+- Administrer la plateforme (utilisateurs, jams, équipes, modération, logs, ban IP — actions admin journalisées)
 
 **Stack principale :**
 
@@ -125,6 +125,9 @@ Depuis la 1.9, plusieurs workers dédiés sont requis (sans eux, certaines featu
 | `appwrite-worker-builds` | Compilation des fonctions |
 | `appwrite-worker-functions` | Exécution des fonctions (cron, triggers) |
 | `appwrite-executor` | Sandbox d'exécution des fonctions (image `openruntimes/executor`) |
+
+### ClamAV
+Scan antivirus des fichiers uploadés (`clamav/clamav:1.4`) — utilisé par le bucket `project-builds` (`antivirus: true`). Partage le volume `appwrite-uploads` en lecture seule avec Appwrite (clamd reçoit un chemin de fichier, pas le contenu).
 
 ### MariaDB
 Base de données d'Appwrite. On n'interagit jamais directement avec elle — tout passe par Appwrite.
@@ -272,15 +275,20 @@ src/app/
 │   ├── layout.tsx              ← Vérification appartenance équipe admin
 │   ├── page.tsx                ← /admin — Statistiques globales
 │   ├── AdminSidebar.tsx
-│   ├── users/page.tsx
+│   ├── users/page.tsx          ← Recherche + liste des utilisateurs
 │   ├── jams/
-│   │   ├── page.tsx
-│   │   └── DeleteJamButton.tsx
-│   ├── moderation/page.tsx
-│   ├── featured/page.tsx
+│   │   ├── page.tsx            ← Liste filtrable par statut + lien « Gérer »
+│   │   ├── DeleteJamButton.tsx
+│   │   └── [jamId]/            ← /admin/jams/:id — Gestion d'une jam (superpouvoirs)
+│   │       ├── page.tsx        ← Édition de n'importe quelle jam + équipes + projets
+│   │       ├── AdminTeamActions.tsx    ← Renommer / retirer un membre / dissoudre
+│   │       └── AdminProjectActions.tsx ← Retirer la soumission d'un projet
+│   ├── teams/page.tsx          ← /admin/teams — Toutes les équipes (recherche + actions)
+│   ├── moderation/page.tsx     ← Signalements avec liens de contexte + retrait de soumission
+│   ├── featured/page.tsx       ← Mises en avant + podium (« Gagnants »)
 │   ├── announcements/page.tsx
 │   └── logs/
-│       ├── page.tsx            ← /admin/logs — Logs d'audit + IPs bannies
+│       ├── page.tsx            ← /admin/logs — Logs d'audit filtrables par type + IPs bannies
 │       ├── BanIPForm.tsx
 │       ├── UnbanButton.tsx
 │       └── ClearLogsButton.tsx
@@ -311,12 +319,13 @@ src/lib/
 │   ├── announcements.ts    ← CRUD annonces
 │   ├── dashboard.ts        ← getUserTeams, getUserParticipations
 │   ├── home.ts             ← Stats page d'accueil (jams en cours, gagnants)
-│   ├── admin.ts            ← Actions admin (modération, featured, setProjectPlacement)
-│   ├── logs.ts             ← Logs d'audit + ban/unban IP
+│   ├── admin.ts            ← Actions admin (modération, featured, setProjectPlacement, listAllJams, listAllTeams) — garde `requireAdminOrThrow`
+│   ├── logs.ts             ← Logs d'audit + ban/unban IP — lectures et écritures gardées admin
 │   ├── profile.ts          ← Server Actions profil (nom, bio, mdp, suppression compte)
 │   └── profile.client.ts   ← Upload avatar (côté client)
 │
 ├── validators.ts           ← Validateurs profil, jam
+├── jam-status.ts           ← computeJamStatus(start, end) — statut calculé depuis les dates
 ├── seo.ts                  ← Helpers JSON-LD (generateJamJsonLd, generateProjectJsonLd…)
 ├── bot-detection.ts        ← Détection bots (User-Agent, patterns URL) — Edge-compatible
 └── mockData.ts             ← Données de démonstration (fallback)
@@ -324,17 +333,7 @@ src/lib/
 
 ### Tests unitaires (`src/__tests__/`)
 
-| Fichier | Couvre |
-|---------|--------|
-| `appwrite-mappers.test.ts` | Mappers Appwrite → types TS |
-| `profile-validators.test.ts` | validateUpdateProfile* |
-| `actions-profile.test.ts` | updateProfileName, updateProfileBio |
-| `actions-chat.test.ts` | sendMessage, pinMessage, reportMessage |
-| `actions-teams.test.ts` | createTeam, joinTeamByCode, getTeamsByJam |
-| `actions-projects.test.ts` | toggleLike (like/unlike, compteur jamais négatif) |
-| `actions-home.test.ts` | getHomePageData (placement réel des gagnants) |
-| `bot-detection.test.ts` | Détection bots (User-Agent + URL patterns) |
-| `seo.test.ts` | JSON-LD helpers |
+**196 tests** répartis sur 15 fichiers (mappers, validators, actions — profil, chat, teams, projects, home, dashboard, announcements, admin, logs —, gardes, URLs de fichiers, bot-detection, SEO). Détail par fichier : `docs/TODO.md → TESTS`.
 
 ### Tests end-to-end (`e2e/`)
 
@@ -591,7 +590,8 @@ Base de données : konfitur-db
 | Bucket ID | Contenu | Taille max |
 |-----------|---------|-----------|
 | `jam-covers` | Images de couverture des jams | 2 Mo |
-| `project-assets` | Screenshots et builds | 10 Mo |
+| `project-assets` | Covers et screenshots des projets | 10 Mo |
+| `project-builds` | Builds jouables (zip) — scan ClamAV | 150 Mo |
 | `avatars` | Photos de profil | 1 Mo |
 
 ### Realtime (chat en direct)
@@ -861,4 +861,4 @@ SITE (prod)             → https://konfiturgame.fr
 
 ---
 
-*KonfiturGame · Next.js 16.2.9 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-08*
+*KonfiturGame · Next.js 16.2.9 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-14*

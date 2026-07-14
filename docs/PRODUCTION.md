@@ -11,7 +11,7 @@ L'infrastructure Appwrite est progressivement versionnée dans `appwrite.json` (
 | Phase | Ressource | État |
 |-------|-----------|------|
 | Phase 1 | Fonctions (`functions/**`) | Actif — CI déploie sur push `main` |
-| Phase 2 | Tables / Schéma | Capturé dans `appwrite.json` — push manuel (`appwrite push tables`), job CI à activer (`docs/MISE-A-JOUR.md §7`) |
+| Phase 2 | Tables / Schéma | Actif — CI déploie sur push `main` si `appwrite.json` modifié (`docs/MISE-A-JOUR.md §7`) |
 | Phase 3 | Buckets + Teams | Capturés dans `appwrite.json` — push manuel |
 
 ## Rappel des URL de production
