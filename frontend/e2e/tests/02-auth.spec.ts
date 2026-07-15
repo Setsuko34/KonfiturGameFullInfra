@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { test as authTest } from '../fixtures/auth'
 import { TEST_USERS } from '../fixtures/test-data'
 
 // Module 1 — Authentification
@@ -7,6 +8,14 @@ import { TEST_USERS } from '../fixtures/test-data'
 test.describe('1.1 — Inscription email/mot de passe', () => {
   test.use({ storageState: { cookies: [], origins: [] } }) // contexte anonyme
 
+  // Bloque les vrais envois SMTP (les @test.local bounceraient chez Resend)
+  // tout en laissant le test vérifier que l'appel part bien.
+  test.beforeEach(async ({ page }) => {
+    await page.route('**/account/verifications/email', route =>
+      route.fulfill({ status: 201, contentType: 'application/json', body: '{}' })
+    )
+  })
+
   test('inscription avec données valides redirige vers accueil', async ({ page }) => {
     await page.goto('/auth/register')
     await expect(page.locator('h1')).toContainText('Créer un compte')
@@ -14,7 +23,13 @@ test.describe('1.1 — Inscription email/mot de passe', () => {
     await page.locator('#name').fill(TEST_USERS.regTest.name)
     await page.locator('#email').fill(TEST_USERS.regTest.email)
     await page.locator('#password').fill(TEST_USERS.regTest.password)
+    // Issue #70 : l'inscription doit déclencher l'envoi de l'email de vérification
+    const verificationSent = page.waitForRequest(
+      req => req.url().includes('/account/verifications/email') && req.method() === 'POST',
+      { timeout: 15_000 }
+    )
     await page.locator('button[type="submit"]').click()
+    await verificationSent
 
     await page.waitForURL(url => !url.pathname.startsWith('/auth'), { timeout: 15_000 })
     // Session active — le bouton login ne doit plus apparaître
@@ -201,5 +216,44 @@ test.describe('1.3 — Mot de passe oublié', () => {
     await page.locator('#confirm-password').fill('Different456!')
     await page.getByRole('button', { name: 'Réinitialiser le mot de passe' }).click()
     await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toContainText('Les mots de passe ne correspondent pas')
+  })
+})
+
+test.describe('1.4 — Vérification d\'adresse email', () => {
+  test.use({ storageState: { cookies: [], origins: [] } }) // contexte anonyme
+
+  test('verify-email sans paramètres affiche le message de lien invalide', async ({ page }) => {
+    await page.goto('/auth/verify-email')
+    await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])'))
+      .toContainText('Lien invalide ou expiré')
+  })
+
+  test('verify-email avec des paramètres bidons affiche le message de lien invalide', async ({ page }) => {
+    await page.goto('/auth/verify-email?userId=fake&secret=fake')
+    await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])'))
+      .toContainText('Lien invalide ou expiré', { timeout: 10_000 })
+  })
+
+  test('verify-email en erreur sans session propose la connexion, pas le renvoi', async ({ page }) => {
+    await page.goto('/auth/verify-email')
+    await expect(page.getByRole('link', { name: 'Se connecter pour renvoyer un lien' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Renvoyer l\'email de vérification' })).toHaveCount(0)
+  })
+})
+
+authTest.describe('1.4bis — Renvoi du lien de vérification (connecté)', () => {
+  authTest('le bouton renvoyer déclenche un nouvel envoi et confirme', async ({ user1Page: page }) => {
+    // Bloque le vrai envoi SMTP (contrainte globale : jamais de bounce @test.local)
+    await page.route('**/account/verifications/email', route =>
+      route.fulfill({ status: 201, contentType: 'application/json', body: '{}' })
+    )
+    await page.goto('/auth/verify-email')
+    const resendRequest = page.waitForRequest(
+      req => req.url().includes('/account/verifications/email') && req.method() === 'POST',
+      { timeout: 10_000 }
+    )
+    await page.getByRole('button', { name: 'Renvoyer l\'email de vérification' }).click()
+    await resendRequest
+    await expect(page.getByRole('status')).toContainText('Un nouvel email de vérification vient d\'être envoyé')
   })
 })
