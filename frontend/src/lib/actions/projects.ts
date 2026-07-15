@@ -48,7 +48,7 @@ export async function submitProject(data: {
     // (le champ `status` stocké n'est jamais mis à jour au démarrage de la jam)
     const jam = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, data.jamId)
     if (computeJamStatus(new Date(jam.start_date), new Date(jam.end_date)) !== 'ongoing') {
-      return { success: false, error: 'La jam n\'est pas en cours — le projet est figé.' }
+      return { success: false, error: 'La jam n\'est pas en cours, le projet est figé.' }
     }
 
     // Appartenance à l'équipe
@@ -285,7 +285,7 @@ export async function unsubmitProject(
     if (isMember) {
       // Membre : même verrou temporel que submitProject
       if (computeJamStatus(new Date(jamDoc.start_date), new Date(jamDoc.end_date)) !== 'ongoing') {
-        return { success: false, error: 'La jam n\'est pas en cours — le projet est figé.' }
+        return { success: false, error: 'La jam n\'est pas en cours, le projet est figé.' }
       }
     } else {
       isAdmin = await isAdminUser(user.$id)

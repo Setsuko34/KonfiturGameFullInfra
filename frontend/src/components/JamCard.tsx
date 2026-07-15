@@ -45,7 +45,7 @@ export default function JamCard({ jam, variant = 'default' }: JamCardProps) {
         border: '1px solid var(--border)',
         display: 'block',
       }}
-      aria-label={`${jam.title} — ${status.label}`}
+      aria-label={`${jam.title} (${status.label})`}
     >
       {/* Contenu */}
       <div className={`p-5 ${isFeatured ? 'p-6' : ''}`}>

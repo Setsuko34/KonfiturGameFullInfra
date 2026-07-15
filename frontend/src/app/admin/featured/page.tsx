@@ -92,7 +92,7 @@ export default async function AdminFeaturedPage({ searchParams }: Props) {
       {selectedJam && (
         <section>
           <h2 className="text-base font-semibold mb-1 pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
-            Gagnants — {selectedJam.title}
+            Gagnants ({selectedJam.title})
           </h2>
           <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
             {projects.length} projet(s) soumis

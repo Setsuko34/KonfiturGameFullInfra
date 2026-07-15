@@ -113,7 +113,7 @@ test.describe('8.5 — Corrections dashboard (chantier F)', () => {
     await page.goto('/admin/featured')
     // Cliquer le lien Gagnants de la jam terminée (podium ouvrable)
     await page.goto(`/admin/featured?jam=${ids.jamEndedId}`)
-    await expect(page.locator('body')).toContainText('Gagnants — [E2E] Jam Terminée', { timeout: 15_000 })
+    await expect(page.locator('body')).toContainText('Gagnants ([E2E] Jam Terminée)', { timeout: 15_000 })
   })
 
   test("/admin/teams liste les équipes et l'entrée sidebar existe", async ({ adminPage: page }) => {

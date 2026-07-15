@@ -273,7 +273,7 @@ describe('submitProject — verrou temporel', () => {
     } as never)
     const res = await submitProject({ jamId: 'j1', teamId: 't1', title: 'X', description: 'D', technologies: [] })
     expect(res.success).toBe(false)
-    expect(res.error).toBe('La jam n\'est pas en cours — le projet est figé.')
+    expect(res.error).toBe('La jam n\'est pas en cours, le projet est figé.')
     expect(mockCreate).not.toHaveBeenCalled()
     expect(mockUpdate).not.toHaveBeenCalled()
   })
@@ -286,7 +286,7 @@ describe('submitProject — verrou temporel', () => {
     } as never)
     const res = await submitProject({ jamId: 'j1', teamId: 't1', title: 'X', description: 'D', technologies: [] })
     expect(res.success).toBe(false)
-    expect(res.error).toBe('La jam n\'est pas en cours — le projet est figé.')
+    expect(res.error).toBe('La jam n\'est pas en cours, le projet est figé.')
     expect(mockList).not.toHaveBeenCalled() // le verrou court-circuite avant le check d'équipe
     expect(mockCreate).not.toHaveBeenCalled()
   })
@@ -368,7 +368,7 @@ describe('unsubmitProject', () => {
 
     const res = await unsubmitProject('p1')
 
-    expect(res).toEqual({ success: false, error: 'La jam n\'est pas en cours — le projet est figé.' })
+    expect(res).toEqual({ success: false, error: 'La jam n\'est pas en cours, le projet est figé.' })
     expect(mockUpdate).not.toHaveBeenCalled()
   })
 

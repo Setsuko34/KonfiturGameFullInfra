@@ -39,7 +39,7 @@ export default function Header() {
             href="/"
             className="flex items-center gap-2 font-bold text-lg"
             style={{ color: 'var(--foreground)', fontFamily: 'var(--font-sans)' }}
-            aria-label="KonfiturGame — Accueil"
+            aria-label="KonfiturGame, Accueil"
           >
             <Image
               src="/hautequalite.svg"

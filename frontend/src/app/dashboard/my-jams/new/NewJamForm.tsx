@@ -189,7 +189,7 @@ export default function NewJamForm() {
             style={{ ...inputStyle, borderStyle: 'dashed', color: 'var(--muted-foreground)' }}
           >
             <ImageIcon size={16} aria-hidden="true" />
-            {coverFile ? coverFile.name : 'Choisir une image (JPG, PNG, WebP — max 5 Mo)'}
+            {coverFile ? coverFile.name : 'Choisir une image (JPG, PNG, WebP, max 5 Mo)'}
           </button>
           {coverPreview && (
             <Image

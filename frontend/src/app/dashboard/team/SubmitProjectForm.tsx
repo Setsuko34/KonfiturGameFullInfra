@@ -79,7 +79,7 @@ export default function SubmitProjectForm({ jamId, jamTitle, teamId, existingPro
       >
         <div className="flex items-center gap-2 mb-2">
           <CheckCircle size={16} style={{ color: 'var(--success)' }} aria-hidden="true" />
-          <p className="label-tech" style={{ color: 'var(--success)' }}>PROJET SOUMIS — {jamTitle}</p>
+          <p className="label-tech" style={{ color: 'var(--success)' }}>PROJET SOUMIS ({jamTitle})</p>
         </div>
         <p className="font-bold text-base">{title || existingProject?.title}</p>
         <p className="text-sm mt-1" style={{ color: 'var(--muted-foreground)' }}>
@@ -102,7 +102,7 @@ export default function SubmitProjectForm({ jamId, jamTitle, teamId, existingPro
     <div className="p-5 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
       <h2 className="text-base font-bold mb-4 flex items-center gap-2">
         <Package size={16} aria-hidden="true" />
-        Soumettre mon projet — {jamTitle}
+        Soumettre mon projet ({jamTitle})
       </h2>
 
       {error && (
@@ -196,7 +196,7 @@ export default function SubmitProjectForm({ jamId, jamTitle, teamId, existingPro
               onUploaded={id => setCoverFileId(id)} onRemoved={() => setCoverFileId(undefined)}
               onBusyChange={busy => setUploadsBusy(n => n + (busy ? 1 : -1))}
               initialFileId={existingProject?.coverImage} />
-            <FileUploadField label="BUILD DU JEU — .ZIP (optionnel)" bucketId={BUCKETS.PROJECT_BUILDS}
+            <FileUploadField label="BUILD DU JEU (.ZIP, optionnel)" bucketId={BUCKETS.PROJECT_BUILDS}
               accept=".zip" maxSizeMo={150} userId={user.$id}
               onUploaded={id => setBuildFileId(id)} onRemoved={() => setBuildFileId(undefined)}
               onBusyChange={busy => setUploadsBusy(n => n + (busy ? 1 : -1))}
@@ -237,7 +237,7 @@ export default function SubmitProjectForm({ jamId, jamTitle, teamId, existingPro
 
         <details className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
           <summary className="cursor-pointer" style={{ color: 'var(--primary)' }}>
-            Publier sur itch.io — comment faire ?
+            Publier sur itch.io : comment faire ?
           </summary>
           <ol className="mt-2 ml-4 space-y-1 list-decimal">
             <li>Crée un compte sur itch.io puis « Upload new project »</li>

@@ -92,13 +92,13 @@ export default async function ManageJamPage({ params }: Props) {
           Projets soumis ({projects.filter(p => p.submitted).length})
           {!jamEnded && (
             <span className="ml-2 text-xs font-normal" style={{ color: 'var(--muted-foreground)' }}>
-              — Podium ouvrable après la fin de la jam
+              (Podium ouvrable après la fin de la jam)
             </span>
           )}
         </h2>
         {jamEnded && (
           <p className="text-xs mb-3" style={{ color: 'var(--muted-foreground)' }}>
-            Désigne le top 3 — reclique un rang pour le retirer
+            Désigne le top 3 (reclique un rang pour le retirer)
           </p>
         )}
         {projects.filter(p => p.submitted).length === 0 ? (
