@@ -7,6 +7,7 @@ import { Gamepad2, Eye, EyeOff, Check, X } from 'lucide-react'
 import { OAuthProvider } from 'appwrite'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { logAuthEvent } from '@/lib/actions/logs'
+import { account } from '@/lib/appwrite/client'
 
 const passwordRequirements = [
   { test: (p: string) => p.length >= 8, label: 'Au moins 8 caractères' },
@@ -61,6 +62,10 @@ export default function RegisterPage() {
     try {
       await register(email, password, name)
       void logAuthEvent('register') // best effort — ne bloque jamais la suite
+      // Issue #70 : email de vérification, best effort (ne bloque jamais l'inscription)
+      void account
+        .createVerification(`${window.location.origin}/auth/verify-email`)
+        .catch(() => {})
       // La mise à jour de `user` déclenche le useEffect ci-dessus
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ''
