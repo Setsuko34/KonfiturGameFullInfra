@@ -3,9 +3,10 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { Menu, X, LogIn, LayoutDashboard, LogOut } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
+import { useFocusTrap } from '@/hooks/useFocusTrap'
 
 const navLinks = [
   { href: '/', label: 'Accueil' },
@@ -16,6 +17,9 @@ export default function Header() {
   const pathname = usePathname()
   const { user, logout, loading } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
+  const closeMenu = useCallback(() => setMenuOpen(false), [])
+  useFocusTrap(menuOpen, mobileMenuRef, closeMenu)
 
   const handleLogout = async () => {
     await logout()
@@ -148,6 +152,7 @@ export default function Header() {
       {menuOpen && (
         <div
           id="mobile-menu"
+          ref={mobileMenuRef}
           role="dialog"
           aria-modal="true"
           aria-label="Menu de navigation"
