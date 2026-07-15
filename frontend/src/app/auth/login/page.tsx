@@ -152,13 +152,16 @@ function LoginForm() {
           )}
 
           <form onSubmit={handleSubmit} noValidate>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
+              <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span> champ obligatoire
+            </p>
             {/* Email */}
             <div className="mb-4">
               <label
                 htmlFor="email"
                 className="block text-sm font-medium mb-2"
               >
-                Adresse e-mail
+                Adresse e-mail <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span>
               </label>
               <input
                 id="email"
@@ -181,7 +184,7 @@ function LoginForm() {
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
                 <label htmlFor="password" className="block text-sm font-medium">
-                  Mot de passe
+                  Mot de passe <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span>
                 </label>
                 <Link
                   href="/auth/forgot-password"

@@ -153,10 +153,13 @@ export default function RegisterPage() {
           )}
 
           <form onSubmit={handleSubmit} noValidate>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
+              <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span> champ obligatoire
+            </p>
             {/* Pseudo */}
             <div className="mb-4">
               <label htmlFor="name" className="block text-sm font-medium mb-2">
-                Pseudo
+                Pseudo <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span>
               </label>
               <input
                 id="name"
@@ -180,7 +183,7 @@ export default function RegisterPage() {
             {/* Email */}
             <div className="mb-4">
               <label htmlFor="email" className="block text-sm font-medium mb-2">
-                Adresse e-mail
+                Adresse e-mail <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span>
               </label>
               <input
                 id="email"
@@ -202,7 +205,7 @@ export default function RegisterPage() {
             {/* Mot de passe */}
             <div className="mb-4">
               <label htmlFor="password" className="block text-sm font-medium mb-2">
-                Mot de passe
+                Mot de passe <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span>
               </label>
               <div className="relative">
                 <input
