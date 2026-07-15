@@ -73,6 +73,12 @@ services:
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.routers.frontend.middlewares=security-headers,rate-limit,compress-response"
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+      # Rate limit strict sur les pages d'authentification (issue #67)
+      - "traefik.http.routers.frontend-auth.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)) && PathPrefix(`/auth`)"
+      - "traefik.http.routers.frontend-auth.entrypoints=websecure"
+      - "traefik.http.routers.frontend-auth.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.frontend-auth.middlewares=security-headers,auth-rate-limit,compress-response"
+      - "traefik.http.routers.frontend-auth.service=frontend"
     depends_on:
       - appwrite
 
@@ -143,6 +149,12 @@ services:
       - "traefik.http.routers.appwrite.tls.certresolver=letsencrypt"
       - "traefik.http.routers.appwrite.middlewares=security-headers,appwrite-rate-limit"
       - "traefik.http.services.appwrite.loadbalancer.server.port=80"
+      # Rate limit strict sur les créations de session (login email + OAuth callback)
+      - "traefik.http.routers.appwrite-auth.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/v1/account/sessions`)"
+      - "traefik.http.routers.appwrite-auth.entrypoints=websecure"
+      - "traefik.http.routers.appwrite-auth.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.appwrite-auth.middlewares=security-headers,auth-rate-limit"
+      - "traefik.http.routers.appwrite-auth.service=appwrite"
     depends_on:
       - mariadb
       - redis

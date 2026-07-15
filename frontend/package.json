@@ -39,11 +39,5 @@
     "typescript": "^5.7.2",
     "vitest": "^4.1.0"
   },
-  "packageManager": "pnpm@9.15.0",
-  "pnpm": {
-    "overrides": {
-      "postcss@<8.5.10": ">=8.5.10",
-      "brace-expansion@<1.1.15": "1.1.15"
-    }
-  }
+  "packageManager": "pnpm@11.13.0"
 }

@@ -67,6 +67,7 @@ Décisions notables :
 |------------|---------|-------|-------|
 | `rate-limit` | 100 req/min | 200 | Frontend |
 | `appwrite-rate-limit` | 50 req/min | 100 | API Appwrite |
+| `auth-rate-limit` | 10 req/min | 20 | Pages `/auth/*` + endpoint Appwrite `/v1/account/sessions` (anti brute-force login) |
 
 Limites par IP source. Protègent contre scraping, brute-force et déni de service à faible débit.
 
