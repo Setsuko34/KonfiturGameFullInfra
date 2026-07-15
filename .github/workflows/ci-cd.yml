@@ -30,7 +30,7 @@ jobs:
           package_json_file: frontend/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -51,7 +51,7 @@ jobs:
           package_json_file: frontend/package.json
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
           cache-dependency-path: frontend/pnpm-lock.yaml
       - run: pnpm install --frozen-lockfile
@@ -127,6 +127,10 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: frontend/package.json
+      # pnpm 11 exige node >= 22.13 — ne pas dépendre du node par défaut du runner
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: pnpm audit
         run: pnpm -C frontend audit --prod --json > pnpm-audit.json || true
       - name: Trivy fs (CVE dépendances)
@@ -150,7 +154,13 @@ jobs:
         run: |
           AUDIT=0
           if [ -f pnpm-audit.json ]; then
-            AUDIT=$(jq '[.metadata.vulnerabilities[]] | add // 0' pnpm-audit.json)
+            # Si l'audit n'a pas pu tourner (erreur réseau/registre), échouer explicitement
+            if jq -e '.error' pnpm-audit.json >/dev/null; then
+              echo "### Audit dépendances : pnpm audit n'a pas pu s'exécuter" >> "$GITHUB_STEP_SUMMARY"
+              jq -r '.error.message // .error' pnpm-audit.json >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+            AUDIT=$(jq '[.metadata.vulnerabilities // {} | .[]] | add // 0' pnpm-audit.json)
           fi
           TRIVY=0
           if [ -f trivy-fs.json ]; then

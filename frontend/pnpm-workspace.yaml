@@ -1,0 +1,11 @@
+# Config pnpm (pnpm >= 10 lit overrides/allowBuilds ici, plus dans package.json)
+overrides:
+  "postcss@<8.5.10": ">=8.5.10"
+  "brace-expansion@<1.1.15": 1.1.15
+
+# pnpm >= 10 bloque les scripts postinstall par défaut — allowlist explicite,
+# sinon sharp/esbuild installés sans leurs binaires natifs (build Next cassé).
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
