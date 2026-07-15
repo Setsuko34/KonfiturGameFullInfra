@@ -65,6 +65,25 @@ test.describe('1.1 — Inscription email/mot de passe', () => {
     // La validation client-côté bloque la soumission et affiche l'erreur
     await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toBeVisible({ timeout: 5_000 })
   })
+
+  test('les critères de mot de passe montrent X quand non satisfaits, Check quand satisfaits', async ({ page }) => {
+    await page.goto('/auth/register')
+    const pwd = page.locator('#password')
+    await pwd.click() // déclenche onFocus → passwordTouched → liste visible
+
+    const requirements = page.locator('#password-requirements li')
+    await expect(requirements.first()).toBeVisible()
+
+    // Champ vide : tous les critères non satisfaits → aucune coche, que des X
+    await expect(page.locator('#password-requirements [data-icon="check"]')).toHaveCount(0)
+    const totalCriteria = await requirements.count()
+    await expect(page.locator('#password-requirements [data-icon="x"]')).toHaveCount(totalCriteria)
+
+    // Mot de passe fort : tous satisfaits → que des Check
+    await pwd.fill('MotDePasseSolide123!')
+    await expect(page.locator('#password-requirements [data-icon="x"]')).toHaveCount(0)
+    await expect(page.locator('#password-requirements [data-icon="check"]')).toHaveCount(totalCriteria)
+  })
 })
 
 test.describe('1.2 — Connexion email/mot de passe', () => {
