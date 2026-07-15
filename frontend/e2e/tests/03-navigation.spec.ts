@@ -104,3 +104,31 @@ test.describe('2.3 — Page de détail d\'une jam', () => {
     await expect(page.locator('body')).toContainText(/404|introuvable|not found/i)
   })
 })
+
+test.describe('2.4 — Menu mobile : focus trap (WCAG 2.1.2)', () => {
+  test.use({ viewport: { width: 390, height: 844 } })
+
+  test('Escape ferme le menu et restitue le focus au bouton burger', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Ouvrir le menu' }).click()
+    await expect(page.locator('#mobile-menu')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(page.locator('#mobile-menu')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Ouvrir le menu' })).toBeFocused()
+  })
+
+  test('Tab boucle à l\'intérieur du menu ouvert', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Ouvrir le menu' }).click()
+    await expect(page.locator('#mobile-menu')).toBeVisible()
+
+    // Le focus initial est déjà DANS le menu (premier lien)
+    for (let i = 0; i < 12; i++) {
+      await page.keyboard.press('Tab')
+      const inside = await page.evaluate(() =>
+        document.getElementById('mobile-menu')?.contains(document.activeElement) ?? false)
+      expect(inside, `Tab n°${i + 1} a fait sortir le focus du menu`).toBe(true)
+    }
+  })
+})
