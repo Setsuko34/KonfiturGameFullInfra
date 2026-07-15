@@ -34,6 +34,14 @@ http:
         burst: 100
         period: 1m
 
+    # Anti brute-force login (issue #67) : limite stricte par IP sur les
+    # surfaces d'authentification. 10 tentatives/min, tolérance rafale 20.
+    auth-rate-limit:
+      rateLimit:
+        average: 10
+        burst: 20
+        period: 1m
+
     compress-response:
       compress: {}
 
