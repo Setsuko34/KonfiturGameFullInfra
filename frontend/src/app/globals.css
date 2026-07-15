@@ -13,6 +13,7 @@
   --primary-foreground: #FFFFFF;
   --primary-muted: #2A3A7A;
   --secondary: #EF233C;
+  --error: #FF6B81; /* Texte d'erreur — ratio ≈7:1 sur fond composité (WCAG 1.4.3 AA, issue #50) */
   --secondary-foreground: #FFFFFF;
   --success: #34D399;
   --success-foreground: #0C1018;

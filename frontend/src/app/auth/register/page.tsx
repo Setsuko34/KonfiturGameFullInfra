@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { Gamepad2, Eye, EyeOff, Check } from 'lucide-react'
+import { Gamepad2, Eye, EyeOff, Check, X } from 'lucide-react'
 import { OAuthProvider } from 'appwrite'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { logAuthEvent } from '@/lib/actions/logs'
@@ -249,10 +249,13 @@ export default function RegisterPage() {
                       <li
                         key={req.label}
                         className="flex items-center gap-2 text-xs"
-                        style={{ color: ok ? 'var(--success)' : 'var(--muted-foreground)' }}
+                        style={{ color: ok ? 'var(--success)' : 'var(--error)' }}
                         aria-label={`${req.label} : ${ok ? 'satisfait' : 'non satisfait'}`}
                       >
-                        <Check size={11} aria-hidden="true" />
+                        {ok
+                          ? <Check size={11} aria-hidden="true" data-icon="check" />
+                          : <X size={11} aria-hidden="true" data-icon="x" />
+                        }
                         {req.label}
                       </li>
                     )
