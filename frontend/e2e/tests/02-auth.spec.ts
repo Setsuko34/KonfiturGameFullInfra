@@ -115,6 +115,17 @@ test.describe('1.2 — Connexion email/mot de passe', () => {
     await page.waitForURL(url => !url.pathname.startsWith('/auth'), { timeout: 15_000 })
   })
 
+  test('les boutons ont cursor pointer (not-allowed si désactivés)', async ({ page }) => {
+    await page.goto('/auth/login')
+    // Bouton submit désactivé tant que les champs sont vides
+    const submit = page.getByRole('button', { name: 'Se connecter' })
+    expect(await submit.evaluate(el => getComputedStyle(el).cursor)).toBe('not-allowed')
+
+    // Bouton actif (afficher/masquer le mot de passe)
+    const toggle = page.getByRole('button', { name: 'Afficher le mot de passe' })
+    expect(await toggle.evaluate(el => getComputedStyle(el).cursor)).toBe('pointer')
+  })
+
   test('/dashboard redirige vers login si non connecté', async ({ page }) => {
     await page.goto('/dashboard')
     await expect(page).toHaveURL(/\/auth\/login\?redirect=.*dashboard/)
