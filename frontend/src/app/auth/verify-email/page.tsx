@@ -15,7 +15,7 @@ function VerifyEmailContent() {
   const [status, setStatus] = useState<'pending' | 'success' | 'error'>(
     !userId || !secret ? 'error' : 'pending'
   )
-  const [resend, setResend] = useState<'idle' | 'sending' | 'sent' | 'failed'>('idle')
+  const [resend, setResend] = useState<'idle' | 'sending' | 'sent' | 'failed' | 'already'>('idle')
 
   useEffect(() => {
     if (!userId || !secret) return
@@ -30,8 +30,9 @@ function VerifyEmailContent() {
     try {
       await account.createVerification(`${window.location.origin}/auth/verify-email`)
       setResend('sent')
-    } catch {
-      setResend('failed')
+    } catch (err: unknown) {
+      // 409 : l'email est déjà vérifié, il n'y a rien à renvoyer
+      setResend((err as { code?: number })?.code === 409 ? 'already' : 'failed')
     }
   }
 
@@ -49,6 +50,21 @@ function VerifyEmailContent() {
         <p role="status" aria-live="polite" className="p-3 mb-6 text-sm border"
           style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
           Votre adresse e-mail est vérifiée. Merci !
+        </p>
+        <Link href="/" className="inline-flex items-center justify-center w-full py-3 min-h-11 font-bold text-sm"
+          style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}>
+          Retour à l&apos;accueil
+        </Link>
+      </div>
+    )
+  }
+
+  if (resend === 'already') {
+    return (
+      <div>
+        <p role="status" aria-live="polite" className="p-3 mb-6 text-sm border"
+          style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
+          Votre adresse e-mail est déjà vérifiée.
         </p>
         <Link href="/" className="inline-flex items-center justify-center w-full py-3 min-h-11 font-bold text-sm"
           style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}>
