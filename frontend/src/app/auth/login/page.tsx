@@ -33,6 +33,7 @@ function LoginForm() {
   const searchParams = useSearchParams()
   const redirect = searchParams.get('redirect') || '/'
   const oauthError = searchParams.get('error') === 'oauth'
+  const resetSuccess = searchParams.get('reset') === 'success'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -127,6 +128,13 @@ function LoginForm() {
             <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
           </div>
 
+          {resetSuccess && (
+            <p role="status" aria-live="polite" className="p-3 mb-4 text-sm border"
+              style={{ borderColor: 'var(--success)', color: 'var(--success)' }}>
+              Mot de passe réinitialisé, vous pouvez vous connecter.
+            </p>
+          )}
+
           {/* Message d'erreur */}
           {error && (
             <div
@@ -171,12 +179,18 @@ function LoginForm() {
 
             {/* Mot de passe */}
             <div className="mb-6">
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium mb-2"
-              >
-                Mot de passe
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="password" className="block text-sm font-medium">
+                  Mot de passe
+                </label>
+                <Link
+                  href="/auth/forgot-password"
+                  className="text-xs underline transition-opacity hover:opacity-80"
+                  style={{ color: 'var(--primary)' }}
+                >
+                  Mot de passe oublié ?
+                </Link>
+              </div>
               <div className="relative">
                 <input
                   id="password"
