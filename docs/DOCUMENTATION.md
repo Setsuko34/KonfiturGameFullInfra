@@ -548,6 +548,7 @@ admin/layout   → vérifie appartenance équipe admin → si non : notFound() (
 --muted-foreground #8891A4   /* Texte secondaire */
 --primary          #4F6AFF   /* Bleu — CTA, liens actifs */
 --secondary        #EF233C   /* Rouge — danger, accents */
+--error            #FF6B81   /* Texte d'erreur (contraste AA) */
 --success          #34D399   /* Vert */
 --border           #1E2736   /* Bordures */
 --radius           0px       /* Pas d'arrondi — intentionnel */

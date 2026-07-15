@@ -134,5 +134,9 @@ test.describe('1.2 — Connexion email/mot de passe', () => {
 
     await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toBeVisible()
     await expect(page).toHaveURL(/\/auth\/login/)
+
+    // Issue #50 — le texte d'erreur doit utiliser --error (#FF6B81), pas --secondary
+    const alertColor = await page.locator('[role="alert"]:not([id="__next-route-announcer__"])').evaluate(el => getComputedStyle(el).color)
+    expect(alertColor).toBe('rgb(255, 107, 129)') // #FF6B81
   })
 })

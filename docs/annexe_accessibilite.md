@@ -57,7 +57,7 @@ Défauts prioritaires détaillés dans [`analyse_ui_ux.md`](./analyse_ui_ux.md) 
 |----|----------|--------------|----------------------|
 | P0-1 | Pas de focus trap dans le menu mobile (`role="dialog"`) | 2.1.2 (No Keyboard Trap) | `useFocusTrap` + handler `Escape` |
 | P0-2 | Icône `<Check>` affichée pour critères mot de passe **non** satisfaits | 1.4.1 (Utilisation de la couleur) | ✅ corrigé (2026-07-15, icône `<X>` + `--error`) |
-| P0-3 | Contraste messages d'erreur ≈ 4.0:1 (seuil AA 4.5:1) | 1.4.3 (Contraste minimum) | Couleur d'erreur `#FF6B81` (≈ 7:1) |
+| P0-3 | Contraste messages d'erreur ≈ 4.0:1 (seuil AA 4.5:1) | 1.4.3 (Contraste minimum) | ✅ corrigé (2026-07-15, couleur d'erreur `--error` `#FF6B81` ≈ 6.36:1) |
 | P0-4 | Critères de mot de passe masqués avant frappe | 3.3.2 (Étiquettes ou instructions) | Affichage dès le focus du champ |
 
 ---

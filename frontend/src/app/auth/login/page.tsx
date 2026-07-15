@@ -136,7 +136,7 @@ function LoginForm() {
               style={{
                 background: 'rgba(239, 35, 60, 0.1)',
                 border: '1px solid var(--secondary)',
-                color: 'var(--secondary)',
+                color: 'var(--error)',
               }}
             >
               {error}
