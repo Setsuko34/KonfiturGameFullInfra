@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Save, Lock, AlertTriangle, Loader2 } from 'lucide-react'
+import { Save, Lock, AlertTriangle, Loader2, Download } from 'lucide-react'
 import { updateProfileClient, updatePasswordClient } from '@/lib/actions/profile.client'
 import { deleteAccount } from '@/lib/actions/profile'
+import ExportDataButton from './ExportDataButton'
 import type { Models } from 'appwrite'
 
 interface Props {
@@ -219,6 +220,20 @@ export default function ProfileForm({ user }: Props) {
             {isPwdPending ? <Loader2 size={14} className="animate-spin" aria-hidden="true" /> : <Lock size={14} aria-hidden="true" />}
             Changer le mot de passe
           </button>
+        </div>
+      </section>
+
+      {/* ─── Mes données (RGPD art. 20) ─── */}
+      <section aria-labelledby="export-heading">
+        <h2 id="export-heading" className="text-base font-bold mb-4 flex items-center gap-2">
+          <Download size={15} aria-hidden="true" />
+          Mes données
+        </h2>
+        <div className="p-6 border space-y-4" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
+          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+            Téléchargez une copie de vos données personnelles : profil, équipes, messages, commentaires, likes, projets et logs de sécurité (connexions, IP).
+          </p>
+          <ExportDataButton />
         </div>
       </section>
 
