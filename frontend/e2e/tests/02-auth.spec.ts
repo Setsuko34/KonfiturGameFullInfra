@@ -126,6 +126,13 @@ test.describe('1.2 — Connexion email/mot de passe', () => {
     await page.waitForURL(/\/dashboard/, { timeout: 15_000 })
   })
 
+  test('le lien « Mot de passe oublié ? » mène à la page de réinitialisation', async ({ page }) => {
+    await page.goto('/auth/login')
+    await page.getByRole('link', { name: 'Mot de passe oublié ?' }).click()
+    await expect(page).toHaveURL(/\/auth\/forgot-password/)
+    await expect(page.locator('h1')).toContainText('Mot de passe oublié')
+  })
+
   test('erreur avec mauvais mot de passe', async ({ page }) => {
     await page.goto('/auth/login')
     await page.locator('#email').fill(TEST_USERS.user1.email)
