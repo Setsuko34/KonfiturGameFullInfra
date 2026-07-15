@@ -286,6 +286,16 @@ button {
   transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
 
+/* ═══ Curseurs (issue #55) — Tailwind v4 preflight met cursor: default ═══ */
+button:not(:disabled),
+[role='button']:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
 /* ═══ Utilitaires CSS personnalisés ═══ */
 .text-balance {
   text-wrap: balance;
