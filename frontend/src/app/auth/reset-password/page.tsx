@@ -55,6 +55,9 @@ function ResetPasswordForm() {
 
   return (
     <form onSubmit={handleSubmit} noValidate>
+      <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
+        <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span> champ obligatoire
+      </p>
       {error && (
         <div role="alert" aria-live="assertive" className="p-3 mb-4 text-sm"
           style={{ background: 'rgba(239, 35, 60, 0.1)', border: '1px solid var(--secondary)', color: 'var(--error)' }}>
@@ -62,13 +65,13 @@ function ResetPasswordForm() {
         </div>
       )}
       <div className="mb-4">
-        <label htmlFor="new-password" className="block text-sm font-medium mb-2">Nouveau mot de passe</label>
+        <label htmlFor="new-password" className="block text-sm font-medium mb-2">Nouveau mot de passe <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span></label>
         <input id="new-password" type="password" value={password} onChange={e => setPassword(e.target.value)}
           required minLength={8} autoComplete="new-password"
           className="w-full px-3 py-2.5 text-sm" style={INPUT_STYLE} aria-required="true" />
       </div>
       <div className="mb-6">
-        <label htmlFor="confirm-password" className="block text-sm font-medium mb-2">Confirmer le mot de passe</label>
+        <label htmlFor="confirm-password" className="block text-sm font-medium mb-2">Confirmer le mot de passe <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span></label>
         <input id="confirm-password" type="password" value={confirm} onChange={e => setConfirm(e.target.value)}
           required minLength={8} autoComplete="new-password"
           className="w-full px-3 py-2.5 text-sm" style={INPUT_STYLE} aria-required="true" />

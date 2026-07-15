@@ -84,6 +84,21 @@ test.describe('1.1 — Inscription email/mot de passe', () => {
     await expect(page.locator('#password-requirements [data-icon="x"]')).toHaveCount(0)
     await expect(page.locator('#password-requirements [data-icon="check"]')).toHaveCount(totalCriteria)
   })
+
+  test('les champs requis portent un astérisque et la légende est visible', async ({ page }) => {
+    await page.goto('/auth/register')
+    await expect(page.getByText('* champ obligatoire')).toBeVisible()
+    for (const id of ['name', 'email', 'password']) {
+      await expect(page.locator(`label[for="${id}"] [aria-hidden="true"]`),
+        `astérisque manquant sur #${id}`).toHaveText('*')
+    }
+
+    await page.goto('/auth/login')
+    await expect(page.getByText('* champ obligatoire')).toBeVisible()
+    for (const id of ['email', 'password']) {
+      await expect(page.locator(`label[for="${id}"] [aria-hidden="true"]`)).toHaveText('*')
+    }
+  })
 })
 
 test.describe('1.2 — Connexion email/mot de passe', () => {

@@ -43,8 +43,11 @@ export default function ForgotPasswordPage() {
           </p>
         ) : (
           <form onSubmit={handleSubmit} noValidate>
+            <p className="text-xs mb-4" style={{ color: 'var(--muted-foreground)' }}>
+              <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span> champ obligatoire
+            </p>
             <div className="mb-6">
-              <label htmlFor="email" className="block text-sm font-medium mb-2">Adresse e-mail</label>
+              <label htmlFor="email" className="block text-sm font-medium mb-2">Adresse e-mail <span aria-hidden="true" style={{ color: 'var(--secondary)' }}>*</span></label>
               <input
                 id="email"
                 type="email"
