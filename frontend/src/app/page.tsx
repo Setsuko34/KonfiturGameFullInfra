@@ -14,10 +14,10 @@ import { storageFileUrl } from '@/lib/appwrite/file-url'
 import { BUCKETS } from '@/lib/appwrite/config'
 
 export const metadata: Metadata = {
-  title: 'KonfiturGame — Plateforme Game Jam',
+  title: 'KonfiturGame - Plateforme Game Jam',
   description: 'La plateforme française de game jams. Crée, jam, ship.',
   openGraph: {
-    title: 'KonfiturGame — Plateforme Game Jam',
+    title: 'KonfiturGame - Plateforme Game Jam',
     description: 'La plateforme française de game jams. Crée, jam, ship.',
     images: [{ url: '/og?title=CRÉE.+JAM.+SHIP_', width: 1200, height: 630, alt: 'KonfiturGame' }],
   },

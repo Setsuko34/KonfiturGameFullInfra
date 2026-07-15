@@ -140,3 +140,33 @@ test.describe('1.2 — Connexion email/mot de passe', () => {
     expect(alertColor).toBe('rgb(255, 107, 129)') // #FF6B81
   })
 })
+
+test.describe('1.3 — Mot de passe oublié', () => {
+  test.use({ storageState: { cookies: [], origins: [] } }) // contexte anonyme
+
+  test('la page forgot-password se charge et affiche le formulaire', async ({ page }) => {
+    await page.goto('/auth/forgot-password')
+    await expect(page.locator('h1')).toContainText('Mot de passe oublié')
+    await expect(page.locator('#email')).toBeVisible()
+  })
+
+  test("la demande affiche le même message de confirmation quel que soit l'email (anti-énumération)", async ({ page }) => {
+    await page.goto('/auth/forgot-password')
+    await page.locator('#email').fill('nexiste-pas-du-tout@test.local')
+    await page.getByRole('button', { name: 'Envoyer le lien de réinitialisation' }).click()
+    await expect(page.getByRole('status')).toContainText('Si un compte existe pour cette adresse', { timeout: 10_000 })
+  })
+
+  test('reset-password sans paramètres affiche le message de lien invalide', async ({ page }) => {
+    await page.goto('/auth/reset-password')
+    await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toContainText('Lien invalide ou expiré')
+  })
+
+  test('reset-password refuse des mots de passe différents (validation client)', async ({ page }) => {
+    await page.goto('/auth/reset-password?userId=fake&secret=fake')
+    await page.locator('#new-password').fill('MotDePasse123!')
+    await page.locator('#confirm-password').fill('Different456!')
+    await page.getByRole('button', { name: 'Réinitialiser le mot de passe' }).click()
+    await expect(page.locator('[role="alert"]:not([id="__next-route-announcer__"])')).toContainText('Les mots de passe ne correspondent pas')
+  })
+})

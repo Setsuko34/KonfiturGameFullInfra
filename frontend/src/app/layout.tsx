@@ -19,7 +19,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: 'KonfiturGame — Plateforme Game Jam',
+    default: 'KonfiturGame - Plateforme Game Jam',
     template: '%s | KonfiturGame',
   },
   description: 'La plateforme française de game jams. Crée, jam, ship.',

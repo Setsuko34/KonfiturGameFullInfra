@@ -6,7 +6,7 @@ import { getJams } from '@/lib/actions/jams'
 
 export const metadata: Metadata = {
   title: 'Explorer les jams',
-  description: 'Découvre toutes les game jams disponibles sur KonfiturGame — en cours, à venir, terminées.',
+  description: 'Découvre toutes les game jams disponibles sur KonfiturGame : en cours, à venir, terminées.',
   openGraph: {
     title: 'Explorer les jams | KonfiturGame',
     description: 'Toutes les game jams sur la plateforme française.',

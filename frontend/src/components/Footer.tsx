@@ -43,7 +43,7 @@ export default function Footer() {
               href="/"
               className="flex items-center gap-2 font-bold text-lg mb-3"
               style={{ color: 'var(--foreground)' }}
-              aria-label="KonfiturGame — Accueil"
+              aria-label="KonfiturGame, Accueil"
             >
               <Gamepad2 size={20} style={{ color: 'var(--primary)' }} aria-hidden="true" />
               <span>Konfitur<span style={{ color: 'var(--primary)' }}>Game</span></span>

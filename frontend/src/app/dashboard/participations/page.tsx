@@ -100,7 +100,7 @@ export default async function ParticipationsPage({ searchParams }: Props) {
                   <h2 className="font-bold text-base mb-1">{jam.title}</h2>
                   <p className="text-sm mb-3" style={{ color: 'var(--primary)' }}>Thème : {jam.theme}</p>
                   <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
-                    {jam.startDate.toLocaleDateString('fr-FR')} — {jam.endDate.toLocaleDateString('fr-FR')}
+                    {jam.startDate.toLocaleDateString('fr-FR')} au {jam.endDate.toLocaleDateString('fr-FR')}
                   </p>
                 </div>
                 <Link

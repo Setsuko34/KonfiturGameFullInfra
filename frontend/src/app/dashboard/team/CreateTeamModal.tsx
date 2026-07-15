@@ -97,7 +97,7 @@ export default function CreateTeamModal({ leaderId, leaderName, availableJams, o
 
           <div>
             <label htmlFor="team-jam" className="label-tech block mb-1" style={{ color: 'var(--muted-foreground)' }}>
-              JAM (optionnel — laisser vide pour créer une guilde)
+              JAM (optionnel, laisser vide pour créer une guilde)
             </label>
             <select
               id="team-jam"

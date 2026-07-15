@@ -21,7 +21,7 @@ export default async function AdminTeamsPage({ searchParams }: Props) {
         Équipes
       </h1>
       <p className="text-sm mb-8" style={{ color: 'var(--muted-foreground)' }}>
-        Gestion des équipes et guildes — renommer, retirer un membre, dissoudre. Actions journalisées.
+        Gestion des équipes et guildes : renommer, retirer un membre, dissoudre. Actions journalisées.
       </p>
 
       {/* Recherche */}

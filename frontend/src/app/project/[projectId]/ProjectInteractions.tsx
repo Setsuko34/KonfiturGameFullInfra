@@ -82,7 +82,7 @@ export default function ProjectInteractions({
             background: liked ? 'var(--secondary)' : 'var(--primary)',
             color: 'var(--primary-foreground)',
           }}
-          aria-label={liked ? `Retirer le like — ${likes} likes` : `Aimer ce projet — ${likes} likes actuels`}
+          aria-label={liked ? `Retirer le like (${likes} likes)` : `Aimer ce projet (${likes} likes actuels)`}
           aria-pressed={liked}
         >
           <Heart size={15} aria-hidden="true" fill={liked ? 'currentColor' : 'none'} />
@@ -156,7 +156,7 @@ export default function ProjectInteractions({
 
       {buildFileId && (
         <p className="text-xs mb-8" style={{ color: 'var(--muted-foreground)' }}>
-          Archive fournie par l&apos;équipe — analyse antivirus partielle, prudence.
+          Archive fournie par l&apos;équipe : analyse antivirus partielle, prudence.
         </p>
       )}
 

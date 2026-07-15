@@ -43,7 +43,7 @@ export default async function AdminManageJamPage({ params }: Props) {
       </Link>
 
       <p className="px-4 py-2 border text-sm mb-6" style={{ borderColor: 'var(--secondary)', color: 'var(--secondary)' }}>
-        Mode administrateur — vos actions sur cette jam sont journalisées
+        Mode administrateur, vos actions sur cette jam sont journalisées
       </p>
 
       <h1 id="admin-manage-jam-heading" className="text-2xl font-bold mb-1">{jam.title}</h1>

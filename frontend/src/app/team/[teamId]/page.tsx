@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   return {
     title: data.team.name,
-    description: `Équipe ${data.team.name} — ${data.members.length} membre${data.members.length > 1 ? 's' : ''}`,
+    description: `Équipe ${data.team.name}, ${data.members.length} membre${data.members.length > 1 ? 's' : ''}`,
     alternates: { canonical: `/team/${teamId}` },
   }
 }
