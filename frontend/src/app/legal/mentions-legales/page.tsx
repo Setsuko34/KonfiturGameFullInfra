@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { LegalTitle, Section, P, List, A, Todo } from '../_components'
+import { LegalTitle, Section, P, List, A } from '../_components'
 
 export const metadata: Metadata = {
   title: 'Mentions légales',
@@ -10,26 +10,30 @@ export const metadata: Metadata = {
 export default function MentionsLegalesPage() {
   return (
     <>
-      <LegalTitle updated="4 juin 2026">Mentions légales</LegalTitle>
+      <LegalTitle updated="15 juillet 2026">Mentions légales</LegalTitle>
 
       <Section id="editeur" title="1. Éditeur du site">
         <P>
           Le site <strong>KonfiturGame</strong> (ci-après « le Site »), accessible à l&apos;adresse{' '}
-          <A href="https://konfiturgame.fr">konfiturgame.fr</A>, est édité par :
+          <A href="https://konfiturgame.fr">konfiturgame.fr</A>, est édité à titre non professionnel
+          par un particulier (personne physique).
+        </P>
+        <P>
+          Conformément à l&apos;article 6-III-2 de la loi n° 2004-575 du 21 juin 2004 pour la confiance
+          dans l&apos;économie numérique (LCEN), l&apos;éditeur, personne physique éditant le Site à
+          titre non professionnel, a choisi de ne pas rendre ses coordonnées publiques. Son identité
+          et ses coordonnées ont été communiquées à l&apos;hébergeur (voir section 3), qui les tient à
+          la disposition des autorités judiciaires.
         </P>
         <List>
-          <li>Dénomination / éditeur : <Todo>nom ou raison sociale de l&apos;éditeur</Todo></li>
-          <li>Statut juridique : <Todo>forme juridique (association, SAS, auto-entrepreneur…)</Todo></li>
-          <li>Adresse : <Todo>adresse postale du siège</Todo></li>
-          <li>Email : <A href="mailto:contact@konfiturgame.fr">contact@konfiturgame.fr</A></li>
-          <li>Numéro d&apos;immatriculation (RCS / SIREN), le cas échéant : <Todo>SIREN / RCS</Todo></li>
-          <li>Numéro de TVA intracommunautaire, le cas échéant : <Todo>TVA intracommunautaire</Todo></li>
+          <li>Contact : <A href="mailto:contact@konfiturgame.fr">contact@konfiturgame.fr</A></li>
         </List>
       </Section>
 
       <Section id="publication" title="2. Directeur de la publication">
         <P>
-          Directeur / Directrice de la publication : <Todo>nom du directeur de la publication</Todo>.
+          Le directeur de la publication est l&apos;éditeur du Site, personne physique mentionnée à la
+          section 1, dont l&apos;identité est détenue par l&apos;hébergeur.
         </P>
       </Section>
 

@@ -249,6 +249,10 @@ Dans la section **Sécurité** du profil, entrer l'ancien mot de passe puis le n
 
 Accessible via `/profile/:id` — visible par tous. Affiche le nom, la bio, l'avatar et les participations publiques.
 
+### Télécharger ses données
+
+Dans la section **Mes données** du profil, le bouton **Télécharger mes données (JSON)** génère un fichier `konfiturgame-donnees-AAAA-MM-JJ.json` contenant vos données personnelles : profil (nom, email, bio), appartenances aux équipes, messages de chat, commentaires, likes, projets de vos équipes et logs de sécurité (connexions, adresses IP). Cet export répond aux droits de portabilité (RGPD, art. 20) et d'accès (art. 15).
+
 ### Supprimer son compte
 
 Dans la section **Zone de danger** du profil. La suppression est **définitive** et irréversible.

@@ -26,7 +26,7 @@ export default function TermsPage() {
         <List>
           <li>
             La consultation des jams et projets publics est libre. La participation (création de
-            projets, commentaires, chat, votes) nécessite la création d&apos;un compte.
+            projets, commentaires, chat, likes) nécessite la création d&apos;un compte.
           </li>
           <li>
             La création d&apos;un compte est réservée aux personnes âgées d&apos;au moins 15 ans, ou

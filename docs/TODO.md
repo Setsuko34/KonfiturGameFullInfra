@@ -8,6 +8,7 @@
 
 - [x] Gestion des équipes multi-jam (guildes) — création, invitation, inscription, gestion des rôles, suppression
 - [x] Gestion du profil utilisateur — modifier nom, bio, mot de passe, supprimer le compte, upload avatar
+- [x] Export des données personnelles (RGPD art. 20) — bouton « Télécharger mes données (JSON)» dans le profil, agrège profil, équipes, messages, commentaires, likes et projets via la Server Action `exportUserData`
 - [x] Annonces publiables par les organisateurs sur leurs jams uniquement
 - [x] Édition d'une jam en cours (description, règles, prix, tags, max participants)
 - [x] Logs d'audit admin — actions, crashs, connexions

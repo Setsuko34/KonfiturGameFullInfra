@@ -66,6 +66,14 @@ test.describe('6.1 — Modifier le profil', () => {
       await expect(page.locator('body')).toContainText(/E2E Joueur1/)
     }
   })
+
+  test('le profil propose le téléchargement des données personnelles (RGPD)', async ({ user1Page: page }) => {
+    await page.goto('/dashboard/profile')
+    const downloadPromise = page.waitForEvent('download')
+    await page.getByRole('button', { name: 'Télécharger mes données (JSON)' }).click()
+    const download = await downloadPromise
+    expect(download.suggestedFilename()).toMatch(/^konfiturgame-donnees-.*\.json$/)
+  })
 })
 
 test.describe('6.2 — Changer de mot de passe', () => {

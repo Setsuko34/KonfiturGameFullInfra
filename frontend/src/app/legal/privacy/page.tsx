@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { LegalTitle, Section, P, List, A, Todo } from '../_components'
+import { LegalTitle, Section, P, List, A } from '../_components'
 
 export const metadata: Metadata = {
   title: 'Politique de confidentialité',
@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <>
-      <LegalTitle updated="4 juin 2026">Politique de confidentialité</LegalTitle>
+      <LegalTitle updated="15 juillet 2026">Politique de confidentialité</LegalTitle>
 
       <Section id="intro" title="1. Préambule">
         <P>
@@ -28,8 +28,10 @@ export default function PrivacyPage() {
           <A href="/legal/mentions-legales">mentions légales</A>.
         </P>
         <List>
-          <li>Contact pour toute question relative à vos données : <Todo>privacy@konfiturgame.fr (à créer)</Todo></li>
-          <li>Délégué à la protection des données (DPO), le cas échéant : <Todo>coordonnées du DPO si désigné</Todo></li>
+          <li>
+            Contact pour toute question relative à vos données :{' '}
+            <A href="mailto:privacy@konfiturgame.fr">privacy@konfiturgame.fr</A>
+          </li>
         </List>
       </Section>
 
@@ -46,7 +48,7 @@ export default function PrivacyPage() {
             Base légale : exécution du contrat / votre consentement auprès du fournisseur.
           </li>
           <li>
-            <strong>Contenus publiés</strong> : projets, commentaires, messages de chat, votes,
+            <strong>Contenus publiés</strong> : projets, commentaires, messages de chat, likes,
             participations et équipes, associés à votre pseudo. Finalité : fonctionnement de la
             plateforme de game jams. Base légale : exécution du contrat.
           </li>
@@ -123,8 +125,10 @@ export default function PrivacyPage() {
         </List>
         <P>
           Vous pouvez exercer la plupart de ces droits directement depuis votre{' '}
-          <A href="/dashboard/profile">espace profil</A> (modification de vos informations,
-          suppression de votre compte). Pour toute autre demande, contactez-nous par e-mail. Nous y
+          <A href="/dashboard/profile">espace profil</A> : modification de vos informations,
+          téléchargement d&apos;une copie de vos données au format JSON (droits d&apos;accès et de
+          portabilité) et suppression de votre compte. Pour toute autre demande, contactez-nous par
+          e-mail. Nous y
           répondons dans un délai d&apos;un mois. Vous disposez également du droit d&apos;introduire une
           réclamation auprès de la <A href="https://www.cnil.fr">CNIL</A>.
         </P>
