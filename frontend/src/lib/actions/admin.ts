@@ -15,6 +15,7 @@ import {
 } from '@/lib/appwrite/types'
 import type { GameJam, Project, ChatMessage, Announcement, Team, TeamMember } from '@/types'
 import { isAdminUser, logAdminAction } from '@/lib/appwrite/guards'
+import { aggregateByDay, type DayCount } from '@/lib/dashboard-utils'
 
 // Toute action de ce fichier est un endpoint public : la garde du layout ne suffit pas.
 // Dérive l'identité de la session et exige l'appartenance admin — fail-closed.
@@ -37,37 +38,124 @@ async function requireAdminOrThrow(): Promise<{ userId: string }> {
 
 const REFUS_ADMIN = { success: false as const, error: 'Accès réservé aux administrateurs.' }
 
-// ── Stats globales ─────────────────────────────────────────────────────────
-
-export async function getAdminStats(): Promise<{
+export interface AdminDashboardData {
   totalUsers: number
   totalJams: number
   activeJams: number
+  totalTeams: number
+  totalProjects: number
   pendingReports: number
-}> {
+  botsBlocked24h: number
+  errors24h: number
+  bannedIPs: number
+  registrationsByDay: DayCount[]
+  loginsByDay: DayCount[]
+  recentRegistrations: { name: string; country?: string; date: Date }[]
+  recentJams: { id: string; title: string; status: string }[]
+  recentErrors: { message: string; path?: string; date: Date }[]
+  topCountries: { country: string; count: number }[]
+}
+
+const DASHBOARD_DAYS = 14
+
+export async function getAdminDashboard(): Promise<AdminDashboardData> {
   await requireAdminOrThrow()
-  const [usersRes, allJamsRes, activeJamsRes, reportedMessagesRes, reportedProjectsRes] = await Promise.all([
-    serverUsers.list([Query.limit(1)]),
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [Query.limit(1)]),
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
-      Query.equal('status', 'ongoing'),
-      Query.limit(1),
+  const now = new Date()
+  const dayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString()
+  const periodStart = new Date(now.getTime() - DASHBOARD_DAYS * 24 * 60 * 60 * 1000).toISOString()
+
+  // Compteur pas cher : limit(1) + .total, fallback 0 par source
+  const count = (collection: string, queries: string[] = []): Promise<number> =>
+    serverDatabases
+      .listDocuments(DATABASE_ID, collection, [...queries, Query.limit(1)])
+      .then(r => r.total)
+      .catch(() => 0)
+
+  type Doc = { $id: string; $createdAt: string; [key: string]: unknown }
+  const list = (collection: string, queries: string[]): Promise<Doc[]> =>
+    serverDatabases
+      .listDocuments(DATABASE_ID, collection, queries)
+      .then(r => r.documents as unknown as Doc[])
+      .catch(() => [])
+
+  const [
+    totalUsers, totalJams, activeJams, totalTeams, totalProjects,
+    reportedMessages, reportedProjects, botsBlocked24h, errors24h, bannedIPs,
+    authLogs, registerDocs, recentJamDocs, errorDocs,
+  ] = await Promise.all([
+    serverUsers.list([Query.limit(1)]).then(r => r.total).catch(() => 0),
+    count(COLLECTIONS.GAME_JAMS),
+    count(COLLECTIONS.GAME_JAMS, [Query.equal('status', 'ongoing')]),
+    count(COLLECTIONS.TEAMS),
+    count(COLLECTIONS.PROJECTS),
+    count(COLLECTIONS.CHAT_MESSAGES, [Query.equal('reported', true)]),
+    count(COLLECTIONS.PROJECTS, [Query.equal('reported', true)]),
+    count(COLLECTIONS.AUDIT_LOGS, [Query.equal('type', 'bot_blocked'), Query.greaterThan('$createdAt', dayAgo)]),
+    count(COLLECTIONS.AUDIT_LOGS, [Query.equal('type', 'error'), Query.greaterThan('$createdAt', dayAgo)]),
+    count(COLLECTIONS.BANNED_IPS),
+    list(COLLECTIONS.AUDIT_LOGS, [
+      Query.equal('type', 'auth'),
+      Query.greaterThan('$createdAt', periodStart),
+      Query.orderDesc('$createdAt'),
+      Query.limit(1000),
     ]),
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, [
-      Query.equal('reported', true),
-      Query.limit(1),
+    list(COLLECTIONS.AUDIT_LOGS, [
+      Query.equal('type', 'auth'),
+      Query.equal('message', 'register'),
+      Query.orderDesc('$createdAt'),
+      Query.limit(5),
     ]),
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
-      Query.equal('reported', true),
-      Query.limit(1),
-    ]),
+    list(COLLECTIONS.GAME_JAMS, [Query.orderDesc('$createdAt'), Query.limit(5)]),
+    list(COLLECTIONS.AUDIT_LOGS, [Query.equal('type', 'error'), Query.orderDesc('$createdAt'), Query.limit(5)]),
   ])
 
+  // Noms des derniers inscrits (user supprimé → libellé de repli)
+  const recentRegistrations = await Promise.all(
+    registerDocs.map(async doc => ({
+      name: doc.user_id
+        ? await serverUsers.get(doc.user_id as string).then(u => u.name).catch(() => 'Utilisateur supprimé')
+        : 'Inconnu',
+      country: (doc.country_code as string) || undefined,
+      date: new Date(doc.$createdAt),
+    }))
+  )
+
+  // Top pays sur la même fenêtre 14 j que les graphes
+  const countryCounts: Record<string, number> = {}
+  for (const doc of authLogs) {
+    const cc = (doc.country_code as string) || 'XX'
+    countryCounts[cc] = (countryCounts[cc] ?? 0) + 1
+  }
+  const topCountries = Object.entries(countryCounts)
+    .map(([country, count]) => ({ country, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3)
+
   return {
-    totalUsers: usersRes.total,
-    totalJams: allJamsRes.total,
-    activeJams: activeJamsRes.total,
-    pendingReports: reportedMessagesRes.total + reportedProjectsRes.total,
+    totalUsers,
+    totalJams,
+    activeJams,
+    totalTeams,
+    totalProjects,
+    pendingReports: reportedMessages + reportedProjects,
+    botsBlocked24h,
+    errors24h,
+    bannedIPs,
+    registrationsByDay: aggregateByDay(
+      authLogs.filter(d => d.message === 'register').map(d => d.$createdAt), DASHBOARD_DAYS, now),
+    loginsByDay: aggregateByDay(
+      authLogs.filter(d => d.message === 'login').map(d => d.$createdAt), DASHBOARD_DAYS, now),
+    recentRegistrations,
+    recentJams: recentJamDocs.map(doc => {
+      const jam = mapDocToGameJam(doc as never)
+      return { id: jam.id, title: jam.title, status: jam.status }
+    }),
+    recentErrors: errorDocs.map(doc => ({
+      message: (doc.message as string) ?? '',
+      path: (doc.path as string) || undefined,
+      date: new Date(doc.$createdAt),
+    })),
+    topCountries,
   }
 }
 

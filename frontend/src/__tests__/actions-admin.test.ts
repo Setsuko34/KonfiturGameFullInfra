@@ -16,6 +16,7 @@ vi.mock('@/lib/appwrite/server', () => ({
   },
   serverUsers: {
     list: vi.fn(),
+    get: vi.fn(),
     updateStatus: vi.fn(),
   },
 }))
@@ -37,6 +38,7 @@ import {
   deleteMessage,
   listAllJams,
   listAllTeams,
+  getAdminDashboard,
 } from '@/lib/actions/admin'
 import { serverDatabases, serverTeams, serverUsers } from '@/lib/appwrite/server'
 
@@ -48,6 +50,8 @@ const mockListDocuments = vi.mocked(serverDatabases.listDocuments)
 const mockListMemberships = vi.mocked(serverTeams.listMemberships)
 const mockCreateMembership = vi.mocked(serverTeams.createMembership)
 const mockUpdateStatus = vi.mocked(serverUsers.updateStatus)
+const mockUsersGet = vi.mocked(serverUsers.get)
+const mockUsersList = vi.mocked(serverUsers.list)
 
 const PAST_END_DATE = '2020-01-01T00:00:00.000Z'
 const FUTURE_END_DATE = '2999-01-01T00:00:00.000Z'
@@ -289,5 +293,101 @@ describe('listAllTeams', () => {
 
     expect(mockListDocuments).toHaveBeenCalledWith('konfitur-db', 'teams',
       expect.arrayContaining([Query.contains('name', 'alpha')]))
+  })
+})
+
+describe('getAdminDashboard', () => {
+  beforeEach(() => {
+    // mécanisme admin existant du fichier (requireAdmin -> isAdminUser -> listMemberships.total > 0)
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' } as never)
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+  })
+
+  it('refuse un non-admin sans lire la DB', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+    await expect(getAdminDashboard()).rejects.toThrow('Accès réservé aux administrateurs.')
+    expect(mockListDocuments).not.toHaveBeenCalled()
+  })
+
+  it('toutes les sources en panne : retourne des zéros et des listes vides, sans throw', async () => {
+    mockUsersList.mockRejectedValue(new Error('down'))
+    mockListDocuments.mockRejectedValue(new Error('down'))
+    const data = await getAdminDashboard()
+    expect(data.totalUsers).toBe(0)
+    expect(data.totalJams).toBe(0)
+    expect(data.bannedIPs).toBe(0)
+    expect(data.recentJams).toEqual([])
+    expect(data.recentErrors).toEqual([])
+    expect(data.registrationsByDay).toHaveLength(14)
+    expect(data.registrationsByDay.every(d => d.count === 0)).toBe(true)
+  })
+
+  it('agrège chaque source dans le bon champ et sépare register/login', async () => {
+    const now = new Date()
+    const today = now.toISOString()
+    const jamDoc = {
+      $id: 'jam-1', title: 'Jam Récente', slug: 'jam-r', theme: 'T', description: 'd',
+      type: 'online', start_date: '2020-01-01T00:00:00.000Z', end_date: '2020-01-03T00:00:00.000Z',
+      duration: '48h', organizer_id: 'u1',
+    }
+    mockUsersList.mockResolvedValue({ total: 142, users: [] } as never)
+    mockUsersGet.mockResolvedValue({ name: 'Alice' } as never)
+    mockListDocuments.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const q = queries.join('|')
+      if (col === 'game_jams' && q.includes('orderDesc')) return { total: 12, documents: [jamDoc] } as never
+      if (col === 'game_jams' && q.includes('ongoing')) return { total: 3, documents: [] } as never
+      if (col === 'game_jams') return { total: 12, documents: [] } as never
+      if (col === 'teams') return { total: 38, documents: [] } as never
+      if (col === 'projects' && q.includes('reported')) return { total: 1, documents: [] } as never
+      if (col === 'projects') return { total: 57, documents: [] } as never
+      if (col === 'chat_messages') return { total: 2, documents: [] } as never
+      if (col === 'banned_ips') return { total: 5, documents: [] } as never
+      if (col === 'audit_logs' && q.includes('bot_blocked')) return { total: 4, documents: [] } as never
+      if (col === 'audit_logs' && q.includes('register')) {
+        return { total: 1, documents: [{ $id: 'l1', type: 'auth', message: 'register', user_id: 'u9', country_code: 'FR', $createdAt: today }] } as never
+      }
+      if (col === 'audit_logs' && q.includes('"error"')) {
+        return { total: 2, documents: [{ $id: 'l2', type: 'error', message: 'boom', path: '/x', $createdAt: today }] } as never
+      }
+      if (col === 'audit_logs' && q.includes('auth')) {
+        return { total: 3, documents: [
+          { $id: 'a1', type: 'auth', message: 'register', country_code: 'FR', $createdAt: today },
+          { $id: 'a2', type: 'auth', message: 'login', country_code: 'FR', $createdAt: today },
+          { $id: 'a3', type: 'auth', message: 'login', country_code: 'BE', $createdAt: today },
+        ] } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+
+    const data = await getAdminDashboard()
+    expect(data.totalUsers).toBe(142)
+    expect(data.totalJams).toBe(12)
+    expect(data.activeJams).toBe(3)
+    expect(data.totalTeams).toBe(38)
+    expect(data.totalProjects).toBe(57)
+    expect(data.pendingReports).toBe(3) // 2 messages + 1 projet
+    expect(data.botsBlocked24h).toBe(4)
+    expect(data.errors24h).toBe(2)
+    expect(data.bannedIPs).toBe(5)
+    expect(data.registrationsByDay.reduce((s, d) => s + d.count, 0)).toBe(1)
+    expect(data.loginsByDay.reduce((s, d) => s + d.count, 0)).toBe(2)
+    expect(data.recentRegistrations[0]).toMatchObject({ name: 'Alice', country: 'FR' })
+    expect(data.recentJams[0]).toMatchObject({ id: 'jam-1', title: 'Jam Récente', status: 'ended' })
+    expect(data.recentErrors[0]).toMatchObject({ message: 'boom', path: '/x' })
+    expect(data.topCountries[0]).toEqual({ country: 'FR', count: 2 })
+  })
+
+  it("résout 'Utilisateur supprimé' quand le user d'une inscription n'existe plus", async () => {
+    const today = new Date().toISOString()
+    mockUsersList.mockResolvedValue({ total: 1, users: [] } as never)
+    mockUsersGet.mockRejectedValue(new Error('not found'))
+    mockListDocuments.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      if (col === 'audit_logs' && queries.join('|').includes('register')) {
+        return { total: 1, documents: [{ $id: 'l1', type: 'auth', message: 'register', user_id: 'gone', $createdAt: today }] } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+    const data = await getAdminDashboard()
+    expect(data.recentRegistrations[0].name).toBe('Utilisateur supprimé')
   })
 })
