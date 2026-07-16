@@ -163,6 +163,34 @@ export async function logAuthEvent(kind: 'login' | 'register'): Promise<void> {
   }
 }
 
+// Fire-and-forget : journalise un crash client (error boundary).
+// Endpoint public par nécessité (crashs des anonymes) — message tronqué, jamais de throw.
+export async function logClientError(message: string, digest?: string, path?: string): Promise<void> {
+  try {
+    let userId: string | undefined
+    try {
+      const { account } = await createSessionClient()
+      userId = (await account.get()).$id
+    } catch {
+      // visiteur anonyme : on log quand même
+    }
+
+    const hdrs = await headers()
+    const ip = extractIP(hdrs as unknown as Headers)
+
+    const fullMessage = digest ? `${message} [digest: ${digest}]` : message
+    await serverDatabases.createDocument(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, ID.unique(), {
+      type: 'error',
+      message: fullMessage.slice(0, 512),
+      ...(path ? { path: path.slice(0, 256) } : {}),
+      ...(userId ? { user_id: userId } : {}),
+      ip: ip.slice(0, 45),
+    })
+  } catch {
+    // un log de crash raté ne doit jamais aggraver le crash (même décision que logAuthEvent)
+  }
+}
+
 // ── Gestion IPs bannies ────────────────────────────────────────────────────
 
 export async function getBannedIPs(): Promise<BannedIP[]> {

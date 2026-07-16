@@ -25,7 +25,7 @@ vi.mock('next/headers', () => ({
   headers: vi.fn(async () => new Headers({ 'x-forwarded-for': '1.2.3.4' })),
 }))
 
-import { getRecentLogs, getCountryStats, getBannedIPs, banIP, unbanIP, logAuthEvent } from '@/lib/actions/logs'
+import { getRecentLogs, getCountryStats, getBannedIPs, banIP, unbanIP, logAuthEvent, logClientError } from '@/lib/actions/logs'
 import { serverDatabases, serverTeams } from '@/lib/appwrite/server'
 
 const mockList = vi.mocked(serverDatabases.listDocuments)
@@ -125,5 +125,40 @@ describe('logAuthEvent', () => {
 
     await expect(logAuthEvent('login')).resolves.toBeUndefined()
     expect(mockCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('logClientError', () => {
+  it("écrit une entrée type 'error' avec message, digest et path", async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' })
+    await logClientError('TypeError: x is undefined', 'digest-abc', '/dashboard')
+    expect(mockCreate).toHaveBeenCalledOnce()
+    const payload = mockCreate.mock.calls[0][3] as Record<string, string>
+    expect(payload.type).toBe('error')
+    expect(payload.message).toContain('TypeError: x is undefined')
+    expect(payload.message).toContain('digest-abc')
+    expect(payload.path).toBe('/dashboard')
+    expect(payload.user_id).toBe('user-1')
+  })
+
+  it('écrit le log même sans session (visiteur anonyme)', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+    await logClientError('crash anonyme')
+    expect(mockCreate).toHaveBeenCalledOnce()
+    const payload = mockCreate.mock.calls[0][3] as Record<string, string>
+    expect(payload.user_id).toBeUndefined()
+  })
+
+  it('tronque le message à 512 caractères', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+    await logClientError('e'.repeat(2000))
+    const payload = mockCreate.mock.calls[0][3] as Record<string, string>
+    expect(payload.message.length).toBeLessThanOrEqual(512)
+  })
+
+  it("ne throw jamais si l'écriture échoue", async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+    mockCreate.mockRejectedValue(new Error('DB down'))
+    await expect(logClientError('crash')).resolves.toBeUndefined()
   })
 })
