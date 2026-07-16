@@ -1,6 +1,6 @@
 # KonfiturGame — Guide Claude
 
-Plateforme française de Game Jams. Stack: Next.js 16.2.3 (App Router), TypeScript strict, Tailwind CSS v4, Appwrite 1.8.0 self-hosted, Traefik v3.6.7, Docker Compose.
+Plateforme française de Game Jams. Stack: Next.js 16.2.3 (App Router), TypeScript strict, Tailwind CSS v4, Appwrite 1.9.0 self-hosted, Traefik v3.6.7, Docker Compose.
 
 ---
 
@@ -63,7 +63,7 @@ KonfiturGameFullInfra/
 
 ## Appwrite
 
-- **Version:** 1.8.0
+- **Version:** 1.9.0
 - **Database:** `konfitur-db`
 - **Collections:** `game_jams`, `teams`, `team_members`, `projects`, `chat_messages`, `announcements`, `comments`, `votes`, `audit_logs`, `banned_ips`
 - **Buckets:** `jam-covers`, `project-assets`, `avatars`
@@ -180,6 +180,7 @@ bash ./scripts/restore.sh ./backups/2026-xx-xx_xx-xx-xx
 - **pnpm-lock.yaml sur Windows FS** — générer dans `/tmp` (voir commande ci-dessus)
 - **Appwrite 500 "Unknown attribute: devKeys"** — après upgrade depuis 1.6.x : lancer `docker exec konfitur-appwrite php .../cli.php migrate` puis `docker restart konfitur-appwrite`
 - **`node_modules` Docker corrompu** — si `frontend/node_modules` est un fichier texte (artefact worktree git) : `rm frontend/node_modules && git rm --cached frontend/node_modules`
+- **Double moteur Docker (résolu 2026-07-16)** — un docker-ce installé DANS la distro WSL ressuscitait une vieille stack qui squattait :3000/:8080/:3306 en parallèle de Docker Desktop (symptôme : vieux code servi, `docker logs` muets pendant un curl). Services `masked` ; ne jamais relancer `systemctl start docker` dans la distro, le CLI passe par le socket Docker Desktop
 
 ---
 

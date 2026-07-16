@@ -118,7 +118,8 @@ test.describe('8.5 — Corrections dashboard (chantier F)', () => {
 
   test("/admin/teams liste les équipes et l'entrée sidebar existe", async ({ adminPage: page }) => {
     await page.goto('/admin')
-    await page.getByRole('link', { name: 'Équipes' }).click()
+    // exact: la StatCard « Équipes » du dashboard enrichi est aussi un lien vers /admin/teams
+    await page.getByRole('link', { name: 'Équipes', exact: true }).click()
     await expect(page).toHaveURL(/\/admin\/teams/)
     await expect(page.getByRole('heading', { name: 'Équipes', level: 1 })).toBeVisible()
   })
@@ -141,6 +142,34 @@ test.describe('8.5 — Corrections dashboard (chantier F)', () => {
     // Audit visible (l'admin e2e n'est pas leader de cette guilde → admin_action)
     await page.goto('/admin/logs?type=admin_action')
     await expect(page.locator('body')).toContainText('Renommage de l\'équipe', { timeout: 15_000 })
+  })
+})
+
+test.describe('8.6 — Dashboard vue d\'ensemble enrichi', () => {
+  test('affiche compteurs, graphes, listes et bouton rafraîchir', async ({ adminPage: page }) => {
+    await page.goto('/admin')
+
+    // 8 StatCards (libellés uniques)
+    for (const label of [
+      'Utilisateurs', 'Jams', 'Équipes', 'Projets soumis',
+      'Signalements', 'Bots bloqués 24 h', 'IPs bannies', 'Erreurs 24 h',
+    ]) {
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+
+    // Graphes (SVG role="img" avec aria-label)
+    await expect(page.getByRole('img', { name: /Inscriptions \(14 jours\)/ })).toBeVisible()
+    await expect(page.getByRole('img', { name: /Connexions \(14 jours\)/ })).toBeVisible()
+
+    // Listes récentes
+    await expect(page.getByText('Dernières inscriptions')).toBeVisible()
+    await expect(page.getByText('Dernières jams')).toBeVisible()
+    await expect(page.getByText('Santé')).toBeVisible()
+
+    // Refresh : la page reste rendue après clic
+    await page.getByRole('button', { name: 'Rafraîchir les données' }).click()
+    await expect(page.getByRole('heading', { name: 'Vue d\'ensemble' })).toBeVisible()
+    await expect(page.getByText('Dernières jams')).toBeVisible()
   })
 })
 
