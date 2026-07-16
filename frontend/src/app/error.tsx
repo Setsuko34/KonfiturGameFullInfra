@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { logClientError } from '@/lib/actions/logs'
 
 export default function Error({
   error,
@@ -11,6 +12,8 @@ export default function Error({
 }) {
   useEffect(() => {
     console.error(error)
+    // Fire-and-forget : le crash est journalisé dans /admin/logs (type 'error')
+    logClientError(error.message, error.digest, window.location.pathname).catch(() => {})
   }, [error])
 
   return (
