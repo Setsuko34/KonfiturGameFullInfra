@@ -18,9 +18,9 @@ export default function RecentList({ title, items, href, emptyLabel }: RecentLis
   return (
     <section className="p-5 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xs uppercase tracking-widest" style={{ color: 'var(--muted-foreground)' }}>
+        <h2 className="text-xs uppercase tracking-widest" style={{ color: 'var(--muted-foreground)' }}>
           {title}
-        </h3>
+        </h2>
         {href && (
           <Link
             href={href}

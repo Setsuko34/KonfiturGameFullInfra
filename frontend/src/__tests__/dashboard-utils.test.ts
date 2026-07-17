@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { aggregateByDay } from '@/lib/dashboard-utils'
+import { aggregateByDay, mergeFeed, type FeedItem } from '@/lib/dashboard-utils'
 
 // now fixe pour des tests déterministes (un mercredi à midi, heure locale)
 const NOW = new Date(2026, 6, 15, 12, 0, 0) // 15 juillet 2026
@@ -31,5 +31,27 @@ describe('aggregateByDay', () => {
   it('gère une période de 1 jour', () => {
     const res = aggregateByDay([iso(2026, 7, 15)], 1, NOW)
     expect(res).toEqual([{ date: '2026-07-15', count: 1 }])
+  })
+})
+
+describe('mergeFeed', () => {
+  const item = (label: string, daysAgo: number): FeedItem => ({
+    label,
+    date: new Date(Date.now() - daysAgo * 86_400_000),
+  })
+
+  it('fusionne les sources triées par date décroissante', () => {
+    const res = mergeFeed([[item('a', 3), item('b', 1)], [item('c', 2)]])
+    expect(res.map(i => i.label)).toEqual(['b', 'c', 'a'])
+  })
+
+  it('tronque au limit (défaut 10)', () => {
+    const source = Array.from({ length: 15 }, (_, i) => item(`x${i}`, i))
+    expect(mergeFeed([source])).toHaveLength(10)
+    expect(mergeFeed([source], 3)).toHaveLength(3)
+  })
+
+  it('sources vides : retourne []', () => {
+    expect(mergeFeed([[], []])).toEqual([])
   })
 })

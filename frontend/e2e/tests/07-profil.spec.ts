@@ -116,3 +116,23 @@ test.describe('6.2 — Changer de mot de passe', () => {
     await expect(page.locator('[role="alert"]').first()).toBeVisible({ timeout: 5_000 })
   })
 })
+
+test.describe('6.9 — Dashboard vue d\'ensemble enrichi', () => {
+  test('affiche compteurs, feed, équipes, projets et bouton rafraîchir', async ({ user1Page: page }) => {
+    await page.goto('/dashboard')
+
+    for (const label of ['Participations', 'Projets soumis', 'Jams organisées', 'Likes reçus']) {
+      await expect(page.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+
+    await expect(page.getByText('À venir', { exact: true })).toBeVisible()
+    await expect(page.getByText('Activité récente')).toBeVisible()
+    await expect(page.getByText('Mes équipes')).toBeVisible()
+    await expect(page.getByText('Mes projets')).toBeVisible()
+
+    // Refresh : la page reste rendue après clic
+    await page.getByRole('button', { name: 'Rafraîchir les données' }).click()
+    await expect(page.getByRole('heading', { name: 'Vue d\'ensemble' })).toBeVisible()
+    await expect(page.getByText('Mes équipes')).toBeVisible()
+  })
+})

@@ -1,62 +1,41 @@
-import { getDashboardOverview } from '@/lib/actions/dashboard'
-import CountdownTimer from '@/components/CountdownTimer'
-import Link from 'next/link'
-import { Gamepad2, Trophy, Send, ArrowRight } from 'lucide-react'
 import type { Metadata } from 'next'
+import Link from 'next/link'
+import { Trophy, Send, Gamepad2, Heart, ArrowRight } from 'lucide-react'
+import { getUserDashboard } from '@/lib/actions/dashboard'
+import CountdownTimer from '@/components/CountdownTimer'
+import StatCard from '@/components/dashboard/StatCard'
+import RecentList from '@/components/dashboard/RecentList'
+import RefreshButton from '@/components/dashboard/RefreshButton'
+import TeamsWidget from './TeamsWidget'
 
-export const metadata: Metadata = { title: 'Vue d\'ensemble' }
+export const metadata: Metadata = { title: "Vue d'ensemble" }
 
 export default async function DashboardPage() {
-  const { participationsCount, organizedJamsCount, submittedProjectsCount, ongoingJam } =
-    await getDashboardOverview()
+  const data = await getUserDashboard()
 
   return (
     <section aria-labelledby="overview-heading">
-      <p className="text-[9px] tracking-widest uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
-        Dashboard
-      </p>
-      <h1 id="overview-heading" className="text-2xl font-bold mb-6">Vue d&apos;ensemble</h1>
-
-      {/* Stats personnelles */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
-        <div className="p-5 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-2 mb-2">
-            <Trophy size={16} style={{ color: 'var(--primary)' }} aria-hidden="true" />
-            <span className="text-[9px] tracking-widest uppercase" style={{ color: 'var(--muted-foreground)' }}>
-              Participations
-            </span>
-          </div>
-          <p className="text-3xl font-bold" style={{ color: 'var(--primary)' }}>{participationsCount}</p>
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <p className="text-[9px] tracking-widest uppercase mb-1" style={{ color: 'var(--muted-foreground)' }}>
+            Dashboard
+          </p>
+          <h1 id="overview-heading" className="text-2xl font-bold">Vue d&apos;ensemble</h1>
         </div>
-
-        <div className="p-5 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-2 mb-2">
-            <Send size={16} style={{ color: 'var(--success)' }} aria-hidden="true" />
-            <span className="text-[9px] tracking-widest uppercase" style={{ color: 'var(--muted-foreground)' }}>
-              Projets soumis
-            </span>
-          </div>
-          <p className="text-3xl font-bold" style={{ color: 'var(--success)' }}>{submittedProjectsCount}</p>
-        </div>
-
-        <div className="p-5 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
-          <div className="flex items-center gap-2 mb-2">
-            <Gamepad2 size={16} style={{ color: 'var(--secondary)' }} aria-hidden="true" />
-            <span className="text-[9px] tracking-widest uppercase" style={{ color: 'var(--muted-foreground)' }}>
-              Jams organisées
-            </span>
-          </div>
-          <p className="text-3xl font-bold" style={{ color: 'var(--secondary)' }}>{organizedJamsCount}</p>
-        </div>
+        <RefreshButton />
       </div>
 
-      {/* Feed d'activité récente — déféré Phase 1.5.
-          Nécessite un champ `action_type` ou une collection dédiée non présente dans le schéma actuel.
-          Phase 1 affiche uniquement les stats et la jam en cours. */}
+      {/* Stats personnelles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <StatCard label="Participations" value={data.participationsCount} icon={Trophy} href="/dashboard/participations" />
+        <StatCard label="Projets soumis" value={data.submittedProjectsCount} icon={Send} href="/dashboard/participations" />
+        <StatCard label="Jams organisées" value={data.organizedJamsCount} icon={Gamepad2} href="/dashboard/my-jams" />
+        <StatCard label="Likes reçus" value={data.likesReceived} icon={Heart} href="/dashboard/participations" />
+      </div>
 
-      {/* Jam en cours */}
-      {ongoingJam ? (
-        <div>
+      {/* Jam en cours (bloc conservé) */}
+      {data.ongoingJam ? (
+        <div className="mb-8">
           <p className="text-[9px] tracking-widest uppercase mb-3" style={{ color: 'var(--muted-foreground)' }}>
             Jam en cours
           </p>
@@ -65,24 +44,24 @@ export default async function DashboardPage() {
             style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
           >
             <div>
-              <h2 className="text-xl font-bold mb-1">{ongoingJam.title}</h2>
-              <p className="text-sm mb-4" style={{ color: 'var(--primary)' }}>Thème : {ongoingJam.theme}</p>
+              <h2 className="text-xl font-bold mb-1">{data.ongoingJam.title}</h2>
+              <p className="text-sm mb-4" style={{ color: 'var(--primary)' }}>Thème : {data.ongoingJam.theme}</p>
               <Link
-                href={`/jam/${ongoingJam.id}`}
-                className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+                href={`/jam/${data.ongoingJam.id}`}
+                className="inline-flex items-center gap-2 px-4 py-2 min-h-11 text-sm font-semibold"
                 style={{ background: 'var(--primary)', color: 'var(--primary-foreground)' }}
               >
                 Voir la jam <ArrowRight size={14} aria-hidden="true" />
               </Link>
             </div>
             <div role="timer" aria-label="Temps restant">
-              <CountdownTimer targetDate={ongoingJam.endDate} size="lg" label="TEMPS RESTANT" />
+              <CountdownTimer targetDate={data.ongoingJam.endDate} size="lg" label="TEMPS RESTANT" />
             </div>
           </div>
         </div>
       ) : (
         <div
-          className="p-8 border text-center"
+          className="p-8 border text-center mb-8"
           style={{ background: 'var(--card)', borderColor: 'var(--border)', borderStyle: 'dashed' }}
         >
           <p className="text-sm mb-3" style={{ color: 'var(--muted-foreground)' }}>
@@ -90,13 +69,51 @@ export default async function DashboardPage() {
           </p>
           <Link
             href="/explore"
-            className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold"
+            className="inline-flex items-center gap-2 px-4 py-2 min-h-11 text-sm font-semibold"
             style={{ border: '1px solid var(--border)', color: 'var(--foreground)' }}
           >
             Explorer les jams <ArrowRight size={14} aria-hidden="true" />
           </Link>
         </div>
       )}
+
+      {/* À venir */}
+      <div className="mb-8">
+        <RecentList
+          title="À venir"
+          href="/explore"
+          emptyLabel="Aucune jam annoncée pour le moment."
+          items={data.upcomingJams.map(j => ({
+            primary: j.title,
+            meta: j.startDate.toLocaleDateString('fr-FR'),
+          }))}
+        />
+      </div>
+
+      {/* Feed + équipes */}
+      <div className="grid lg:grid-cols-2 gap-4 mb-8">
+        <RecentList
+          title="Activité récente"
+          emptyLabel="Rien de nouveau pour le moment."
+          items={data.feed.map(f => ({
+            primary: f.label,
+            secondary: f.sublabel,
+            meta: f.date.toLocaleDateString('fr-FR'),
+          }))}
+        />
+        <TeamsWidget teams={data.teams} />
+      </div>
+
+      {/* Mes projets */}
+      <RecentList
+        title="Mes projets"
+        href="/dashboard/participations"
+        emptyLabel="Aucun projet pour le moment."
+        items={data.myProjects.map(p => ({
+          primary: p.title,
+          meta: `${p.likes} like${p.likes > 1 ? 's' : ''} · ${p.comments} commentaire${p.comments > 1 ? 's' : ''}`,
+        }))}
+      />
     </section>
   )
 }
