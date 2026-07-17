@@ -25,3 +25,17 @@ export function aggregateByDay(isoDates: string[], days: number, now: Date = new
   }
   return [...counts.entries()].map(([date, count]) => ({ date, count }))
 }
+
+// Fusion des sources du feed d'activité personnel (commentaires, likes, annonces)
+export interface FeedItem {
+  label: string
+  sublabel?: string
+  date: Date
+}
+
+export function mergeFeed(sources: FeedItem[][], limit = 10): FeedItem[] {
+  return sources
+    .flat()
+    .sort((a, b) => b.date.getTime() - a.date.getTime())
+    .slice(0, limit)
+}

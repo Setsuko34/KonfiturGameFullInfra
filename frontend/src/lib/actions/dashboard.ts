@@ -10,6 +10,7 @@ import type { GameJam, Team, TeamMember, Project } from '@/types'
 import { validateUpdateJamData, type UpdateJamData } from '@/lib/validators'
 import { computeJamStatus } from '@/lib/jam-status'
 import { canActOnJam, logAdminAction } from '@/lib/appwrite/guards'
+import { mergeFeed, type FeedItem } from '@/lib/dashboard-utils'
 
 // ── Lecture session utilisateur ────────────────────────────────────────────
 
@@ -193,48 +194,128 @@ export async function createJam(data: CreateJamData): Promise<GameJam> {
   return mapDocToGameJam(doc)
 }
 
-// ── Vue d'ensemble ─────────────────────────────────────────────────────────
+// ── Dashboard utilisateur enrichi ───────────────────────────────────────────
 
-export async function getDashboardOverview(): Promise<{
+export interface UserDashboardData {
   participationsCount: number
   organizedJamsCount: number
   submittedProjectsCount: number
+  likesReceived: number
   ongoingJam: GameJam | null
-}> {
+  upcomingJams: { id: string; title: string; startDate: Date }[]
+  feed: FeedItem[]
+  teams: { id: string; name: string; membersCount: number; activeJams: number; inviteCode: string }[]
+  myProjects: { id: string; title: string; likes: number; comments: number }[]
+}
+
+export async function getUserDashboard(): Promise<UserDashboardData> {
   const user = await getCurrentUser()
 
-  const [memberships, organizedJams, ongoingJams] = await Promise.all([
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
-      Query.equal('user_id', user.$id),
-      Query.limit(50),
-    ]),
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
-      Query.equal('organizer_id', user.$id),
-      Query.limit(1),
-    ]),
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
-      Query.equal('status', 'ongoing'),
-      Query.limit(1),
-    ]),
+  type Doc = { $id: string; $createdAt: string; [key: string]: unknown }
+  const list = (collection: string, queries: string[]): Promise<Doc[]> =>
+    serverDatabases
+      .listDocuments(DATABASE_ID, collection, queries)
+      .then(r => r.documents as unknown as Doc[])
+      .catch(() => [])
+  const countOf = (collection: string, queries: string[]): Promise<number> =>
+    serverDatabases
+      .listDocuments(DATABASE_ID, collection, [...queries, Query.limit(1)])
+      .then(r => r.total)
+      .catch(() => 0)
+
+  // ── Chaîne de base : mes équipes, mes jams, mes projets ──────────────────
+  const membershipsRes = await serverDatabases
+    .listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [Query.equal('user_id', user.$id), Query.limit(50)])
+    .catch(() => ({ total: 0, documents: [] as unknown[] }))
+  const teamIds = (membershipsRes.documents as Doc[]).map(m => m.team_id as string)
+
+  const teamDocs = teamIds.length > 0
+    ? await list(COLLECTIONS.TEAMS, [Query.equal('$id', teamIds)])
+    : []
+  const teams = teamDocs.map(doc => mapDocToTeam(doc as never))
+  const myJamIds = [...new Set(teams.flatMap(t => t.jamIds))]
+
+  const projectDocs = teamIds.length > 0
+    ? await list(COLLECTIONS.PROJECTS, [Query.equal('team_id', teamIds), Query.orderDesc('$createdAt'), Query.limit(25)])
+    : []
+  const projects = projectDocs.map(doc => mapDocToProject(doc as never))
+  const projectIds = projects.map(p => p.id)
+  const titleByProject = new Map(projects.map(p => [p.id, p.title]))
+
+  // ── Sources parallèles ─────────────────────────────────────────────────────
+  const [
+    organizedJamsCount, submittedProjectsCount, ongoingJams, upcomingJamDocs,
+    myJamDocs, commentDocs, likeDocs, announcementDocs,
+    teamMemberCounts, projectCommentCounts,
+  ] = await Promise.all([
+    countOf(COLLECTIONS.GAME_JAMS, [Query.equal('organizer_id', user.$id)]),
+    teamIds.length > 0
+      ? countOf(COLLECTIONS.PROJECTS, [Query.equal('team_id', teamIds), Query.equal('submitted', true)])
+      : Promise.resolve(0),
+    list(COLLECTIONS.GAME_JAMS, [Query.equal('status', 'ongoing'), Query.limit(1)]),
+    list(COLLECTIONS.GAME_JAMS, [Query.equal('status', 'upcoming'), Query.orderAsc('start_date'), Query.limit(3)]),
+    myJamIds.length > 0
+      ? list(COLLECTIONS.GAME_JAMS, [Query.equal('$id', myJamIds)])
+      : Promise.resolve([] as Doc[]),
+    projectIds.length > 0
+      ? list(COLLECTIONS.COMMENTS, [Query.equal('project_id', projectIds), Query.orderDesc('$createdAt'), Query.limit(10)])
+      : Promise.resolve([] as Doc[]),
+    projectIds.length > 0
+      ? list(COLLECTIONS.LIKES, [Query.equal('project_id', projectIds), Query.orderDesc('$createdAt'), Query.limit(10)])
+      : Promise.resolve([] as Doc[]),
+    myJamIds.length > 0
+      ? list(COLLECTIONS.ANNOUNCEMENTS, [Query.equal('jam_id', myJamIds), Query.orderDesc('$createdAt'), Query.limit(10)])
+      : Promise.resolve([] as Doc[]),
+    Promise.all(teams.slice(0, 5).map(t => countOf(COLLECTIONS.TEAM_MEMBERS, [Query.equal('team_id', t.id)]))),
+    Promise.all(projects.slice(0, 5).map(p => countOf(COLLECTIONS.COMMENTS, [Query.equal('project_id', p.id)]))),
   ])
 
-  // Projets soumis : uniquement ceux des teams de l'utilisateur
-  const teamIds = memberships.documents.map(m => m.team_id as string)
-  let submittedProjectsCount = 0
-  if (teamIds.length > 0) {
-    const submissions = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
-      Query.equal('team_id', teamIds),
-      Query.equal('submitted', true),
-      Query.limit(1),
-    ])
-    submittedProjectsCount = submissions.total
-  }
+  const jamTitleById = new Map(myJamDocs.map(d => [d.$id, d.title as string]))
+
+  // ── Feed : actions des autres uniquement ──────────────────────────────────
+  const commentFeed: FeedItem[] = commentDocs
+    .filter(d => d.author_id !== user.$id)
+    .map(d => ({
+      label: `${d.author_name as string} a commenté ${titleByProject.get(d.project_id as string) ?? 'votre projet'}`,
+      date: new Date(d.$createdAt),
+    }))
+  const likeFeed: FeedItem[] = likeDocs
+    .filter(d => d.user_id !== user.$id)
+    .map(d => ({
+      label: `${titleByProject.get(d.project_id as string) ?? 'Votre projet'} a reçu un like`,
+      date: new Date(d.$createdAt),
+    }))
+  const announcementFeed: FeedItem[] = announcementDocs.map(d => ({
+    label: `Annonce : ${d.title as string}`,
+    sublabel: jamTitleById.get(d.jam_id as string),
+    date: new Date(d.$createdAt),
+  }))
 
   return {
-    participationsCount: memberships.total,
-    organizedJamsCount: organizedJams.total,
+    participationsCount: membershipsRes.total,
+    organizedJamsCount,
     submittedProjectsCount,
-    ongoingJam: ongoingJams.total > 0 ? mapDocToGameJam(ongoingJams.documents[0]) : null,
+    likesReceived: projects.reduce((s, p) => s + p.likesCount, 0),
+    ongoingJam: ongoingJams.length > 0 ? mapDocToGameJam(ongoingJams[0] as never) : null,
+    upcomingJams: upcomingJamDocs.map(d => ({
+      id: d.$id,
+      title: d.title as string,
+      startDate: new Date(d.start_date as string),
+    })),
+    feed: mergeFeed([commentFeed, likeFeed, announcementFeed]),
+    teams: teams.slice(0, 5).map((t, i) => ({
+      id: t.id,
+      name: t.name,
+      membersCount: teamMemberCounts[i],
+      activeJams: t.jamIds.length,
+      inviteCode: t.inviteCode,
+    })),
+    myProjects: projects.slice(0, 5).map((p, i) => ({
+      id: p.id,
+      title: p.title,
+      likes: p.likesCount,
+      comments: projectCommentCounts[i],
+    })),
   }
 }
 

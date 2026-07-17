@@ -17,9 +17,9 @@ export default function DailyBarChart({ title, data, total }: DailyBarChartProps
   return (
     <section className="p-5 border" style={{ background: 'var(--card)', borderColor: 'var(--border)' }}>
       <div className="flex items-baseline justify-between mb-4">
-        <h3 className="text-xs uppercase tracking-widest" style={{ color: 'var(--muted-foreground)' }}>
+        <h2 className="text-xs uppercase tracking-widest" style={{ color: 'var(--muted-foreground)' }}>
           {title}
-        </h3>
+        </h2>
         <span className="text-2xl font-bold" style={{ fontFamily: 'var(--font-mono)' }}>{total}</span>
       </div>
 

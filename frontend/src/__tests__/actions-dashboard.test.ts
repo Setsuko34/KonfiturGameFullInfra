@@ -21,7 +21,7 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-import { updateJam, getOrganizedJamDetails } from '@/lib/actions/dashboard'
+import { updateJam, getOrganizedJamDetails, getUserDashboard } from '@/lib/actions/dashboard'
 import { serverDatabases, serverTeams } from '@/lib/appwrite/server'
 
 const mockGet = vi.mocked(serverDatabases.getDocument)
@@ -123,5 +123,98 @@ describe('getOrganizedJamDetails — double garde', () => {
 
     await expect(getOrganizedJamDetails('jam-1')).rejects.toThrow('Accès non autorisé')
     expect(mockList).not.toHaveBeenCalled()
+  })
+})
+
+describe('getUserDashboard', () => {
+  const NOW_ISO = new Date().toISOString()
+
+  function fullDispatch() {
+    // user-1 membre de team-1 ; team-1 sur jam-1 ; projet proj-1 avec 7 likes
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const q = queries.join('|')
+      if (col === 'team_members' && q.includes('user-1')) {
+        return { total: 2, documents: [{ $id: 'm1', team_id: 'team-1', user_id: 'user-1' }] } as never
+      }
+      if (col === 'team_members') return { total: 3, documents: [] } as never // membres par équipe
+      if (col === 'teams') {
+        return { total: 1, documents: [{ $id: 'team-1', name: 'Les Confituriers', jam_ids: ['jam-1'], invite_code: 'KG-ABCD1234', leader_id: 'user-1' }] } as never
+      }
+      if (col === 'game_jams' && q.includes('organizer_id')) return { total: 1, documents: [] } as never
+      if (col === 'game_jams' && q.includes('upcoming')) {
+        return { total: 1, documents: [{ $id: 'jam-9', title: 'Jam Future', slug: 'jf', theme: 'T', description: 'd', type: 'online', start_date: '2999-01-01T00:00:00.000Z', end_date: '2999-01-03T00:00:00.000Z', duration: '48h', organizer_id: 'u9' }] } as never
+      }
+      if (col === 'game_jams' && q.includes('ongoing')) return { total: 0, documents: [] } as never
+      if (col === 'game_jams') {
+        // jams de mes équipes (titres pour les annonces)
+        return { total: 1, documents: [{ $id: 'jam-1', title: 'Ma Jam', slug: 'mj', theme: 'T', description: 'd', type: 'online', start_date: '2020-01-01T00:00:00.000Z', end_date: '2020-01-03T00:00:00.000Z', duration: '48h', organizer_id: 'u9' }] } as never
+      }
+      if (col === 'projects' && q.includes('submitted')) return { total: 1, documents: [] } as never
+      if (col === 'projects') {
+        return { total: 1, documents: [{ $id: 'proj-1', jam_id: 'jam-1', team_id: 'team-1', title: 'Mon Jeu', description: 'd', likes_count: 7 }] } as never
+      }
+      if (col === 'comments') {
+        return { total: 1, documents: [
+          { $id: 'c1', project_id: 'proj-1', author_id: 'user-2', author_name: 'Alice', content: 'GG', $createdAt: NOW_ISO },
+          { $id: 'c2', project_id: 'proj-1', author_id: 'user-1', author_name: 'Moi', content: 'merci', $createdAt: NOW_ISO },
+        ] } as never
+      }
+      if (col === 'likes') {
+        return { total: 1, documents: [{ $id: 'k1', project_id: 'proj-1', user_id: 'user-3', $createdAt: NOW_ISO }] } as never
+      }
+      if (col === 'announcements') {
+        return { total: 1, documents: [{ $id: 'an1', jam_id: 'jam-1', title: 'Thème dévoilé', content: 'c', author_id: 'u9', $createdAt: NOW_ISO }] } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+  }
+
+  beforeEach(() => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' })
+  })
+
+  it('agrège compteurs, feed filtré et projets avec engagement', async () => {
+    fullDispatch()
+    const data = await getUserDashboard()
+
+    expect(data.participationsCount).toBe(2)
+    expect(data.organizedJamsCount).toBe(1)
+    expect(data.submittedProjectsCount).toBe(1)
+    expect(data.likesReceived).toBe(7) // somme des likes_count
+    expect(data.upcomingJams[0]).toMatchObject({ id: 'jam-9', title: 'Jam Future' })
+    expect(data.teams[0]).toMatchObject({ name: 'Les Confituriers', membersCount: 3, activeJams: 1, inviteCode: 'KG-ABCD1234' })
+    expect(data.myProjects[0]).toMatchObject({ id: 'proj-1', title: 'Mon Jeu', likes: 7, comments: 1 })
+
+    // Feed : le commentaire d'Alice et le like de user-3, PAS mon propre commentaire (c2 filtré)
+    const labels = data.feed.map(f => f.label)
+    expect(labels.some(l => l.includes('Alice'))).toBe(true)
+    expect(labels.some(l => l.includes('Moi'))).toBe(false)
+    expect(labels.some(l => l.includes('like'))).toBe(true)
+    expect(labels.some(l => l.includes('Thème dévoilé'))).toBe(true)
+  })
+
+  it('utilisateur sans équipe : compteurs à 0, feed réduit aux annonces (aucune), pas de throw', async () => {
+    mockList.mockImplementation(async (_db: string, col: string) => {
+      if (col === 'team_members') return { total: 0, documents: [] } as never
+      return { total: 0, documents: [] } as never
+    })
+    const data = await getUserDashboard()
+    expect(data.participationsCount).toBe(0)
+    expect(data.likesReceived).toBe(0)
+    expect(data.feed).toEqual([])
+    expect(data.myProjects).toEqual([])
+    expect(data.teams).toEqual([])
+  })
+
+  it('sources secondaires en panne : les compteurs restent, les listes tombent à vide sans throw', async () => {
+    mockList.mockImplementation(async (_db: string, col: string) => {
+      if (col === 'team_members') return { total: 2, documents: [{ $id: 'm1', team_id: 'team-1' }] } as never
+      throw new Error('down')
+    })
+    const data = await getUserDashboard()
+    expect(data.participationsCount).toBe(2)
+    expect(data.upcomingJams).toEqual([])
+    expect(data.feed).toEqual([])
+    expect(data.ongoingJam).toBeNull()
   })
 })
