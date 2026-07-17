@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Query } from 'node-appwrite'
-import { serverDatabases } from '@/lib/appwrite/server'
-import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
+import { fetchAllDocs } from '@/lib/appwrite/fetch-all'
+import { COLLECTIONS } from '@/lib/appwrite/config'
 
 // Endpoint interne consommé uniquement par le middleware Next.js
 const LOG_SECRET = process.env.LOG_INTERNAL_SECRET
@@ -18,12 +17,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const res = await serverDatabases.listDocuments(
-      DATABASE_ID,
-      COLLECTIONS.BANNED_IPS,
-      [Query.limit(500)]
-    )
-    const ips = res.documents.map(doc => doc.ip as string)
+    // fetchAllDocs lève plutôt que de tronquer au-delà de SAFETY_CAP : sur une
+    // liste d'IP bannies, mieux vaut échouer bruyamment (catch ci-dessous, 500)
+    // que de servir une liste incomplète en silence.
+    const docs = await fetchAllDocs(COLLECTIONS.BANNED_IPS)
+    const ips = docs.map(doc => (doc as Record<string, unknown>).ip as string)
     return NextResponse.json({ ips }, {
       headers: { 'Cache-Control': 'no-store' },
     })

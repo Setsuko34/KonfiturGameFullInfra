@@ -119,12 +119,13 @@ aw_get() {
 aw_post() {
   local path="$1"
   local body="$2"
+  # Corps envoyé via stdin — un argument argv est plafonné à ~128 Ko (E2BIG)
   curl -sf -X POST \
     -H "X-Appwrite-Project: $AW_PROJECT" \
     -H "X-Appwrite-Key: $AW_KEY" \
     -H "Content-Type: application/json" \
-    -d "$body" \
-    "${AW_ENDPOINT}${path}" 2>/dev/null || echo "null"
+    -d @- \
+    "${AW_ENDPOINT}${path}" 2>/dev/null <<< "$body" || echo "null"
 }
 
 # Poll jusqu'à ce que tous les attributs d'une collection soient "available"
@@ -137,7 +138,13 @@ wait_for_attributes() {
   echo -n "      ⏳ Attributs en cours de traitement..."
   while [ "$waited" -lt "$max_wait" ]; do
     local processing
-    processing=$(aw_get "/databases/${db_id}/collections/${col_id}/attributes?limit=200" | \
+    # queries[] obligatoire — Appwrite 1.9 ignore les params nus limit/offset (25 rendus)
+    # ponytail: plafond 100 attributs par collection, paginer si dépassé un jour
+    processing=$(curl -sf -G \
+      -H "X-Appwrite-Project: $AW_PROJECT" \
+      -H "X-Appwrite-Key: $AW_KEY" \
+      --data-urlencode 'queries[]={"method":"limit","values":[100]}' \
+      "${AW_ENDPOINT}/databases/${db_id}/collections/${col_id}/attributes" 2>/dev/null | \
       jq '[.attributes[]? | select(.status == "processing")] | length' 2>/dev/null || echo "0")
 
     if [[ "${processing:-1}" == "0" ]]; then
@@ -264,9 +271,14 @@ restore_standard() {
     echo "   ⚠️  mariadb.sql absent, MariaDB non restauré"
   fi
 
-  # Détecter le préfixe projet
+  # Détecter le préfixe projet — pas de fallback deviné : un nom faux
+  # restaurerait les archives dans des volumes inexistants en silence
   local PROJECT_NAME
-  PROJECT_NAME=$(docker inspect konfitur-mariadb --format '{{ index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || echo "konfiturga mefullinfra")
+  PROJECT_NAME=$(docker inspect konfitur-mariadb --format '{{ index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || true)
+  if [[ -z "$PROJECT_NAME" ]]; then
+    echo "❌ Impossible de détecter le projet Docker Compose (conteneur konfitur-mariadb absent ?)"
+    exit 1
+  fi
 
   # Restauration volumes Appwrite
   restore_volume() {
@@ -305,8 +317,6 @@ restore_schema() {
   fi
 
   echo "📐 Restauration schéma Appwrite..."
-  local schema
-  schema=$(cat "$BACKUP_DIR/appwrite-schema.json")
 
   while IFS= read -r db_json; do
     local db_id db_name
@@ -362,7 +372,7 @@ restore_schema() {
 
     done < <(echo "$db_json" | jq -c '.collections[]?')
 
-  done < <(echo "$schema" | jq -c '.databases[]?')
+  done < <(jq -c '.databases[]?' "$BACKUP_DIR/appwrite-schema.json")
 
   echo "   ✅ Schéma restauré"
 }
@@ -374,37 +384,32 @@ restore_documents() {
   fi
 
   echo "📄 Restauration documents Appwrite..."
-  local data total_restored=0
-  data=$(cat "$BACKUP_DIR/appwrite-data.json")
+  local data_file="$BACKUP_DIR/appwrite-data.json"
+  local total_restored=0 db_id col_id
 
   while IFS= read -r db_id; do
     while IFS= read -r col_id; do
-      local count=0
+      local count=0 doc_body result
       echo "   ${db_id}/${col_id}..."
 
-      while IFS= read -r doc_json; do
-        local doc_id permissions doc_data doc_body result
-        doc_id=$(echo "$doc_json" | jq -r '."$id"')
-        permissions=$(echo "$doc_json" | jq -c '."$permissions" // []')
-        # Supprimer les champs système Appwrite — ne garder que les données utilisateur
-        doc_data=$(echo "$doc_json" | jq 'with_entries(select(.key | startswith("$") | not))')
-
-        doc_body=$(jq -n \
-          --arg id "$doc_id" \
-          --argjson perms "$permissions" \
-          --argjson data "$doc_data" \
-          '{documentId: $id, data: $data, permissions: $perms}')
-
+      # Corps des requêtes précalculés en une seule passe jq par collection
+      # (champs système $* retirés, ne garder que les données utilisateur)
+      while IFS= read -r doc_body; do
         result=$(aw_post "/databases/${db_id}/collections/${col_id}/documents" "$doc_body")
         if [[ "$result" != "null" ]]; then
           count=$((count + 1))
         fi
-      done < <(echo "$data" | jq -c --arg db "$db_id" --arg col "$col_id" '.databases[$db][$col].documents[]? // empty')
+      done < <(jq -c --arg db "$db_id" --arg col "$col_id" \
+        '.databases[$db][$col].documents[]? | {
+          documentId: ."$id",
+          data: with_entries(select(.key | startswith("$") | not)),
+          permissions: (."$permissions" // [])
+        }' "$data_file")
 
       total_restored=$((total_restored + count))
       echo "      ✅ $count document(s) restaurés"
-    done < <(echo "$data" | jq -r --arg db "$db_id" '.databases[$db] | keys[]? // empty')
-  done < <(echo "$data" | jq -r '.databases | keys[]? // empty')
+    done < <(jq -r --arg db "$db_id" '.databases[$db] | keys[]? // empty' "$data_file")
+  done < <(jq -r '.databases | keys[]? // empty' "$data_file")
 
   echo "   ✅ $total_restored document(s) restaurés au total"
 }

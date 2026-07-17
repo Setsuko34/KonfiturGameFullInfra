@@ -15,7 +15,8 @@ test.describe('8.1 — Accès au panel admin', () => {
   test('le compte admin accède au dashboard admin', async ({ adminPage: page }) => {
     await page.goto('/admin')
     // Le panel admin doit être visible — pas de 404
-    await expect(page.locator('body')).not.toContainText(/404/)
+    // (ancien: assertion body ne contient pas /404/, cassée par "4" StatCard + "04/07" concaténés = "404")
+    await expect(page.getByRole('heading', { name: 'Vue d\'ensemble' })).toBeVisible()
     // Au moins le sidebar ou un titre admin doit être présent
     await expect(page.locator('nav, [data-admin-sidebar], aside').first()).toBeVisible()
   })

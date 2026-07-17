@@ -5,6 +5,7 @@ import { serverDatabases } from '@/lib/appwrite/server'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { mapDocToGameJam, mapDocToProject } from '@/lib/appwrite/types'
 import { getPopularProjects } from '@/lib/actions/projects'
+import { fetchAllByField } from '@/lib/appwrite/fetch-all'
 import type { GameJam, PastWinner, SiteStats, Project } from '@/types'
 
 export async function getHomePageData(): Promise<{
@@ -17,7 +18,7 @@ export async function getHomePageData(): Promise<{
   try {
     const now = new Date()
 
-    const [featuredRes, ongoingStatusRes, upcomingStatusRes, winnerProjectsRes, jamsCountRes, participantsCountRes, projectsCountRes, popularProjects] =
+    const [featuredRes, ongoingStatusRes, upcomingStatusRes, jamsCountRes, participantsCountRes, projectsCountRes, popularProjects] =
       await Promise.all([
         // Jams mises en avant par l'admin
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
@@ -35,11 +36,6 @@ export async function getHomePageData(): Promise<{
           Query.equal('status', 'upcoming'),
           Query.orderAsc('start_date'),
           Query.limit(10),
-        ]),
-        serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
-          Query.greaterThan('placement', 0),
-          Query.orderDesc('$createdAt'),
-          Query.limit(50), // large : le tri par récence de jam + limite 5 jams se fait après jointure
         ]),
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [Query.limit(1)]),
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [Query.limit(1)]),
@@ -73,45 +69,47 @@ export async function getHomePageData(): Promise<{
       .slice(0, 6)
 
     const upcomingJams = allUpcoming
-    const winnerProjects = winnerProjectsRes.documents.map(mapDocToProject)
 
-    // Jointure manuelle : jams et équipes des projets gagnants
-    const jamIds = [...new Set(winnerProjects.map(p => p.jamId))]
-    const teamIds = [...new Set(winnerProjects.map(p => p.teamId))]
+    // Hall of Fame : les 5 dernières jams terminées.
+    // limit(5) DÉLIBÉRÉ = le nombre de jams affichées (cas 4 de la règle, pas un plafond accidentel).
+    // Filtre sur end_date et non sur status : le status stocké peut être en retard, ce que le reste
+    // de ce fichier compense déjà (voir isOngoing). Le chemin des gagnants était le seul à ne pas le faire.
+    const endedJamsRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
+      Query.lessThan('end_date', now.toISOString()),
+      Query.orderDesc('end_date'),
+      Query.limit(5),
+    ])
+    const endedJams = endedJamsRes.documents.map(mapDocToGameJam)
+    const jamsMap = new Map(endedJams.map(j => [j.id, j]))
 
-    const [jamsRes, teamsRes] = jamIds.length > 0
-      ? await Promise.all([
-          serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [Query.equal('$id', jamIds)]),
-          serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAMS, [Query.equal('$id', teamIds)]),
-        ])
-      : [{ documents: [] }, { documents: [] }]
+    // Leurs projets placés : TOUS. Un podium tronqué est un podium faux.
+    const placed = endedJams.length > 0
+      ? (await fetchAllByField(COLLECTIONS.PROJECTS, 'jam_id', endedJams.map(j => j.id),
+          [Query.greaterThan('placement', 0)])).map(d => mapDocToProject(d as never))
+      : []
 
-    const jamsMap = Object.fromEntries(jamsRes.documents.map(d => [d.$id, mapDocToGameJam(d)]))
-    const teamsMap = Object.fromEntries(teamsRes.documents.map(d => [d.$id, d.name as string]))
+    // Les équipes de ces projets : TOUTES.
+    const teamDocs = placed.length > 0
+      ? await fetchAllByField(COLLECTIONS.TEAMS, '$id', [...new Set(placed.map(p => p.teamId))])
+      : []
+    const teamsMap = new Map(teamDocs.map(d => [d.$id, (d as Record<string, unknown>).name as string]))
 
-    const winnersRaw: (PastWinner | null)[] = winnerProjects.map(p => {
-      const jam = jamsMap[p.jamId]
-      if (!jam) return null
-      const winner: PastWinner = {
+    const winners: PastWinner[] = placed.map(p => {
+      const jam = jamsMap.get(p.jamId)!
+      return {
         id: p.id,
         jamId: p.jamId,
         jamTitle: jam.title,
         jamYear: jam.endDate.getFullYear(),
         placement: (p.placement ?? 1) as 1 | 2 | 3,
         projectTitle: p.title,
-        teamName: teamsMap[p.teamId] ?? 'Équipe inconnue',
+        teamName: teamsMap.get(p.teamId) ?? 'Équipe inconnue',
         coverImage: p.coverImage,
       }
-      return winner
     })
-    const allWinners: PastWinner[] = winnersRaw.filter((w): w is PastWinner => w !== null)
 
-    // Hall of Fame : jams les plus récemment terminées d'abord, rang 1er→3e dans chaque jam,
-    // limité aux 5 dernières jams terminées
-    const jamEndTime = (w: PastWinner) => jamsMap[w.jamId]?.endDate.getTime() ?? 0
-    allWinners.sort((a, b) => jamEndTime(b) - jamEndTime(a) || a.placement - b.placement)
-    const recentJamIds = new Set([...new Set(allWinners.map(w => w.jamId))].slice(0, 5))
-    const winners = allWinners.filter(w => recentJamIds.has(w.jamId))
+    // Jams les plus récemment terminées d'abord, rang 1er→3e dans chaque jam
+    winners.sort((a, b) => jamsMap.get(b.jamId)!.endDate.getTime() - jamsMap.get(a.jamId)!.endDate.getTime() || a.placement - b.placement)
 
     const stats: SiteStats = {
       jamsOrganized: jamsCountRes.total,

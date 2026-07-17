@@ -1,31 +1,7 @@
 import type { MetadataRoute } from 'next'
-import { serverDatabases } from '@/lib/appwrite/server'
-import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
+import { COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'node-appwrite'
-import type { Models } from 'node-appwrite'
-
-const SAFETY_CAP = 10_000
-
-async function fetchAllDocs(
-  collection: string,
-  queries: string[]
-): Promise<Models.Document[]> {
-  const all: Models.Document[] = []
-  let cursor: string | null = null
-
-  while (all.length < SAFETY_CAP) {
-    const q = [...queries, Query.limit(100)]
-    if (cursor) q.push(Query.cursorAfter(cursor))
-
-    const { documents } = await serverDatabases.listDocuments(DATABASE_ID, collection, q)
-    all.push(...documents)
-
-    if (documents.length < 100) break
-    cursor = documents[documents.length - 1].$id
-  }
-
-  return all
-}
+import { fetchAllDocs } from '@/lib/appwrite/fetch-all'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr'

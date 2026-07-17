@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { Query } from 'node-appwrite'
 
 vi.mock('@/lib/appwrite/server', () => ({
   serverDatabases: {
@@ -167,6 +168,41 @@ describe('getTeamsByJam', () => {
     const teams = await getTeamsByJam('jam-1')
     expect(teams).toHaveLength(1)
     expect(teams[0].jamIds).toContain('jam-1')
+  })
+
+  it("remonte plus de 100 équipes et regroupe leurs membres en une seule requête (pas de N+1)", async () => {
+    const hasPage500 = (queries: string[]) => queries.some(q => q === Query.limit(500))
+    const equalValues = (queries: string[], attribute: string): string[] => {
+      for (const q of queries) {
+        const parsed = JSON.parse(q)
+        if (parsed.method === 'equal' && parsed.attribute === attribute) return parsed.values
+      }
+      return []
+    }
+    const allTeams = Array.from({ length: 120 }, (_, i) =>
+      makeTeamDoc({ $id: `t${i}`, jam_ids: ['jam-1'], name: `Crew ${i}`, invite_code: `KG-Y${i}`, leader_id: `u${i}` }))
+    // 3 membres pour chacune des 120 équipes = 360 membres, dépasse l'ancien limit(20) par équipe
+    const allMembers = allTeams.flatMap((t, ti) =>
+      Array.from({ length: 3 }, (_, i) => makeMemberDoc({ $id: `m${ti}-${i}`, team_id: t.$id, user_id: `u${ti}-${i}` })))
+
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      if (col === 'teams') return { total: allTeams.length, documents: page500 ? allTeams : allTeams.slice(0, 25) } as never
+      if (col === 'team_members') {
+        const teamIdChunk = equalValues(queries, 'team_id')
+        const filtered = allMembers.filter(m => teamIdChunk.includes((m as Record<string, unknown>).team_id as string))
+        return { total: filtered.length, documents: filtered } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+
+    const teams = await getTeamsByJam('jam-1')
+
+    expect(teams).toHaveLength(120)
+    expect(teams.every(t => t.members.length === 3)).toBe(true)
+    // 1 appel pour les équipes + 2 lots de membres (120 team_ids > FILTER_MAX 100) = 3 appels,
+    // jamais un appel par équipe (l'ancienne boucle N+1 en aurait fait 120)
+    expect(mockList).toHaveBeenCalledTimes(3)
   })
 })
 

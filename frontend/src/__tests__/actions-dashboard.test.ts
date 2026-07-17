@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { Query } from 'node-appwrite'
 
 vi.mock('@/lib/appwrite/server', () => ({
   serverDatabases: {
@@ -21,7 +22,7 @@ vi.mock('next/cache', () => ({
   revalidatePath: vi.fn(),
 }))
 
-import { updateJam, getOrganizedJamDetails, getUserDashboard } from '@/lib/actions/dashboard'
+import { updateJam, getOrganizedJamDetails, getUserDashboard, getUserTeams, getUserParticipations } from '@/lib/actions/dashboard'
 import { serverDatabases, serverTeams } from '@/lib/appwrite/server'
 
 const mockGet = vi.mocked(serverDatabases.getDocument)
@@ -37,6 +38,111 @@ const ONGOING_DATES = {
 }
 
 beforeEach(() => { vi.clearAllMocks() })
+
+// Extrait les valeurs d'un Query.equal(attribute, ...) au sein du tableau de requêtes sérialisées.
+function equalValues(queries: string[], attribute: string): string[] {
+  for (const q of queries) {
+    const parsed = JSON.parse(q)
+    if (parsed.method === 'equal' && parsed.attribute === attribute) return parsed.values
+  }
+  return []
+}
+
+const hasPage500 = (queries: string[]) => queries.some(q => q === Query.limit(500))
+
+describe('getUserTeams — pas de plafond', () => {
+  it('remonte plus de 25 équipes (fetchAllByField contourne la page par défaut Appwrite)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' })
+    const memberships = Array.from({ length: 30 }, (_, i) => ({ $id: `m${i}`, team_id: `t${i}`, user_id: 'user-1' }))
+    const allTeams = Array.from({ length: 30 }, (_, i) =>
+      ({ $id: `t${i}`, name: `T${i}`, jam_ids: [], invite_code: `KG-X${i}`, leader_id: 'user-1' }))
+
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      if (col === 'team_members' && equalValues(queries, 'user_id').length > 0) {
+        return { total: memberships.length, documents: memberships } as never
+      }
+      if (col === 'team_members') return { total: 0, documents: [] } as never // sous-appel membres par équipe
+      if (col === 'teams') {
+        return { total: allTeams.length, documents: hasPage500(queries) ? allTeams : allTeams.slice(0, 25) } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+
+    const result = await getUserTeams()
+    expect(result).toHaveLength(30)
+  })
+
+  it("remonte plus de 50 adhésions (fetchAllDocs contourne l'ancien Query.limit(50) figé)", async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' })
+    const memberships = Array.from({ length: 60 }, (_, i) => ({ $id: `m${i}`, team_id: `t${i}`, user_id: 'user-1' }))
+    const allTeams = Array.from({ length: 60 }, (_, i) =>
+      ({ $id: `t${i}`, name: `T${i}`, jam_ids: [], invite_code: `KG-Z${i}`, leader_id: 'user-1' }))
+
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      if (col === 'team_members' && equalValues(queries, 'user_id').length > 0) {
+        // Simule l'ancien comportement Appwrite : sans le marqueur de page de fetchAllDocs
+        // (Query.limit(500)), le Query.limit(50) figé de l'ancien code plafonnait ici.
+        return { total: memberships.length, documents: page500 ? memberships : memberships.slice(0, 50) } as never
+      }
+      if (col === 'team_members') return { total: 0, documents: [] } as never
+      if (col === 'teams') {
+        return { total: allTeams.length, documents: page500 ? allTeams : allTeams.slice(0, 25) } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+
+    const result = await getUserTeams()
+    expect(result).toHaveLength(60)
+  })
+})
+
+describe('getUserParticipations — pas de plafond', () => {
+  it('remonte plus de 25 équipes ET plus de 25 jams (fetchAllByField contourne la page par défaut Appwrite)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' })
+    const memberships = Array.from({ length: 30 }, (_, i) => ({ $id: `m${i}`, team_id: `t${i}`, user_id: 'user-1' }))
+    const allTeams = Array.from({ length: 30 }, (_, i) =>
+      ({ $id: `t${i}`, name: `T${i}`, jam_ids: [`j${i}`], invite_code: `KG-X${i}`, leader_id: 'user-1' }))
+    const allJams = Array.from({ length: 30 }, (_, i) =>
+      ({ $id: `j${i}`, title: `Jam ${i}`, slug: `jam-${i}`, theme: 'T', description: 'd', type: 'online',
+        start_date: '2026-01-01T00:00:00.000Z', end_date: '2026-01-03T00:00:00.000Z', duration: '48h', organizer_id: 'u9' }))
+
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      if (col === 'team_members') return { total: memberships.length, documents: memberships } as never
+      if (col === 'teams') return { total: allTeams.length, documents: page500 ? allTeams : allTeams.slice(0, 25) } as never
+      if (col === 'game_jams') return { total: allJams.length, documents: page500 ? allJams : allJams.slice(0, 25) } as never
+      return { total: 0, documents: [] } as never
+    })
+
+    const { jams, teamsByJam } = await getUserParticipations()
+    expect(jams).toHaveLength(30)
+    expect(Object.keys(teamsByJam)).toHaveLength(30)
+  })
+
+  it("remonte plus de 50 adhésions (fetchAllDocs contourne l'ancien Query.limit(50) figé)", async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' })
+    const memberships = Array.from({ length: 60 }, (_, i) => ({ $id: `m${i}`, team_id: `t${i}`, user_id: 'user-1' }))
+    const allTeams = Array.from({ length: 60 }, (_, i) =>
+      ({ $id: `t${i}`, name: `T${i}`, jam_ids: [`j${i}`], invite_code: `KG-Z${i}`, leader_id: 'user-1' }))
+    const allJams = Array.from({ length: 60 }, (_, i) =>
+      ({ $id: `j${i}`, title: `Jam ${i}`, slug: `jam-${i}`, theme: 'T', description: 'd', type: 'online',
+        start_date: '2026-01-01T00:00:00.000Z', end_date: '2026-01-03T00:00:00.000Z', duration: '48h', organizer_id: 'u9' }))
+
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      if (col === 'team_members' && equalValues(queries, 'user_id').length > 0) {
+        return { total: memberships.length, documents: page500 ? memberships : memberships.slice(0, 50) } as never
+      }
+      if (col === 'teams') return { total: allTeams.length, documents: page500 ? allTeams : allTeams.slice(0, 25) } as never
+      if (col === 'game_jams') return { total: allJams.length, documents: page500 ? allJams : allJams.slice(0, 25) } as never
+      return { total: 0, documents: [] } as never
+    })
+
+    const { jams } = await getUserParticipations()
+    expect(jams).toHaveLength(60)
+  })
+})
 
 describe('updateJam — double garde', () => {
   it("organisateur : succès, AUCUNE entrée d'audit ni check admin", async () => {
@@ -124,6 +230,27 @@ describe('getOrganizedJamDetails — double garde', () => {
     await expect(getOrganizedJamDetails('jam-1')).rejects.toThrow('Accès non autorisé')
     expect(mockList).not.toHaveBeenCalled()
   })
+
+  it('remonte plus de 25 équipes ET plus de 25 projets (fetchAllDocs contourne la page par défaut Appwrite)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'orga-1' })
+    mockGet.mockResolvedValue({ $id: 'jam-1', organizer_id: 'orga-1', ...ONGOING_DATES } as never)
+
+    const allTeams = Array.from({ length: 30 }, (_, i) => ({ $id: `t${i}`, jam_ids: ['jam-1'], name: `T${i}` }))
+    const allProjects = Array.from({ length: 30 }, (_, i) => ({ $id: `p${i}`, jam_id: 'jam-1', title: `P${i}` }))
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      // Simule le comportement réel d'Appwrite : sans Query.limit(500) explicite (donc sans fetchAllDocs),
+      // seule une page par défaut de 25 documents revient.
+      const hasPage500 = queries.some(q => q === Query.limit(500))
+      if (col === 'teams') return { total: allTeams.length, documents: hasPage500 ? allTeams : allTeams.slice(0, 25) } as never
+      if (col === 'projects') return { total: allProjects.length, documents: hasPage500 ? allProjects : allProjects.slice(0, 25) } as never
+      return { total: 0, documents: [] } as never
+    })
+
+    const res = await getOrganizedJamDetails('jam-1')
+
+    expect(res.teams).toHaveLength(30)
+    expect(res.projects).toHaveLength(30)
+  })
 })
 
 describe('getUserDashboard', () => {
@@ -134,7 +261,12 @@ describe('getUserDashboard', () => {
     mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
       const q = queries.join('|')
       if (col === 'team_members' && q.includes('user-1')) {
-        return { total: 2, documents: [{ $id: 'm1', team_id: 'team-1', user_id: 'user-1' }] } as never
+        // 2 adhésions réelles : participationsCount vient désormais de fetchAllDocs(...).length,
+        // plus de la métadonnée .total d'un appel Query.limit(50) unique.
+        return { total: 2, documents: [
+          { $id: 'm1', team_id: 'team-1', user_id: 'user-1' },
+          { $id: 'm1b', team_id: 'team-1', user_id: 'user-1' },
+        ] } as never
       }
       if (col === 'team_members') return { total: 3, documents: [] } as never // membres par équipe
       if (col === 'teams') {
@@ -149,9 +281,10 @@ describe('getUserDashboard', () => {
         // jams de mes équipes (titres pour les annonces)
         return { total: 1, documents: [{ $id: 'jam-1', title: 'Ma Jam', slug: 'mj', theme: 'T', description: 'd', type: 'online', start_date: '2020-01-01T00:00:00.000Z', end_date: '2020-01-03T00:00:00.000Z', duration: '48h', organizer_id: 'u9' }] } as never
       }
-      if (col === 'projects' && q.includes('submitted')) return { total: 1, documents: [] } as never
       if (col === 'projects') {
-        return { total: 1, documents: [{ $id: 'proj-1', jam_id: 'jam-1', team_id: 'team-1', title: 'Mon Jeu', description: 'd', likes_count: 7 }] } as never
+        // submitted: true directement sur le document — submittedProjectsCount se calcule
+        // désormais localement sur le lot complet de projets, plus de countOf('submitted') séparé.
+        return { total: 1, documents: [{ $id: 'proj-1', jam_id: 'jam-1', team_id: 'team-1', title: 'Mon Jeu', description: 'd', likes_count: 7, submitted: true }] } as never
       }
       if (col === 'comments') {
         return { total: 1, documents: [
@@ -206,9 +339,54 @@ describe('getUserDashboard', () => {
     expect(data.teams).toEqual([])
   })
 
+  it('mes >25 équipes et >25 jams remontent toutes (fetchAllByField contourne la page par défaut Appwrite)', async () => {
+    const memberships = Array.from({ length: 30 }, (_, i) => ({ $id: `m${i}`, team_id: `t${i}`, user_id: 'user-1' }))
+    const allTeams = Array.from({ length: 30 }, (_, i) =>
+      ({ $id: `t${i}`, name: `T${i}`, jam_ids: [`j${i}`], invite_code: `KG-X${i}`, leader_id: 'user-1' }))
+    const jam29Announcement = { $id: 'an-29', jam_id: 'j29', title: 'Annonce tardive', content: 'c', author_id: 'u9', $createdAt: NOW_ISO }
+
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      const idFilter = equalValues(queries, '$id')
+      if (col === 'team_members' && equalValues(queries, 'user_id').length > 0) {
+        return { total: memberships.length, documents: memberships } as never
+      }
+      if (col === 'team_members') return { total: 0, documents: [] } as never // sous-appel comptage membres
+      if (col === 'teams') return { total: allTeams.length, documents: page500 ? allTeams : allTeams.slice(0, 25) } as never
+      if (col === 'game_jams' && idFilter.length > 0) {
+        const built = idFilter.map(id => ({ $id: id, title: `Jam ${id}` }))
+        return { total: built.length, documents: page500 ? built : built.slice(0, 25) } as never
+      }
+      if (col === 'game_jams') return { total: 0, documents: [] } as never // organizer_id / ongoing / upcoming
+      if (col === 'announcements') {
+        const ids = equalValues(queries, 'jam_id')
+        return ids.includes('j29') ? { total: 1, documents: [jam29Announcement] } as never : { total: 0, documents: [] } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+
+    const data = await getUserDashboard()
+    const entry = data.feed.find(f => f.label.includes('Annonce tardive'))
+    expect(entry).toBeDefined()
+    expect(entry?.sublabel).toBe('Jam j29')
+  })
+
+  it("participationsCount dépasse 50 (fetchAllDocs contourne l'ancien Query.limit(50) figé)", async () => {
+    const memberships = Array.from({ length: 55 }, (_, i) => ({ $id: `m${i}`, team_id: `t${i}`, user_id: 'user-1' }))
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      if (col === 'team_members' && queries.join('|').includes('user-1')) {
+        return { total: memberships.length, documents: page500 ? memberships : memberships.slice(0, 50) } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+    const data = await getUserDashboard()
+    expect(data.participationsCount).toBe(55)
+  })
+
   it('sources secondaires en panne : les compteurs restent, les listes tombent à vide sans throw', async () => {
     mockList.mockImplementation(async (_db: string, col: string) => {
-      if (col === 'team_members') return { total: 2, documents: [{ $id: 'm1', team_id: 'team-1' }] } as never
+      if (col === 'team_members') return { total: 2, documents: [{ $id: 'm1', team_id: 'team-1' }, { $id: 'm2', team_id: 'team-1' }] } as never
       throw new Error('down')
     })
     const data = await getUserDashboard()
@@ -216,5 +394,91 @@ describe('getUserDashboard', () => {
     expect(data.upcomingJams).toEqual([])
     expect(data.feed).toEqual([])
     expect(data.ongoingJam).toBeNull()
+  })
+
+  it("mes >150 teamIds (donc >100) : likesReceived et submittedProjectsCount comptent TOUS les projets (fetchAllByField remplace le list(limit 25) + countOf('submitted') qui se faisaient rejeter/tronquer)", async () => {
+    const memberships = Array.from({ length: 150 }, (_, i) => ({ $id: `m${i}`, team_id: `t${i}`, user_id: 'user-1' }))
+    const allTeams = Array.from({ length: 150 }, (_, i) =>
+      ({ $id: `t${i}`, name: `T${i}`, jam_ids: [], invite_code: `KG-Y${i}`, leader_id: 'user-1' }))
+    // Un projet par équipe, une valeur de likes constante, la moitié soumise.
+    const allProjects = Array.from({ length: 150 }, (_, i) =>
+      ({ $id: `p${i}`, team_id: `t${i}`, jam_id: 'jam-x', title: `P${i}`, likes_count: 1, submitted: i % 2 === 0 }))
+
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      if (col === 'team_members' && equalValues(queries, 'user_id').length > 0) {
+        return { total: memberships.length, documents: memberships } as never
+      }
+      if (col === 'team_members') return { total: 0, documents: [] } as never // comptage membres par équipe
+      if (col === 'teams') {
+        const idFilter = equalValues(queries, '$id')
+        return { total: allTeams.length, documents: page500 ? allTeams.filter(t => idFilter.includes(t.$id)) : allTeams.slice(0, 25) } as never
+      }
+      if (col === 'projects') {
+        // Simule le vrai comportement Appwrite : un filtre Query.equal de plus de 100 valeurs
+        // est REJETÉ (exception), pas tronqué — l'ancien code (list+countOf sans chunking)
+        // passait teamIds entier (150) d'un coup et se faisait rejeter.
+        const teamIdFilter = equalValues(queries, 'team_id')
+        if (teamIdFilter.length > 100) throw new Error('Appwrite: >100 values in equal filter')
+        return { total: allProjects.length, documents: allProjects.filter(p => teamIdFilter.includes(p.team_id)) } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+
+    const data = await getUserDashboard()
+    expect(data.likesReceived).toBe(150) // pas 25 (ex-list plafonné) ni 0 (ex-countOf rejeté)
+    expect(data.submittedProjectsCount).toBe(75) // moitié des 150, pas 0
+  })
+
+  it('mes >100 projectIds : le fil garde le top 10 (découpe par lots de 100 puis fusion/replafonnage, pas de rejet Appwrite)', async () => {
+    const NOW = Date.now()
+    // 1 seule équipe pour isoler le test du chunking sur teamIds — 150 projets dessous.
+    const allProjects = Array.from({ length: 150 }, (_, i) =>
+      ({ $id: `p${i}`, team_id: 'team-1', jam_id: 'jam-x', title: `Projet ${i}`, likes_count: 0, submitted: false }))
+    // 15 commentaires, répartis entre le 1er lot (p0..p7, indices <100) et le 2e lot (p107..p113,
+    // indices >=100) — i=0 est le plus récent, i=14 le plus ancien. Le top 10 attendu = i=0..9,
+    // qui couvre bien les deux lots (preuve que la fusion inter-lots fonctionne).
+    const feedComments = Array.from({ length: 15 }, (_, i) => ({
+      $id: `c${i}`,
+      project_id: i < 8 ? `p${i}` : `p${100 + i}`,
+      author_id: 'someone-else',
+      author_name: `Author${i}`,
+      content: 'x',
+      $createdAt: new Date(NOW - i * 60_000).toISOString(),
+    }))
+
+    let commentsCalls = 0
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      if (col === 'team_members' && equalValues(queries, 'user_id').length > 0) {
+        return { total: 1, documents: [{ $id: 'm1', team_id: 'team-1', user_id: 'user-1' }] } as never
+      }
+      if (col === 'team_members') return { total: 0, documents: [] } as never
+      if (col === 'teams') {
+        return { total: 1, documents: [{ $id: 'team-1', name: 'T', jam_ids: [], invite_code: 'KG-Z', leader_id: 'user-1' }] } as never
+      }
+      if (col === 'projects') {
+        return { total: allProjects.length, documents: page500 ? allProjects : allProjects.slice(0, 25) } as never
+      }
+      if (col === 'comments') {
+        const ids = equalValues(queries, 'project_id')
+        // Ne compter que les appels du fil (marqueur Query.limit(10)) — projectCommentCounts
+        // interroge aussi 'comments' mais par projet unique avec Query.limit(1) (countOf).
+        if (queries.some(q => q === Query.limit(10))) commentsCalls++
+        if (ids.length > 100) throw new Error('Appwrite: >100 values in equal filter')
+        return { total: 0, documents: feedComments.filter(c => ids.includes(c.project_id)) } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+
+    const data = await getUserDashboard()
+
+    // 150 projectIds / 100 = 2 lots (100 + 50) → 2 appels chunkés sur 'comments' (fil d'activité).
+    expect(commentsCalls).toBe(2)
+
+    const commentLabels = data.feed.filter(f => f.label.includes('a commenté')).map(f => f.label)
+    expect(commentLabels).toHaveLength(10)
+    for (let i = 0; i < 10; i++) expect(commentLabels.some(l => l.includes(`Author${i}`))).toBe(true)
+    for (let i = 10; i < 15; i++) expect(commentLabels.some(l => l.includes(`Author${i}`))).toBe(false)
   })
 })

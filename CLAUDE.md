@@ -171,6 +171,7 @@ bash ./scripts/restore.sh ./backups/2026-xx-xx_xx-xx-xx
 
 ## Pièges connus
 
+- **Plafonds Appwrite** — `listDocuments` tronque silencieusement à 25 sans `Query.limit`, et un filtre `Query.equal(field, [...])` de plus de 100 valeurs est **rejeté** (exception, pas troncature). Symptôme typique : un compteur `array.length` qui plafonne. Ne pas répondre par une limite « généreuse », c'est la même maladie plus loin : utiliser `fetchAllDocs` / `fetchAllByField` (`src/lib/appwrite/fetch-all.ts`) dès qu'il faut tous les documents, et une `Query.limit(N)` explicite et commentée uniquement pour un plafond produit délibéré (50 derniers messages, top 6…).
 - **`new URL()` crash** — le fallback doit contenir `http://`, pas juste `'localhost'`
 - **`getaddrinfo for redis failed`** — toujours déclarer `networks:` explicitement dans l'override pour `appwrite` et `appwrite-realtime`
 - **appwrite-realtime crash Traefik dev** — `traefik.enable=false` dans l'override (entrypoint `websecure` absent de `traefik.dev.yml`)
