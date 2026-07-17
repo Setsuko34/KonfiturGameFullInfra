@@ -11,6 +11,7 @@ import { validateUpdateJamData, type UpdateJamData } from '@/lib/validators'
 import { computeJamStatus } from '@/lib/jam-status'
 import { canActOnJam, logAdminAction } from '@/lib/appwrite/guards'
 import { mergeFeed, type FeedItem } from '@/lib/dashboard-utils'
+import { fetchAllDocs, fetchAllByField } from '@/lib/appwrite/fetch-all'
 
 // ── Lecture session utilisateur ────────────────────────────────────────────
 
@@ -26,20 +27,14 @@ export async function getUserTeams(): Promise<
 > {
   const user = await getCurrentUser()
 
-  const memberships = await serverDatabases.listDocuments(
-    DATABASE_ID, COLLECTIONS.TEAM_MEMBERS,
-    [Query.equal('user_id', user.$id), Query.limit(50)]
-  )
-  if (memberships.total === 0) return []
+  const memberships = await fetchAllDocs(COLLECTIONS.TEAM_MEMBERS, [Query.equal('user_id', user.$id)])
+  if (memberships.length === 0) return []
 
-  const teamIds = memberships.documents.map(m => m.team_id as string)
-  const teamsRes = await serverDatabases.listDocuments(
-    DATABASE_ID, COLLECTIONS.TEAMS,
-    [Query.equal('$id', teamIds)]
-  )
+  const teamIds = memberships.map(m => (m as Record<string, unknown>).team_id as string)
+  const teamDocs = await fetchAllByField(COLLECTIONS.TEAMS, '$id', teamIds)
 
   return Promise.all(
-    teamsRes.documents.map(async doc => {
+    teamDocs.map(async doc => {
       const team = mapDocToTeam(doc)
       const membersRes = await serverDatabases.listDocuments(
         DATABASE_ID, COLLECTIONS.TEAM_MEMBERS,
@@ -49,7 +44,7 @@ export async function getUserTeams(): Promise<
       return {
         team,
         members: team.members,
-        isLeader: doc.leader_id === user.$id,
+        isLeader: (doc as Record<string, unknown>).leader_id === user.$id,
       }
     })
   )
@@ -63,28 +58,19 @@ export async function getUserParticipations(): Promise<{
 }> {
   const user = await getCurrentUser()
 
-  const memberships = await serverDatabases.listDocuments(
-    DATABASE_ID, COLLECTIONS.TEAM_MEMBERS,
-    [Query.equal('user_id', user.$id), Query.limit(50)]
-  )
-  if (memberships.total === 0) return { jams: [], teamsByJam: {} }
+  const memberships = await fetchAllDocs(COLLECTIONS.TEAM_MEMBERS, [Query.equal('user_id', user.$id)])
+  if (memberships.length === 0) return { jams: [], teamsByJam: {} }
 
-  const teamIds = memberships.documents.map(m => m.team_id as string)
-  const teamsRes = await serverDatabases.listDocuments(
-    DATABASE_ID, COLLECTIONS.TEAMS,
-    [Query.equal('$id', teamIds)]
-  )
-  const teams = teamsRes.documents.map(mapDocToTeam)
+  const teamIds = memberships.map(m => (m as Record<string, unknown>).team_id as string)
+  const teamDocs = await fetchAllByField(COLLECTIONS.TEAMS, '$id', teamIds)
+  const teams = teamDocs.map(mapDocToTeam)
 
   // Dédupliquer les jam IDs depuis tous les tableaux jam_ids
   const allJamIds = [...new Set(teams.flatMap(t => t.jamIds))]
   if (allJamIds.length === 0) return { jams: [], teamsByJam: {} }
 
-  const jamsRes = await serverDatabases.listDocuments(
-    DATABASE_ID, COLLECTIONS.GAME_JAMS,
-    [Query.equal('$id', allJamIds)]
-  )
-  const jams = jamsRes.documents.map(mapDocToGameJam)
+  const jamDocs = await fetchAllByField(COLLECTIONS.GAME_JAMS, '$id', allJamIds)
+  const jams = jamDocs.map(mapDocToGameJam)
 
   const teamsByJam: Record<string, Team> = {}
   for (const team of teams) {
@@ -132,19 +118,19 @@ export async function getOrganizedJamDetails(jamId: string): Promise<{
 
   const jam = mapDocToGameJam(jamDoc)
 
-  const [teamsRes, projectsRes] = await Promise.all([
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAMS, [
+  const [teamDocs, projectDocs] = await Promise.all([
+    fetchAllDocs(COLLECTIONS.TEAMS, [
       Query.contains('jam_ids', jamId),
     ]),
-    serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
+    fetchAllDocs(COLLECTIONS.PROJECTS, [
       Query.equal('jam_id', jamId),
     ]),
   ])
 
   return {
     jam,
-    teams: teamsRes.documents.map(mapDocToTeam),
-    projects: projectsRes.documents.map(mapDocToProject),
+    teams: teamDocs.map(mapDocToTeam),
+    projects: projectDocs.map(mapDocToProject),
   }
 }
 
@@ -196,6 +182,43 @@ export async function createJam(data: CreateJamData): Promise<GameJam> {
 
 // ── Dashboard utilisateur enrichi ───────────────────────────────────────────
 
+type Doc = { $id: string; $createdAt: string; [key: string]: unknown }
+
+// Même contrainte Appwrite que fetchAllByField (filtre >100 valeurs refusé) — dupliqué ici
+// car c'est un outil d'affichage plafonné (top N), pas un outil de fetch-all.
+const FEED_FILTER_MAX = 100
+
+/**
+ * Comme fetchAllByField mais borné aux N documents les plus récents : le fil d'activité
+ * n'affiche jamais que les derniers éléments. Découpe en lots de FEED_FILTER_MAX valeurs,
+ * interroge chaque lot avec Query.limit(n), fusionne puis retrie/replafonne (l'ordre entre
+ * lots n'est pas garanti globalement par Appwrite).
+ */
+async function latestByField(
+  collection: string,
+  field: string,
+  values: string[],
+  queries: string[],
+  n: number,
+): Promise<Doc[]> {
+  if (values.length === 0) return []
+
+  const chunks = await Promise.all(
+    Array.from({ length: Math.ceil(values.length / FEED_FILTER_MAX) }, (_, i) => {
+      const chunk = values.slice(i * FEED_FILTER_MAX, (i + 1) * FEED_FILTER_MAX)
+      return serverDatabases
+        .listDocuments(DATABASE_ID, collection, [...queries, Query.equal(field, chunk), Query.limit(n)])
+        .then(r => r.documents as unknown as Doc[])
+        .catch(() => [] as Doc[])
+    })
+  )
+
+  return chunks
+    .flat()
+    .sort((a, b) => new Date(b.$createdAt).getTime() - new Date(a.$createdAt).getTime())
+    .slice(0, n)
+}
+
 export interface UserDashboardData {
   participationsCount: number
   organizedJamsCount: number
@@ -211,7 +234,6 @@ export interface UserDashboardData {
 export async function getUserDashboard(): Promise<UserDashboardData> {
   const user = await getCurrentUser()
 
-  type Doc = { $id: string; $createdAt: string; [key: string]: unknown }
   const list = (collection: string, queries: string[]): Promise<Doc[]> =>
     serverDatabases
       .listDocuments(DATABASE_ID, collection, queries)
@@ -224,48 +246,46 @@ export async function getUserDashboard(): Promise<UserDashboardData> {
       .catch(() => 0)
 
   // ── Chaîne de base : mes équipes, mes jams, mes projets ──────────────────
-  const membershipsRes = await serverDatabases
-    .listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [Query.equal('user_id', user.$id), Query.limit(50)])
-    .catch(() => ({ total: 0, documents: [] as unknown[] }))
-  const teamIds = (membershipsRes.documents as Doc[]).map(m => m.team_id as string)
+  const membershipsRes = await fetchAllDocs(COLLECTIONS.TEAM_MEMBERS, [Query.equal('user_id', user.$id)])
+    .catch(() => [])
+  const teamIds = membershipsRes.map(m => (m as Record<string, unknown>).team_id as string)
 
-  const teamDocs = teamIds.length > 0
-    ? await list(COLLECTIONS.TEAMS, [Query.equal('$id', teamIds)])
-    : []
+  const teamDocs = await fetchAllByField(COLLECTIONS.TEAMS, '$id', teamIds)
+    .then(docs => docs as unknown as Doc[])
+    .catch(() => [] as Doc[])
   const teams = teamDocs.map(doc => mapDocToTeam(doc as never))
   const myJamIds = [...new Set(teams.flatMap(t => t.jamIds))]
 
-  const projectDocs = teamIds.length > 0
-    ? await list(COLLECTIONS.PROJECTS, [Query.equal('team_id', teamIds), Query.orderDesc('$createdAt'), Query.limit(25)])
-    : []
+  // Ex-list() plafonné à 25 + ex-countOf('submitted') : teamIds est désormais illimité (peut
+  // dépasser 100), un Query.equal dessus rejetterait la requête — fetchAllByField découpe en
+  // lots de 100. Le total de projets sert à la fois à likesReceived et submittedProjectsCount
+  // ci-dessous : un seul aller-retour complet plutôt que deux vues partielles/en désaccord.
+  const projectDocs = await fetchAllByField(COLLECTIONS.PROJECTS, 'team_id', teamIds, [Query.orderDesc('$createdAt')])
+    .then(docs => docs as unknown as Doc[])
+    .catch(() => [] as Doc[])
   const projects = projectDocs.map(doc => mapDocToProject(doc as never))
   const projectIds = projects.map(p => p.id)
   const titleByProject = new Map(projects.map(p => [p.id, p.title]))
+  const submittedProjectsCount = projects.filter(p => p.submitted).length
 
   // ── Sources parallèles ─────────────────────────────────────────────────────
   const [
-    organizedJamsCount, submittedProjectsCount, ongoingJams, upcomingJamDocs,
+    organizedJamsCount, ongoingJams, upcomingJamDocs,
     myJamDocs, commentDocs, likeDocs, announcementDocs,
     teamMemberCounts, projectCommentCounts,
   ] = await Promise.all([
     countOf(COLLECTIONS.GAME_JAMS, [Query.equal('organizer_id', user.$id)]),
-    teamIds.length > 0
-      ? countOf(COLLECTIONS.PROJECTS, [Query.equal('team_id', teamIds), Query.equal('submitted', true)])
-      : Promise.resolve(0),
     list(COLLECTIONS.GAME_JAMS, [Query.equal('status', 'ongoing'), Query.limit(1)]),
     list(COLLECTIONS.GAME_JAMS, [Query.equal('status', 'upcoming'), Query.orderAsc('start_date'), Query.limit(3)]),
-    myJamIds.length > 0
-      ? list(COLLECTIONS.GAME_JAMS, [Query.equal('$id', myJamIds)])
-      : Promise.resolve([] as Doc[]),
-    projectIds.length > 0
-      ? list(COLLECTIONS.COMMENTS, [Query.equal('project_id', projectIds), Query.orderDesc('$createdAt'), Query.limit(10)])
-      : Promise.resolve([] as Doc[]),
-    projectIds.length > 0
-      ? list(COLLECTIONS.LIKES, [Query.equal('project_id', projectIds), Query.orderDesc('$createdAt'), Query.limit(10)])
-      : Promise.resolve([] as Doc[]),
-    myJamIds.length > 0
-      ? list(COLLECTIONS.ANNOUNCEMENTS, [Query.equal('jam_id', myJamIds), Query.orderDesc('$createdAt'), Query.limit(10)])
-      : Promise.resolve([] as Doc[]),
+    fetchAllByField(COLLECTIONS.GAME_JAMS, '$id', myJamIds)
+      .then(docs => docs as unknown as Doc[])
+      .catch(() => [] as Doc[]),
+    // Le fil d'activité ne montre que les 10 derniers (cap volontaire) mais projectIds/myJamIds
+    // sont désormais illimités : latestByField découpe en lots de 100 pour ne pas se faire
+    // rejeter, fusionne et replafonne à 10 côté serveur Next.
+    latestByField(COLLECTIONS.COMMENTS, 'project_id', projectIds, [Query.orderDesc('$createdAt')], 10),
+    latestByField(COLLECTIONS.LIKES, 'project_id', projectIds, [Query.orderDesc('$createdAt')], 10),
+    latestByField(COLLECTIONS.ANNOUNCEMENTS, 'jam_id', myJamIds, [Query.orderDesc('$createdAt')], 10),
     Promise.all(teams.slice(0, 5).map(t => countOf(COLLECTIONS.TEAM_MEMBERS, [Query.equal('team_id', t.id)]))),
     Promise.all(projects.slice(0, 5).map(p => countOf(COLLECTIONS.COMMENTS, [Query.equal('project_id', p.id)]))),
   ])
@@ -292,7 +312,7 @@ export async function getUserDashboard(): Promise<UserDashboardData> {
   }))
 
   return {
-    participationsCount: membershipsRes.total,
+    participationsCount: membershipsRes.length,
     organizedJamsCount,
     submittedProjectsCount,
     likesReceived: projects.reduce((s, p) => s + p.likesCount, 0),
@@ -303,14 +323,14 @@ export async function getUserDashboard(): Promise<UserDashboardData> {
       startDate: new Date(d.start_date as string),
     })),
     feed: mergeFeed([commentFeed, likeFeed, announcementFeed]),
-    teams: teams.slice(0, 5).map((t, i) => ({
+    teams: teams.slice(0, 5).map((t, i) => ({ // cap volontaire d'affichage, pas un plafond Appwrite
       id: t.id,
       name: t.name,
       membersCount: teamMemberCounts[i],
       activeJams: t.jamIds.length,
       inviteCode: t.inviteCode,
     })),
-    myProjects: projects.slice(0, 5).map((p, i) => ({
+    myProjects: projects.slice(0, 5).map((p, i) => ({ // cap volontaire d'affichage, pas un plafond Appwrite
       id: p.id,
       title: p.title,
       likes: p.likesCount,

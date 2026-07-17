@@ -16,6 +16,7 @@ import {
 import type { GameJam, Project, ChatMessage, Announcement, Team, TeamMember } from '@/types'
 import { isAdminUser, logAdminAction } from '@/lib/appwrite/guards'
 import { aggregateByDay, type DayCount } from '@/lib/dashboard-utils'
+import { fetchAllDocs, fetchAllByField } from '@/lib/appwrite/fetch-all'
 
 // Toute action de ce fichier est un endpoint public : la garde du layout ne suffit pas.
 // Dérive l'identité de la session et exige l'appartenance admin — fail-closed.
@@ -265,16 +266,14 @@ export async function listAllTeams(search = '', page = 0): Promise<Team[]> {
   const teams = res.documents.map(mapDocToTeam)
 
   if (teams.length > 0) {
-    // Membres de tout le lot en UNE requête (25 équipes × ~20 membres max < limite 500)
-    const membersRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
-      Query.equal('team_id', teams.map(t => t.id)),
-      Query.limit(500),
-    ])
+    // Membres de tout le lot en une passe, quel que soit le nombre par équipe
+    const memberDocs = await fetchAllByField(COLLECTIONS.TEAM_MEMBERS, 'team_id', teams.map(t => t.id))
     const byTeam = new Map<string, TeamMember[]>()
-    for (const doc of membersRes.documents) {
-      const list = byTeam.get(doc.team_id as string) ?? []
+    for (const doc of memberDocs) {
+      const teamId = (doc as Record<string, unknown>).team_id as string
+      const list = byTeam.get(teamId) ?? []
       list.push(mapDocToTeamMember(doc))
-      byTeam.set(doc.team_id as string, list)
+      byTeam.set(teamId, list)
     }
     for (const team of teams) team.members = byTeam.get(team.id) ?? []
   }
@@ -406,11 +405,11 @@ export async function listJamsForCuration(): Promise<GameJam[]> {
 
 export async function listProjectsForJam(jamId: string): Promise<Project[]> {
   await requireAdminOrThrow()
-  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
+  const docs = await fetchAllDocs(COLLECTIONS.PROJECTS, [
     Query.equal('jam_id', jamId),
     Query.equal('submitted', true),
   ])
-  return res.documents.map(mapDocToProject)
+  return docs.map(mapDocToProject)
 }
 
 export async function setProjectPlacement(

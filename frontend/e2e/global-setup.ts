@@ -61,6 +61,22 @@ export default async function globalSetup() {
 
   fs.mkdirSync(AUTH_DIR, { recursive: true })
 
+  // Purger le membership admin du run précédent AVANT de supprimer le user :
+  // supprimer un user ne supprime pas ses memberships, qui deviennent des
+  // fantômes indélébiles (DELETE → 404) et gonflent la team à chaque run.
+  const existingMemberships = await teams
+    .listMemberships({ teamId: ADMIN_TEAM_ID })
+    .catch(() => null)
+  if (existingMemberships) {
+    await Promise.all(
+      existingMemberships.memberships
+        .filter(m => m.userId === TEST_USERS.admin.id)
+        .map(m =>
+          teams.deleteMembership({ teamId: ADMIN_TEAM_ID, membershipId: m.$id }).catch(() => {})
+        )
+    )
+  }
+
   // Nettoyage des résidus d'un run précédent.
   // Les users fixes (user1/2/admin) ont des IDs déterministes → delete par ID.
   // Le user d'inscription est créé par le flow UI avec un ID ALÉATOIRE (ID.unique())

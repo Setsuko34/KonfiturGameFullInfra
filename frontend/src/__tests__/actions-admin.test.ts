@@ -38,6 +38,7 @@ import {
   deleteMessage,
   listAllJams,
   listAllTeams,
+  listProjectsForJam,
   getAdminDashboard,
 } from '@/lib/actions/admin'
 import { serverDatabases, serverTeams, serverUsers } from '@/lib/appwrite/server'
@@ -284,6 +285,36 @@ describe('listAllTeams', () => {
     expect(mockListDocuments).toHaveBeenCalledTimes(2) // pas de N+1
   })
 
+  it("remonte plus de 500 membres au total (fetchAllByField contourne l'ancien Query.limit(500) figé)", async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+
+    const teams = [
+      { $id: 't1', jam_ids: [], name: 'Alpha', invite_code: 'KG-AAAAAAAA', leader_id: 'u1' },
+      { $id: 't2', jam_ids: [], name: 'Beta', invite_code: 'KG-BBBBBBBB', leader_id: 'u2' },
+    ]
+    // 600 membres au total, répartis sur les 2 équipes → dépasse l'ancien Query.limit(500)
+    const allMembers = Array.from({ length: 600 }, (_, i) =>
+      ({ $id: `mem${i}`, team_id: i % 2 === 0 ? 't1' : 't2', user_id: `u${i}`, name: `M${i}`, role: 'dev', is_leader: false }))
+
+    mockListDocuments.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      if (col === 'teams') return { total: teams.length, documents: teams } as never
+      if (col === 'team_members') {
+        // Simule la pagination curseur de fetchAllDocs : 500 puis 100 (au lieu d'un unique
+        // Query.limit(500) qui tronquerait silencieusement à 500).
+        const cursor = queries.find(q => JSON.parse(q).method === 'cursorAfter')
+        if (!cursor) return { total: allMembers.length, documents: allMembers.slice(0, 500) } as never
+        return { total: allMembers.length, documents: allMembers.slice(500) } as never
+      }
+      return { total: 0, documents: [] } as never
+    })
+
+    const result = await listAllTeams()
+
+    const totalMembers = result.reduce((s, t) => s + t.members.length, 0)
+    expect(totalMembers).toBe(600)
+  })
+
   it('filtre par nom avec Query.contains quand search est fourni', async () => {
     mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
     mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
@@ -293,6 +324,26 @@ describe('listAllTeams', () => {
 
     expect(mockListDocuments).toHaveBeenCalledWith('konfitur-db', 'teams',
       expect.arrayContaining([Query.contains('name', 'alpha')]))
+  })
+})
+
+describe('listProjectsForJam — pas de plafond', () => {
+  it('remonte plus de 25 projets soumis (fetchAllDocs contourne la page par défaut Appwrite)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+
+    const allDocs = Array.from({ length: 30 }, (_, i) => ({ $id: `p${i}`, jam_id: 'jam-1', title: `P${i}` }))
+    mockListDocuments.mockImplementation(async (_db: string, _col: string, queries: string[] = []) => {
+      // Simule le comportement réel d'Appwrite : sans Query.limit(500) explicite (donc sans fetchAllDocs),
+      // seule une page par défaut de 25 documents revient.
+      const hasPage500 = queries.some(q => q === Query.limit(500))
+      const page = hasPage500 ? allDocs : allDocs.slice(0, 25)
+      return { total: allDocs.length, documents: page } as never
+    })
+
+    const projects = await listProjectsForJam('jam-1')
+
+    expect(projects).toHaveLength(30)
   })
 })
 

@@ -8,6 +8,7 @@ import { mapDocToTeam, mapDocToTeamMember, mapDocToGameJam, mapDocToProject } fr
 import type { Team, TeamMember, GameJam, Project } from '@/types'
 import { computeJamStatus } from '@/lib/jam-status'
 import { canActOnTeam, logAdminAction } from '@/lib/appwrite/guards'
+import { fetchAllDocs, fetchAllByField } from '@/lib/appwrite/fetch-all'
 
 // ── Génération du code d'invitation ──────────────────────────────────────────
 
@@ -148,18 +149,19 @@ export async function joinTeamByCode(
 
 export async function getTeamsByJam(jamId: string): Promise<Team[]> {
   try {
-    const res = await serverDatabases.listDocuments(
-      DATABASE_ID, COLLECTIONS.TEAMS,
-      [Query.contains('jam_ids', jamId), Query.limit(100)]
-    )
-    const teams = res.documents.map(mapDocToTeam)
+    const teamDocs = await fetchAllDocs(COLLECTIONS.TEAMS, [Query.contains('jam_ids', jamId)])
+    const teams = teamDocs.map(mapDocToTeam)
 
-    for (const team of teams) {
-      const membersRes = await serverDatabases.listDocuments(
-        DATABASE_ID, COLLECTIONS.TEAM_MEMBERS,
-        [Query.equal('team_id', team.id), Query.limit(20)]
-      )
-      team.members = membersRes.documents.map(mapDocToTeamMember)
+    if (teams.length > 0) {
+      const memberDocs = await fetchAllByField(COLLECTIONS.TEAM_MEMBERS, 'team_id', teams.map(t => t.id))
+      const byTeam = new Map<string, TeamMember[]>()
+      for (const doc of memberDocs) {
+        const teamId = (doc as Record<string, unknown>).team_id as string
+        const list = byTeam.get(teamId) ?? []
+        list.push(mapDocToTeamMember(doc))
+        byTeam.set(teamId, list)
+      }
+      for (const team of teams) team.members = byTeam.get(team.id) ?? []
     }
 
     return teams
