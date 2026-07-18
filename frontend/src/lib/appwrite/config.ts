@@ -28,3 +28,7 @@ export type CollectionId = typeof COLLECTIONS[keyof typeof COLLECTIONS]
 export type BucketId = typeof BUCKETS[keyof typeof BUCKETS]
 
 export const ADMIN_TEAM_ID = '69bc67f1003d025c931a'
+
+// Nombre max de jams à la une — doit rester aligné entre la garde de toggleJamFeatured
+// (admin.ts) et le Query.limit d'affichage sur la home (home.ts). Un seul 6, deux lecteurs.
+export const MAX_FEATURED_JAMS = 6
