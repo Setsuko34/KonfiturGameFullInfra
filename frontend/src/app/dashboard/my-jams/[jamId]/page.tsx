@@ -17,9 +17,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function ManageJamPage({ params }: Props) {
   const { jamId } = await params
   let data: Awaited<ReturnType<typeof getOrganizedJamDetails>>
-  let announcements: Awaited<ReturnType<typeof getAnnouncementsByJam>>
+  let announcementsRes: Awaited<ReturnType<typeof getAnnouncementsByJam>>
   try {
-    ;[data, announcements] = await Promise.all([
+    ;[data, announcementsRes] = await Promise.all([
       getOrganizedJamDetails(jamId),
       getAnnouncementsByJam(jamId),
     ])
@@ -27,6 +27,7 @@ export default async function ManageJamPage({ params }: Props) {
     notFound()
   }
   const { jam, teams, projects } = data!
+  const announcements = announcementsRes!.announcements
   const jamEnded = jam.endDate < new Date()
 
   return (

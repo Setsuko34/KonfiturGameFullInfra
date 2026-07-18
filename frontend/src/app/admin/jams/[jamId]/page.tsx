@@ -18,9 +18,9 @@ export const metadata: Metadata = { title: 'Gérer la jam' }
 export default async function AdminManageJamPage({ params }: Props) {
   const { jamId } = await params
   let data: Awaited<ReturnType<typeof getOrganizedJamDetails>>
-  let announcements: Awaited<ReturnType<typeof getAnnouncementsByJam>>
+  let announcementsRes: Awaited<ReturnType<typeof getAnnouncementsByJam>>
   try {
-    ;[data, announcements] = await Promise.all([
+    ;[data, announcementsRes] = await Promise.all([
       getOrganizedJamDetails(jamId), // double garde : organisateur OU admin
       getAnnouncementsByJam(jamId),
     ])
@@ -28,6 +28,7 @@ export default async function AdminManageJamPage({ params }: Props) {
     notFound()
   }
   const { jam, projects } = data!
+  const announcements = announcementsRes!.announcements
   const teams = await getTeamsByJam(jamId) // avec membres (pour « Retirer »)
   const jamEnded = jam.endDate < new Date()
   const submitted = projects.filter(p => p.submitted)

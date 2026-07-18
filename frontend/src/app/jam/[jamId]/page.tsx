@@ -1,10 +1,11 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Users, Clock, Trophy, MessageSquare, Info, Megaphone } from 'lucide-react'
+import { Users, Clock, Trophy, MessageSquare, Info, Megaphone, ChevronDown } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import JamChat from '@/components/JamChat'
+import LoadMoreList from '@/components/LoadMoreList'
 import { getJamById, getAnnouncementsByJam } from '@/lib/actions/jams'
 import { generateJamJsonLd, serializeJsonLd, truncateDescription } from '@/lib/seo'
 import { getTeamsByJam } from '@/lib/actions/teams'
@@ -15,6 +16,8 @@ import { storageFileUrl } from '@/lib/appwrite/file-url'
 import { BUCKETS } from '@/lib/appwrite/config'
 import JamTeamsSection from './JamTeamsSection'
 import JamCountdownClient from './JamCountdownClient'
+import JamAnnouncementsList from './JamAnnouncementsList'
+import type { Announcement } from '@/types'
 
 interface Props {
   params: Promise<{ jamId: string }>
@@ -71,7 +74,7 @@ export default async function JamPage({ params }: Props) {
     // Non connecté — currentUser reste null
   }
 
-  const [jam, announcements, teams, projects, chatMessages] = await Promise.all([
+  const [jam, { announcements, nextCursor: announcementsNextCursor }, teams, projects, chatMessages] = await Promise.all([
     getJamById(jamId),
     getAnnouncementsByJam(jamId),
     getTeamsByJam(jamId),
@@ -80,6 +83,12 @@ export default async function JamPage({ params }: Props) {
   ])
 
   if (!jam) notFound()
+
+  async function loadMoreAnnouncements(cursor: string): Promise<{ items: Announcement[]; nextCursor: string | null }> {
+    'use server'
+    const res = await getAnnouncementsByJam(jamId, cursor)
+    return { items: res.announcements, nextCursor: res.nextCursor }
+  }
 
   // Team de l'user dans cette jam
   const userTeamInThisJam = currentUser
@@ -334,96 +343,81 @@ export default async function JamPage({ params }: Props) {
 
               {/* Section Projets */}
               <section id="projects" aria-labelledby="projects-heading">
-                <h2 id="projects-heading" className="text-xl font-bold mb-4">
-                  Projets soumis ({projects.length})
-                </h2>
-                {projects.length > 0 ? (
-                  <div className="grid sm:grid-cols-2 gap-4">
-                    {projects.map(project => (
-                      <Link
-                        key={project.id}
-                        href={`/project/${project.id}`}
-                        className="p-4 border block"
-                        style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-                      >
-                        {project.coverImage && (
-                          /* eslint-disable-next-line @next/next/no-img-element */
-                          <img src={storageFileUrl(BUCKETS.PROJECT_ASSETS, project.coverImage)}
-                            alt="" aria-hidden="true"
-                            className="w-full h-28 object-cover border-b mb-3"
-                            style={{ borderColor: 'var(--border)' }} />
-                        )}
-                        <p className="font-semibold mb-1">{project.title}</p>
-                        <p
-                          className="text-sm mb-3 line-clamp-2"
-                          style={{ color: 'var(--muted-foreground)' }}
+                <details open>
+                  <summary className="flex items-center justify-between gap-2 mb-4 min-h-11 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    <h2 id="projects-heading" className="text-xl font-bold">
+                      Projets soumis ({projects.length})
+                    </h2>
+                    <ChevronDown
+                      size={20}
+                      className="chevron transition-transform duration-200 flex-shrink-0"
+                      style={{ color: 'var(--muted-foreground)' }}
+                      aria-hidden="true"
+                    />
+                  </summary>
+                  {projects.length > 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {projects.map(project => (
+                        <Link
+                          key={project.id}
+                          href={`/project/${project.id}`}
+                          className="p-4 border block"
+                          style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
                         >
-                          {project.description}
-                        </p>
-                        <div className="flex items-center gap-3">
-                          <span className="label-tech" style={{ color: 'var(--primary)' }}>
-                            {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
-                          </span>
-                          {project.placement ? (
-                            <span className="label-tech" style={{ color: 'var(--success)' }}>
-                              ★ {project.placement}{project.placement === 1 ? 'er' : 'e'}
+                          {project.coverImage && (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={storageFileUrl(BUCKETS.PROJECT_ASSETS, project.coverImage)}
+                              alt="" aria-hidden="true"
+                              className="w-full h-28 object-cover border-b mb-3"
+                              style={{ borderColor: 'var(--border)' }} />
+                          )}
+                          <p className="font-semibold mb-1">{project.title}</p>
+                          <p
+                            className="text-sm mb-3 line-clamp-2"
+                            style={{ color: 'var(--muted-foreground)' }}
+                          >
+                            {project.description}
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <span className="label-tech" style={{ color: 'var(--primary)' }}>
+                              {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
                             </span>
-                          ) : null}
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    Aucun projet soumis pour l&apos;instant.
-                  </p>
-                )}
+                            {project.placement ? (
+                              <span className="label-tech" style={{ color: 'var(--success)' }}>
+                                ★ {project.placement}{project.placement === 1 ? 'er' : 'e'}
+                              </span>
+                            ) : null}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                      Aucun projet soumis pour l&apos;instant.
+                    </p>
+                  )}
+                </details>
               </section>
 
               {/* Section Annonces */}
               <section id="announcements" aria-labelledby="ann-heading">
-                <h2 id="ann-heading" className="text-xl font-bold mb-4">Annonces</h2>
-                {announcements.length > 0 ? (
-                  <div className="space-y-3">
-                    {announcements.map(ann => (
-                      <article
-                        key={ann.id}
-                        className="p-5 border"
-                        style={{
-                          background: 'var(--card)',
-                          borderColor: ann.important ? 'var(--secondary)' : 'var(--border)',
-                          borderLeft: ann.important ? `3px solid var(--secondary)` : undefined,
-                        }}
-                        aria-label={ann.important ? `Annonce importante : ${ann.title}` : ann.title}
-                      >
-                        {ann.important && (
-                          <p className="label-tech mb-2" style={{ color: 'var(--secondary)' }}>
-                            IMPORTANT
-                          </p>
-                        )}
-                        <h3 className="font-semibold mb-2">{ann.title}</h3>
-                        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                          {ann.content}
-                        </p>
-                        <time
-                          className="label-tech mt-3 block"
-                          style={{ color: 'var(--muted-foreground)' }}
-                          dateTime={ann.createdAt.toISOString()}
-                        >
-                          {ann.createdAt.toLocaleDateString('fr-FR', {
-                            day: 'numeric',
-                            month: 'long',
-                            year: 'numeric',
-                          })}
-                        </time>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    Aucune annonce pour l&apos;instant.
-                  </p>
-                )}
+                <details open>
+                  <summary className="flex items-center justify-between gap-2 mb-4 min-h-11 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    <h2 id="ann-heading" className="text-xl font-bold">Annonces</h2>
+                    <ChevronDown
+                      size={20}
+                      className="chevron transition-transform duration-200 flex-shrink-0"
+                      style={{ color: 'var(--muted-foreground)' }}
+                      aria-hidden="true"
+                    />
+                  </summary>
+                  <LoadMoreList
+                    initialItems={announcements}
+                    initialCursor={announcementsNextCursor}
+                    loadMore={loadMoreAnnouncements}
+                    List={JamAnnouncementsList}
+                  />
+                </details>
               </section>
 
               {/* Section Chat */}
