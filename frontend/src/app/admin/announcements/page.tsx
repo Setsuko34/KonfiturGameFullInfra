@@ -1,15 +1,23 @@
 import type { Metadata } from 'next'
-import { Trash2 } from 'lucide-react'
-import { createAnnouncement, listAnnouncements, deleteAnnouncement } from '@/lib/actions/admin'
+import { createAnnouncement, listAnnouncements } from '@/lib/actions/admin'
 import { getCurrentUser } from '@/lib/actions/dashboard'
+import AnnouncementsList from './AnnouncementsList'
+import LoadMoreList from '@/components/LoadMoreList'
+import type { Announcement } from '@/types'
 
 export const metadata: Metadata = { title: 'Annonces' }
 
 export default async function AdminAnnouncementsPage() {
-  const [user, announcements] = await Promise.all([
+  const [user, { announcements, nextCursor }] = await Promise.all([
     getCurrentUser(),
     listAnnouncements(),
   ])
+
+  async function loadMoreAnnouncements(cursor: string): Promise<{ items: Announcement[]; nextCursor: string | null }> {
+    'use server'
+    const res = await listAnnouncements(cursor)
+    return { items: res.announcements, nextCursor: res.nextCursor }
+  }
 
   return (
     <div>
@@ -106,63 +114,17 @@ export default async function AdminAnnouncementsPage() {
         <h2 className="text-base font-semibold mb-4 pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
           Annonces publiées ({announcements.length})
         </h2>
-        {announcements.length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>Aucune annonce.</p>
-        ) : (
-          <div className="space-y-3">
-            {announcements.map(ann => (
-              <div
-                key={ann.id}
-                className="p-4 border"
-                style={{
-                  background: 'var(--card)',
-                  borderColor: ann.important ? 'var(--secondary)' : 'var(--border)',
-                }}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-semibold text-sm">{ann.title}</span>
-                      {ann.important && (
-                        <span
-                          className="text-[9px] uppercase tracking-widest px-1.5 py-0.5"
-                          style={{ background: 'rgba(239,35,60,0.15)', color: 'var(--secondary)' }}
-                        >
-                          Important
-                        </span>
-                      )}
-                      {ann.jamId !== 'all' && (
-                        <span
-                          className="text-[9px] uppercase tracking-widest px-1.5 py-0.5"
-                          style={{ background: 'rgba(79,106,255,0.15)', color: 'var(--primary)' }}
-                        >
-                          Jam ciblée
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>{ann.content}</p>
-                    <p className="text-xs mt-1.5" style={{ color: 'var(--muted-foreground)' }}>
-                      {ann.createdAt.toLocaleDateString('fr-FR')}
-                    </p>
-                  </div>
-                  <form action={async () => {
-                    'use server'
-                    await deleteAnnouncement(ann.id)
-                  }}>
-                    <button
-                      type="submit"
-                      title="Supprimer l'annonce"
-                      className="p-1.5 border flex-shrink-0 transition-opacity hover:opacity-80"
-                      style={{ borderColor: 'var(--secondary)', color: 'var(--secondary)' }}
-                    >
-                      <Trash2 size={13} aria-hidden="true" />
-                    </button>
-                  </form>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {/* key = tête de liste : une création change announcements[0] et force le remontage de
+            LoadMoreList/AnnouncementsList (qui accumulent en useState et ne revoient jamais les
+            nouvelles props après revalidatePath) pour repartir du lot frais. Les suppressions
+            restent gérées localement par removedIds dans AnnouncementsList. */}
+        <LoadMoreList
+          key={announcements[0]?.id ?? 'empty'}
+          initialItems={announcements}
+          initialCursor={nextCursor}
+          loadMore={loadMoreAnnouncements}
+          List={AnnouncementsList}
+        />
       </section>
     </div>
   )

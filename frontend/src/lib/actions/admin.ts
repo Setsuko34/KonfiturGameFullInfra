@@ -4,7 +4,7 @@ import { ID, Query } from 'node-appwrite'
 import { revalidatePath } from 'next/cache'
 import { serverDatabases, serverUsers, serverTeams } from '@/lib/appwrite/server'
 import { createSessionClient } from '@/lib/appwrite/session'
-import { DATABASE_ID, COLLECTIONS, ADMIN_TEAM_ID } from '@/lib/appwrite/config'
+import { DATABASE_ID, COLLECTIONS, ADMIN_TEAM_ID, MAX_FEATURED_JAMS } from '@/lib/appwrite/config'
 import {
   mapDocToGameJam,
   mapDocToProject,
@@ -12,6 +12,7 @@ import {
   mapDocToAnnouncement,
   mapDocToTeam,
   mapDocToTeamMember,
+  type AppwriteDoc,
 } from '@/lib/appwrite/types'
 import type { GameJam, Project, ChatMessage, Announcement, Team, TeamMember } from '@/types'
 import { isAdminUser, logAdminAction } from '@/lib/appwrite/guards'
@@ -242,6 +243,18 @@ export async function deleteJam(jamId: string): Promise<{ success: boolean; erro
 export async function toggleJamFeatured(jamId: string, featured: boolean, featuredOrder?: number): Promise<{ success: boolean; error?: string }> {
   const admin = await requireAdmin()
   if (!admin) return REFUS_ADMIN
+  // Retirer une mise en avant reste toujours autorisé (jamais d'état non corrigeable) ;
+  // seul l'ajout est plafonné, borne alignée sur le Query.limit(MAX_FEATURED_JAMS) de home.ts.
+  if (featured) {
+    const alreadyFeatured = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
+      Query.equal('featured', true),
+      Query.notEqual('$id', jamId), // exclut la jam courante (idempotent si déjà featured)
+      Query.limit(1), // le total suffit pour compter, cf. jamsCountRes de home.ts
+    ])
+    if (alreadyFeatured.total >= MAX_FEATURED_JAMS) {
+      return { success: false, error: "Maximum 6 jams à la une. Retirez-en une avant d'en ajouter une autre." }
+    }
+  }
   await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId, {
     featured,
     ...(featuredOrder !== undefined ? { featured_order: featuredOrder } : {}),
@@ -267,10 +280,10 @@ export async function listAllTeams(search = '', page = 0): Promise<Team[]> {
 
   if (teams.length > 0) {
     // Membres de tout le lot en une passe, quel que soit le nombre par équipe
-    const memberDocs = await fetchAllByField(COLLECTIONS.TEAM_MEMBERS, 'team_id', teams.map(t => t.id))
+    const memberDocs = await fetchAllByField<AppwriteDoc>(COLLECTIONS.TEAM_MEMBERS, 'team_id', teams.map(t => t.id))
     const byTeam = new Map<string, TeamMember[]>()
     for (const doc of memberDocs) {
-      const teamId = (doc as Record<string, unknown>).team_id as string
+      const teamId = doc.team_id as string
       const list = byTeam.get(teamId) ?? []
       list.push(mapDocToTeamMember(doc))
       byTeam.set(teamId, list)
@@ -282,26 +295,40 @@ export async function listAllTeams(search = '', page = 0): Promise<Team[]> {
 
 // ── Modération ─────────────────────────────────────────────────────────────
 
-export async function listReportedMessages(page = 0): Promise<ChatMessage[]> {
+const REPORTED_BATCH_SIZE = 20 // taille de lot délibérée pour « Voir plus » (pas un plafond accidentel)
+
+/**
+ * Récupère un lot de messages signalés, le plus récent d'abord. `cursor` (dernier $id du lot
+ * précédent) permet d'enchaîner via LoadMoreList. `nextCursor` vaut null dès que le lot revient
+ * incomplet : c'est le seul signal honnête qu'il n'y a plus rien à charger.
+ */
+export async function listReportedMessages(
+  cursor?: string,
+): Promise<{ messages: ChatMessage[]; nextCursor: string | null }> {
   await requireAdminOrThrow()
-  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, [
-    Query.equal('reported', true),
-    Query.orderDesc('$createdAt'),
-    Query.limit(20),
-    Query.offset(page * 20),
-  ])
-  return res.documents.map(mapDocToChatMessage)
+  const queries = [Query.equal('reported', true), Query.orderDesc('$createdAt'), Query.limit(REPORTED_BATCH_SIZE)]
+  if (cursor) queries.push(Query.cursorAfter(cursor))
+
+  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, queries)
+  const messages = res.documents.map(mapDocToChatMessage)
+  const nextCursor = res.documents.length < REPORTED_BATCH_SIZE ? null : res.documents[res.documents.length - 1].$id
+
+  return { messages, nextCursor }
 }
 
-export async function listReportedProjects(page = 0): Promise<Project[]> {
+/** Même contrat que listReportedMessages, pour les projets signalés. */
+export async function listReportedProjects(
+  cursor?: string,
+): Promise<{ projects: Project[]; nextCursor: string | null }> {
   await requireAdminOrThrow()
-  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
-    Query.equal('reported', true),
-    Query.orderDesc('$createdAt'),
-    Query.limit(20),
-    Query.offset(page * 20),
-  ])
-  return res.documents.map(mapDocToProject)
+  const queries = [Query.equal('reported', true), Query.orderDesc('$createdAt'), Query.limit(REPORTED_BATCH_SIZE)]
+  if (cursor) queries.push(Query.cursorAfter(cursor))
+
+  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, queries)
+  const projects = res.documents.map(mapDocToProject)
+  const nextCursor = res.documents.length < REPORTED_BATCH_SIZE ? null : res.documents[res.documents.length - 1].$id
+
+  return { projects, nextCursor }
 }
 
 export async function deleteMessage(messageId: string): Promise<{ success: boolean; error?: string }> {
@@ -373,14 +400,21 @@ export async function createAnnouncement(data: CreateAnnouncementData): Promise<
   return { success: true }
 }
 
-export async function listAnnouncements(page = 0): Promise<Announcement[]> {
+const ADMIN_ANNOUNCEMENTS_BATCH_SIZE = 20 // taille de lot délibérée pour « Voir plus » (pas un plafond accidentel)
+
+/** Même contrat que listReportedMessages, pour les annonces publiées. */
+export async function listAnnouncements(
+  cursor?: string,
+): Promise<{ announcements: Announcement[]; nextCursor: string | null }> {
   await requireAdminOrThrow()
-  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.ANNOUNCEMENTS, [
-    Query.orderDesc('$createdAt'),
-    Query.limit(20),
-    Query.offset(page * 20),
-  ])
-  return res.documents.map(mapDocToAnnouncement)
+  const queries = [Query.orderDesc('$createdAt'), Query.limit(ADMIN_ANNOUNCEMENTS_BATCH_SIZE)]
+  if (cursor) queries.push(Query.cursorAfter(cursor))
+
+  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.ANNOUNCEMENTS, queries)
+  const announcements = res.documents.map(mapDocToAnnouncement)
+  const nextCursor = res.documents.length < ADMIN_ANNOUNCEMENTS_BATCH_SIZE ? null : res.documents[res.documents.length - 1].$id
+
+  return { announcements, nextCursor }
 }
 
 export async function deleteAnnouncement(announcementId: string): Promise<{ success: boolean; error?: string }> {

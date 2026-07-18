@@ -1,9 +1,11 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { getRecentLogs, getCountryStats, getBannedIPs } from '@/lib/actions/logs'
+import { getRecentLogs, getCountryStats, getBannedIPs, type AuditLog } from '@/lib/actions/logs'
 import BanIPForm from './BanIPForm'
 import UnbanButton from './UnbanButton'
 import ClearLogsButton from './ClearLogsButton'
+import LogsTable from './LogsTable'
+import LoadMoreList from '@/components/LoadMoreList'
 import { Shield, Globe, AlertTriangle, Activity } from 'lucide-react'
 
 export const metadata: Metadata = { title: 'Logs & Monitoring' }
@@ -13,15 +15,6 @@ function countryFlag(code: string): string {
   if (!code || code === 'XX') return '🌐'
   const codePoints = [...code.toUpperCase()].map(c => 0x1F1E6 - 65 + c.charCodeAt(0))
   return String.fromCodePoint(...codePoints)
-}
-
-const typeColor: Record<string, string> = {
-  connection: 'var(--muted-foreground)',
-  auth: 'var(--primary)',
-  error: 'var(--secondary)',
-  bot_blocked: 'var(--secondary)',
-  ban_applied: 'var(--success)',
-  admin_action: 'var(--secondary)',
 }
 
 const TYPE_FILTERS = [
@@ -38,13 +31,19 @@ type Props = { searchParams: Promise<{ [key: string]: string | string[] | undefi
 export default async function AdminLogsPage({ searchParams }: Props) {
   const sp = await searchParams
   const type = Array.isArray(sp.type) ? sp.type[0] : sp.type
-  const [logs, countryStats, bannedIPs] = await Promise.all([
-    getRecentLogs(type, 0),
+  const [{ logs, nextCursor }, countryStats, bannedIPs] = await Promise.all([
+    getRecentLogs(type),
     getCountryStats(),
     getBannedIPs(),
   ])
 
   const totalConnections = countryStats.reduce((a, b) => a + b.count, 0)
+
+  async function loadMoreLogs(cursor: string): Promise<{ items: AuditLog[]; nextCursor: string | null }> {
+    'use server'
+    const res = await getRecentLogs(type, cursor)
+    return { items: res.logs, nextCursor: res.nextCursor }
+  }
 
   return (
     <section aria-labelledby="logs-heading">
@@ -80,7 +79,7 @@ export default async function AdminLogsPage({ searchParams }: Props) {
           <div>
             <h2 className="text-sm font-bold mb-3 flex items-center gap-2">
               <Activity size={13} aria-hidden="true" />
-              Logs récents (50 derniers)
+              Logs récents
             </h2>
             {/* Filtres par type */}
             <div className="flex flex-wrap gap-2 mb-3">
@@ -99,52 +98,7 @@ export default async function AdminLogsPage({ searchParams }: Props) {
                 </Link>
               ))}
             </div>
-            <div className="border overflow-x-auto" style={{ borderColor: 'var(--border)' }}>
-              <table className="w-full text-xs" role="grid">
-                <thead>
-                  <tr style={{ background: 'var(--surface-elevated)' }}>
-                    {['Type', 'Message', 'IP', 'Pays', 'Chemin', 'Date'].map(h => (
-                      <th key={h} scope="col"
-                        className="text-left px-3 py-2 font-semibold tracking-wider"
-                        style={{ color: 'var(--muted-foreground)', borderBottom: '1px solid var(--border)' }}>
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {logs.map(log => (
-                    <tr key={log.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                      <td className="px-3 py-2 font-mono font-semibold" style={{ color: typeColor[log.type] ?? 'var(--foreground)' }}>
-                        {log.type}
-                      </td>
-                      <td className="px-3 py-2 max-w-[260px] truncate" title={log.message}>
-                        {log.message ?? '—'}
-                      </td>
-                      <td className="px-3 py-2 font-mono" style={{ color: 'var(--muted-foreground)' }}>
-                        {log.ip ?? '—'}
-                      </td>
-                      <td className="px-3 py-2" title={log.countryCode}>
-                        {log.countryCode ? countryFlag(log.countryCode) : '—'}
-                      </td>
-                      <td className="px-3 py-2 max-w-[200px] truncate" style={{ color: 'var(--muted-foreground)' }}>
-                        {log.path ?? '—'}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--muted-foreground)' }}>
-                        {log.createdAt.toLocaleString('fr-FR', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })}
-                      </td>
-                    </tr>
-                  ))}
-                  {logs.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-3 py-6 text-center" style={{ color: 'var(--muted-foreground)' }}>
-                        Aucun log disponible
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <LoadMoreList initialItems={logs} initialCursor={nextCursor} loadMore={loadMoreLogs} List={LogsTable} />
             <div className="mt-2 flex justify-end">
               <ClearLogsButton />
             </div>

@@ -77,6 +77,56 @@ describe('garde admin sur les actions logs', () => {
   })
 })
 
+// n logs minimaux, chacun avec un $id unique, pour tester la pagination au curseur
+function logDocs(n: number, offset = 0) {
+  return Array.from({ length: n }, (_, i) => ({
+    $id: `log-${offset + i}`,
+    type: 'auth',
+    $createdAt: '2026-07-18T00:00:00.000Z',
+  }))
+}
+
+describe('getRecentLogs — pagination au curseur', () => {
+  it('retourne { logs, nextCursor } avec les logs mappés', async () => {
+    asAdmin()
+    mockList.mockResolvedValue({ total: 1, documents: logDocs(1) } as never)
+    const { logs } = await getRecentLogs()
+    expect(logs).toHaveLength(1)
+    expect(logs[0].id).toBe('log-0')
+  })
+
+  it('nextCursor est null quand le lot revient incomplet (moins de 50)', async () => {
+    asAdmin()
+    mockList.mockResolvedValue({ total: 6, documents: logDocs(6) } as never)
+    const { nextCursor } = await getRecentLogs()
+    expect(nextCursor).toBeNull()
+  })
+
+  it('nextCursor pointe vers le dernier document quand le lot est plein (50)', async () => {
+    asAdmin()
+    mockList.mockResolvedValue({ total: 200, documents: logDocs(50) } as never)
+    const { nextCursor } = await getRecentLogs()
+    expect(nextCursor).toBe('log-49')
+  })
+
+  it('transmet le curseur reçu via Query.cursorAfter à Appwrite', async () => {
+    asAdmin()
+    mockList.mockResolvedValue({ total: 6, documents: logDocs(6, 50) } as never)
+    await getRecentLogs(undefined, 'log-49')
+    const queries = mockList.mock.calls[0][2] as string[]
+    expect(queries).toContain(Query.cursorAfter('log-49'))
+  })
+
+  it('conserve le filtre par type en même temps que le curseur', async () => {
+    asAdmin()
+    mockList.mockResolvedValue({ total: 6, documents: logDocs(6, 50) } as never)
+    await getRecentLogs('error', 'log-49')
+    const queries = mockList.mock.calls[0][2] as string[]
+    expect(queries).toContain(Query.equal('type', 'error'))
+    expect(queries).toContain(Query.cursorAfter('log-49'))
+  })
+})
+
 describe('getCountryStats', () => {
   it("agrège sur les logs de type 'auth' (plus 'connection')", async () => {
     asAdmin()
