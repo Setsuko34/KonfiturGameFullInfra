@@ -26,15 +26,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const jams = await fetchAllDocs(COLLECTIONS.GAME_JAMS, [
       Query.orderDesc('$updatedAt'),
     ])
-    jamRoutes = jams.map(doc => {
-      const d = doc as unknown as Record<string, string>
-      return {
-        url: `${siteUrl}/jam/${doc.$id}`,
-        lastModified: new Date(doc.$updatedAt),
-        changeFrequency: d.status === 'ongoing' ? 'hourly' : 'weekly' as 'hourly' | 'weekly',
-        priority: d.status === 'ongoing' ? 0.9 : d.status === 'upcoming' ? 0.8 : 0.5,
-      }
-    })
+    jamRoutes = jams.map(doc => ({
+      url: `${siteUrl}/jam/${doc.$id}`,
+      lastModified: new Date(doc.$updatedAt),
+      changeFrequency: doc.status === 'ongoing' ? 'hourly' : 'weekly' as 'hourly' | 'weekly',
+      priority: doc.status === 'ongoing' ? 0.9 : doc.status === 'upcoming' ? 0.8 : 0.5,
+    }))
   } catch {
     // sitemap partiel si Appwrite indisponible
   }
@@ -45,15 +42,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       Query.equal('submitted', true),
       Query.orderDesc('$updatedAt'),
     ])
-    projectRoutes = projects.map(doc => {
-      const d = doc as unknown as Record<string, unknown>
-      return {
-        url: `${siteUrl}/project/${doc.$id}`,
-        lastModified: new Date(doc.$updatedAt),
-        changeFrequency: 'weekly' as const,
-        priority: ((d.placement as number) ?? 0) > 0 ? 0.7 : 0.5,
-      }
-    })
+    projectRoutes = projects.map(doc => ({
+      url: `${siteUrl}/project/${doc.$id}`,
+      lastModified: new Date(doc.$updatedAt),
+      changeFrequency: 'weekly' as const,
+      priority: ((doc.placement as number) ?? 0) > 0 ? 0.7 : 0.5,
+    }))
   } catch {
     // sitemap partiel
   }

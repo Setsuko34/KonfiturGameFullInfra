@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
+import LoadMoreList from '@/components/LoadMoreList'
 import ExploreGrid from './ExploreGrid'
 import { getJams } from '@/lib/actions/jams'
+import type { GameJam } from '@/types'
 
 export const metadata: Metadata = {
   title: 'Explorer les jams',
@@ -16,7 +18,13 @@ export const metadata: Metadata = {
 }
 
 export default async function ExplorePage() {
-  const jams = await getJams()
+  const { jams, nextCursor } = await getJams()
+
+  async function loadMoreJams(cursor: string): Promise<{ items: GameJam[]; nextCursor: string | null }> {
+    'use server'
+    const res = await getJams(cursor)
+    return { items: res.jams, nextCursor: res.nextCursor }
+  }
 
   return (
     <>
@@ -33,7 +41,7 @@ export default async function ExplorePage() {
             <h1 className="text-3xl font-bold mb-4">Toutes les game jams</h1>
           </div>
         </div>
-        <ExploreGrid jams={jams} />
+        <LoadMoreList initialItems={jams} initialCursor={nextCursor} loadMore={loadMoreJams} List={ExploreGrid} />
       </main>
       <Footer />
     </>

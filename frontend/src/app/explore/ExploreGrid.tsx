@@ -24,17 +24,17 @@ const typeLabels: Record<TypeFilter, string> = {
 }
 
 interface Props {
-  jams: GameJam[]
+  items: GameJam[]
 }
 
-export default function ExploreGrid({ jams }: Props) {
+export default function ExploreGrid({ items }: Props) {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const filteredJams = useMemo<GameJam[]>(() => {
-    return jams.filter(jam => {
+    return items.filter(jam => {
       const matchSearch = !search ||
         jam.title.toLowerCase().includes(search.toLowerCase()) ||
         jam.theme.toLowerCase().includes(search.toLowerCase()) ||
@@ -43,7 +43,7 @@ export default function ExploreGrid({ jams }: Props) {
       const matchType = typeFilter === 'all' || jam.type === typeFilter
       return matchSearch && matchStatus && matchType
     })
-  }, [jams, search, statusFilter, typeFilter])
+  }, [items, search, statusFilter, typeFilter])
 
   const hasActiveFilters = statusFilter !== 'all' || typeFilter !== 'all' || search !== ''
 

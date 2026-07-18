@@ -4,7 +4,7 @@ import { Query } from 'node-appwrite'
 import { serverDatabases } from '@/lib/appwrite/server'
 import { createSessionClient } from '@/lib/appwrite/session'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
-import { mapDocToTeam, mapDocToTeamMember, mapDocToGameJam, mapDocToProject } from '@/lib/appwrite/types'
+import { mapDocToTeam, mapDocToTeamMember, mapDocToGameJam, mapDocToProject, type AppwriteDoc } from '@/lib/appwrite/types'
 import type { Team, TeamMember, GameJam, Project } from '@/types'
 import { computeJamStatus } from '@/lib/jam-status'
 import { canActOnTeam, logAdminAction } from '@/lib/appwrite/guards'
@@ -153,10 +153,10 @@ export async function getTeamsByJam(jamId: string): Promise<Team[]> {
     const teams = teamDocs.map(mapDocToTeam)
 
     if (teams.length > 0) {
-      const memberDocs = await fetchAllByField(COLLECTIONS.TEAM_MEMBERS, 'team_id', teams.map(t => t.id))
+      const memberDocs = await fetchAllByField<AppwriteDoc>(COLLECTIONS.TEAM_MEMBERS, 'team_id', teams.map(t => t.id))
       const byTeam = new Map<string, TeamMember[]>()
       for (const doc of memberDocs) {
-        const teamId = (doc as Record<string, unknown>).team_id as string
+        const teamId = doc.team_id as string
         const list = byTeam.get(teamId) ?? []
         list.push(mapDocToTeamMember(doc))
         byTeam.set(teamId, list)

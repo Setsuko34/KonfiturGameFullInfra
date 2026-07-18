@@ -2,8 +2,8 @@
 
 import { Query } from 'node-appwrite'
 import { serverDatabases } from '@/lib/appwrite/server'
-import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
-import { mapDocToGameJam, mapDocToProject } from '@/lib/appwrite/types'
+import { DATABASE_ID, COLLECTIONS, MAX_FEATURED_JAMS } from '@/lib/appwrite/config'
+import { mapDocToGameJam, mapDocToProject, type AppwriteDoc } from '@/lib/appwrite/types'
 import { getPopularProjects } from '@/lib/actions/projects'
 import { fetchAllByField } from '@/lib/appwrite/fetch-all'
 import type { GameJam, PastWinner, SiteStats, Project } from '@/types'
@@ -24,7 +24,7 @@ export async function getHomePageData(): Promise<{
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
           Query.equal('featured', true),
           Query.orderAsc('featured_order'),
-          Query.limit(6),
+          Query.limit(MAX_FEATURED_JAMS),
         ]),
         // Jams marquées ongoing en DB (peuvent être en retard)
         serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
@@ -84,15 +84,15 @@ export async function getHomePageData(): Promise<{
 
     // Leurs projets placés : TOUS. Un podium tronqué est un podium faux.
     const placed = endedJams.length > 0
-      ? (await fetchAllByField(COLLECTIONS.PROJECTS, 'jam_id', endedJams.map(j => j.id),
-          [Query.greaterThan('placement', 0)])).map(d => mapDocToProject(d as never))
+      ? (await fetchAllByField<AppwriteDoc>(COLLECTIONS.PROJECTS, 'jam_id', endedJams.map(j => j.id),
+          [Query.greaterThan('placement', 0)])).map(mapDocToProject)
       : []
 
     // Les équipes de ces projets : TOUTES.
     const teamDocs = placed.length > 0
-      ? await fetchAllByField(COLLECTIONS.TEAMS, '$id', [...new Set(placed.map(p => p.teamId))])
+      ? await fetchAllByField<AppwriteDoc>(COLLECTIONS.TEAMS, '$id', [...new Set(placed.map(p => p.teamId))])
       : []
-    const teamsMap = new Map(teamDocs.map(d => [d.$id, (d as Record<string, unknown>).name as string]))
+    const teamsMap = new Map(teamDocs.map(d => [d.$id, d.name as string]))
 
     const winners: PastWinner[] = placed.map(p => {
       const jam = jamsMap.get(p.jamId)!
