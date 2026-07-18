@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
     // liste d'IP bannies, mieux vaut échouer bruyamment (catch ci-dessous, 500)
     // que de servir une liste incomplète en silence.
     const docs = await fetchAllDocs(COLLECTIONS.BANNED_IPS)
-    const ips = docs.map(doc => (doc as Record<string, unknown>).ip as string)
+    const ips = docs.map(doc => doc.ip as string)
     return NextResponse.json({ ips }, {
       headers: { 'Cache-Control': 'no-store' },
     })

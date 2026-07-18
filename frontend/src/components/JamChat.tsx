@@ -1,19 +1,21 @@
 'use client'
 
-import { useState, useEffect, useTransition } from 'react'
-import { Pin, Send, Wifi, WifiOff, Flag } from 'lucide-react'
+import { useState, useEffect, useLayoutEffect, useRef, useTransition } from 'react'
+import { Pin, Send, Wifi, WifiOff, Flag, ChevronUp } from 'lucide-react'
 import { client, databases } from '@/lib/appwrite/client'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'appwrite'
 import { mapDocToChatMessage } from '@/lib/appwrite/types'
 import { useAuth } from '@/components/providers/AuthProvider'
-import { reportMessage } from '@/lib/actions/chat'
+import { reportMessage, getOlderChatMessages } from '@/lib/actions/chat'
 import type { ChatMessage, ChatChannel } from '@/types'
 
 interface JamChatProps {
   jamId: string
   initialMessages?: ChatMessage[]
 }
+
+const CHAT_INITIAL_BATCH = 50 // taille de lot délibérée, cohérente avec « charger plus anciens »
 
 const channels: { id: ChatChannel; label: string }[] = [
   { id: 'general', label: 'Général' },
@@ -44,6 +46,19 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [connected, setConnected] = useState(false)
+
+  // Chargement vers le haut (messages plus anciens)
+  const [olderCursor, setOlderCursor] = useState<string | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const initialScrollDone = useRef(false)
+  // Canal auquel appartient `olderCursor` : entre un changement de canal et la résolution du
+  // fetch initial ci-dessous, olderCursor pointe encore vers l'ancien canal. Comparer cette ref
+  // (mise à jour uniquement dans les callbacks async, jamais en synchrone dans l'effet, pour ne
+  // pas déclencher react-hooks/set-state-in-effect) empêche « charger plus anciens » de partir
+  // avec un curseur périmé pendant cette fenêtre.
+  const cursorChannelRef = useRef<ChatChannel | null>(null)
+  const pendingScrollAdjust = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
   const playPing = () => {
     try {
       const ctx = new AudioContext()
@@ -63,15 +78,67 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
 
   // Charger les messages initiaux du canal
   useEffect(() => {
+    initialScrollDone.current = false
     databases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, [
       Query.equal('jam_id', jamId),
       Query.equal('channel', activeChannel),
       Query.orderDesc('$createdAt'),
-      Query.limit(50),
+      Query.limit(CHAT_INITIAL_BATCH),
     ]).then(res => {
-      setMessages(res.documents.map(mapDocToChatMessage).reverse())
+      const docs = res.documents
+      setMessages(docs.map(mapDocToChatMessage).reverse())
+      // Lot plein = peut-être d'autres messages plus anciens ; le plus ancien du lot sert d'ancre
+      setOlderCursor(docs.length === CHAT_INITIAL_BATCH ? docs[docs.length - 1].$id : null)
+      cursorChannelRef.current = activeChannel
     }).catch(console.error)
   }, [jamId, activeChannel])
+
+  // Charge le lot de messages plus anciens que `olderCursor` et préserve la position de
+  // scroll : capturer scrollHeight/scrollTop avant l'insertion, le layout effect ci-dessous
+  // restaure le delta après le rendu pour que la vue ne saute pas sous les yeux du lecteur.
+  const handleLoadOlder = async () => {
+    // cursorChannelRef.current !== activeChannel : fenêtre entre un changement de canal et la
+    // résolution du fetch initial ci-dessus, où olderCursor pointe encore vers l'ancien canal.
+    if (!olderCursor || loadingOlder || cursorChannelRef.current !== activeChannel) return
+    setLoadingOlder(true)
+    const container = messagesContainerRef.current
+    try {
+      const { messages: older, nextCursor } = await getOlderChatMessages(jamId, activeChannel, olderCursor)
+      if (container) {
+        pendingScrollAdjust.current = { scrollHeight: container.scrollHeight, scrollTop: container.scrollTop }
+      }
+      setMessages(prev => {
+        const existingIds = new Set(prev.map(m => m.id))
+        const deduped = older.filter(m => !existingIds.has(m.id))
+        return [...deduped, ...prev]
+      })
+      setOlderCursor(nextCursor)
+    } catch (err) {
+      console.error('Erreur chargement messages plus anciens', err)
+    } finally {
+      setLoadingOlder(false)
+    }
+  }
+
+  // Ajuste le scroll après chaque mise à jour de `messages` : restaure la position lue
+  // après un ajout en haut (delta de hauteur), sinon scrolle en bas au tout premier rendu
+  // du canal (sans animation, sans faire défiler la page entière).
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    if (pendingScrollAdjust.current) {
+      const { scrollHeight: oldHeight, scrollTop: oldTop } = pendingScrollAdjust.current
+      pendingScrollAdjust.current = null
+      container.scrollTop = oldTop + (container.scrollHeight - oldHeight)
+      return
+    }
+
+    if (!initialScrollDone.current && messages.length > 0) {
+      container.scrollTop = container.scrollHeight
+      initialScrollDone.current = true
+    }
+  }, [messages])
 
   // Souscription Realtime
   useEffect(() => {
@@ -212,12 +279,29 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
 
       {/* Zone de messages */}
       <div
+        ref={messagesContainerRef}
         className="flex-1 overflow-y-auto p-4 space-y-4"
         role="log"
         aria-live="polite"
         aria-label="Messages du chat"
         aria-relevant="additions"
       >
+        {olderCursor && (
+          <div className="flex justify-center pb-2">
+            <button
+              type="button"
+              onClick={handleLoadOlder}
+              disabled={loadingOlder}
+              aria-busy={loadingOlder}
+              className="min-h-11 flex items-center gap-2 px-4 text-xs font-semibold border transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}
+            >
+              <ChevronUp size={13} aria-hidden="true" />
+              {loadingOlder ? 'Chargement…' : 'Charger les messages plus anciens'}
+            </button>
+          </div>
+        )}
+
         {Object.entries(groups).map(([date, msgs]) => (
           <div key={date}>
             {/* Séparateur de date */}

@@ -7,20 +7,34 @@ import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { mapDocToComment } from '@/lib/appwrite/types'
 import type { Comment } from '@/types'
 
-export async function getCommentsByProject(projectId: string): Promise<Comment[]> {
+const COMMENTS_BATCH_SIZE = 100 // taille de lot délibérée pour « Voir plus » (ex-plafond)
+
+/**
+ * Récupère un lot de commentaires d'un projet, le plus ancien d'abord. `cursor` (dernier $id du
+ * lot précédent) permet d'enchaîner via « Voir plus ». `nextCursor` vaut null dès que le lot
+ * revient incomplet : c'est le seul signal honnête qu'il n'y a plus rien à charger.
+ */
+export async function getCommentsByProject(
+  projectId: string,
+  cursor?: string,
+): Promise<{ comments: Comment[]; nextCursor: string | null }> {
   try {
-    const res = await serverDatabases.listDocuments(
-      DATABASE_ID,
-      COLLECTIONS.COMMENTS,
-      [
-        Query.equal('project_id', projectId),
-        Query.orderAsc('$createdAt'),
-        Query.limit(100),
-      ]
-    )
-    return res.documents.map(mapDocToComment)
+    const queries = [
+      Query.equal('project_id', projectId),
+      Query.orderAsc('$createdAt'),
+      Query.limit(COMMENTS_BATCH_SIZE),
+    ]
+    if (cursor) queries.push(Query.cursorAfter(cursor))
+
+    const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.COMMENTS, queries)
+    const comments = res.documents.map(mapDocToComment)
+    const nextCursor = res.documents.length < COMMENTS_BATCH_SIZE
+      ? null
+      : res.documents[res.documents.length - 1].$id
+
+    return { comments, nextCursor }
   } catch {
-    return []
+    return { comments: [], nextCursor: null }
   }
 }
 

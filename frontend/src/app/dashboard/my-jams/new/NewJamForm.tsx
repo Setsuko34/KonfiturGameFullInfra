@@ -210,6 +210,7 @@ export default function NewJamForm() {
             <label htmlFor="startDate" className="block text-sm font-medium mb-2">Date de début *</label>
             <input
               id="startDate" type="datetime-local" required value={startDate}
+              onClick={e => e.currentTarget.showPicker?.()}
               onChange={e => setStartDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm" style={inputStyle}
             />
@@ -218,6 +219,7 @@ export default function NewJamForm() {
             <label htmlFor="endDate" className="block text-sm font-medium mb-2">Date de fin *</label>
             <input
               id="endDate" type="datetime-local" required value={endDate}
+              onClick={e => e.currentTarget.showPicker?.()}
               onChange={e => setEndDate(e.target.value)}
               className="w-full px-3 py-2.5 text-sm" style={inputStyle}
             />

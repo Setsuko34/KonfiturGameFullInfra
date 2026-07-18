@@ -296,6 +296,11 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* ═══ Sections repliables (details/summary) ═══ */
+details[open] summary .chevron {
+  transform: rotate(180deg);
+}
+
 /* ═══ Utilitaires CSS personnalisés ═══ */
 .text-balance {
   text-wrap: balance;

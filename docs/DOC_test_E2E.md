@@ -70,12 +70,14 @@ frontend/
 ```
 global-setup.ts
   │  1. Supprime les résidus du run précédent (users E2E + .test-ids.json)
-  │  2. Crée 3 utilisateurs via API (e2e-user1, e2e-user2, e2e-admin)
-  │  3. Ajoute e2e-admin à la team admin (ADMIN_TEAM_ID)
-  │  4. Crée 3 jams de référence dans game_jams
+  │  2. Purge les données de démo (tout document dont l'ID commence par "demo-",
+  │     8 collections, même logique que scripts/clean-big-demo.sh)
+  │  3. Crée 3 utilisateurs via API (e2e-user1, e2e-user2, e2e-admin)
+  │  4. Ajoute e2e-admin à la team admin (ADMIN_TEAM_ID)
+  │  5. Crée 3 jams de référence dans game_jams
   │     └─ Jam "En Cours" : featured=true pour apparaître sur la home page
-  │  5. Sauvegarde les IDs dans e2e/.test-ids.json
-  │  6. Sauvegarde les sessions Playwright dans e2e/.auth/*.json
+  │  6. Sauvegarde les IDs dans e2e/.test-ids.json
+  │  7. Sauvegarde les sessions Playwright dans e2e/.auth/*.json
   ▼
 Tests (séquentiels, workers: 1)
   │  Chaque test a son propre BrowserContext isolé
@@ -86,6 +88,17 @@ global-teardown.ts
      2. Supprime les utilisateurs de test
      3. Supprime e2e/.test-ids.json et e2e/.test-state.json
 ```
+
+### Données de démo vs tests E2E
+
+Les données de `scripts/seed-big-demo.sh` (IDs préfixés `demo-`) faussent les tests :
+leur volume évince les jams `[E2E]` des sections plafonnées de la homepage (top 6
+« Jams à venir », hero featured), ce qui faisait échouer `03-navigation` §2.1 de façon
+déterministe. Le `global-setup` les **purge donc automatiquement avant chaque run**
+(constat mesuré : 791 documents supprimés au premier passage). Pour les récupérer
+après une session de tests : `./scripts/seed-big-demo.sh`. La `KOKORI JAM` de
+`seed-data.sh` (ID non préfixé) n'est pas concernée et peut rester en héros de la
+homepage sans faire échouer l'assertion.
 
 ### Fichiers persistants entre tests (dans e2e/)
 

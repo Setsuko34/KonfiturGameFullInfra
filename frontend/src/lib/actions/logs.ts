@@ -81,17 +81,27 @@ async function requireAdminOrThrow(): Promise<void> {
 
 // ── Lecture des logs ───────────────────────────────────────────────────────
 
-export async function getRecentLogs(type?: string, page = 0): Promise<AuditLog[]> {
+const LOGS_BATCH_SIZE = 50 // taille de lot délibérée pour « Voir plus » (pas un plafond accidentel)
+
+/**
+ * Récupère un lot de logs, le plus récent d'abord, filtrable par type. `cursor` (dernier $id
+ * du lot précédent) permet d'enchaîner via LoadMoreList. `nextCursor` vaut null dès que le lot
+ * revient incomplet : c'est le seul signal honnête qu'il n'y a plus rien à charger.
+ */
+export async function getRecentLogs(
+  type?: string,
+  cursor?: string,
+): Promise<{ logs: AuditLog[]; nextCursor: string | null }> {
   await requireAdminOrThrow()
-  const queries: string[] = [
-    Query.orderDesc('$createdAt'),
-    Query.limit(50),
-    Query.offset(page * 50),
-  ]
+  const queries: string[] = [Query.orderDesc('$createdAt'), Query.limit(LOGS_BATCH_SIZE)]
   if (type) queries.push(Query.equal('type', type))
+  if (cursor) queries.push(Query.cursorAfter(cursor))
 
   const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.AUDIT_LOGS, queries)
-  return res.documents.map(doc => mapDocToLog(doc as unknown as Parameters<typeof mapDocToLog>[0]))
+  const logs = res.documents.map(doc => mapDocToLog(doc as unknown as Parameters<typeof mapDocToLog>[0]))
+  const nextCursor = res.documents.length < LOGS_BATCH_SIZE ? null : res.documents[res.documents.length - 1].$id
+
+  return { logs, nextCursor }
 }
 
 // ── Stats par pays ─────────────────────────────────────────────────────────

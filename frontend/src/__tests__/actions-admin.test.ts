@@ -40,6 +40,10 @@ import {
   listAllTeams,
   listProjectsForJam,
   getAdminDashboard,
+  listReportedMessages,
+  listReportedProjects,
+  listAnnouncements,
+  toggleJamFeatured,
 } from '@/lib/actions/admin'
 import { serverDatabases, serverTeams, serverUsers } from '@/lib/appwrite/server'
 
@@ -347,6 +351,123 @@ describe('listProjectsForJam — pas de plafond', () => {
   })
 })
 
+// n docs minimaux, chacun avec un $id unique, pour tester la pagination au curseur
+function reportedMessageDocs(n: number, offset = 0) {
+  return Array.from({ length: n }, (_, i) => ({
+    $id: `msg-${offset + i}`, jam_id: 'jam-1', channel: 'general', author_id: 'u1',
+    author_name: 'Alice', content: 'contenu', role: 'user', pinned: false, reported: true,
+    $createdAt: '2026-07-18T00:00:00.000Z',
+  }))
+}
+function reportedProjectDocs(n: number, offset = 0) {
+  return Array.from({ length: n }, (_, i) => ({
+    $id: `proj-${offset + i}`, jam_id: 'jam-1', team_id: 't1', title: 'P', description: 'd',
+    technologies: [], submitted: true, likes_count: 0, reported: true,
+  }))
+}
+function announcementDocs(n: number, offset = 0) {
+  return Array.from({ length: n }, (_, i) => ({
+    $id: `ann-${offset + i}`, jam_id: 'all', title: 'T', content: 'c', important: false,
+    author_id: 'u1', $createdAt: '2026-07-18T00:00:00.000Z',
+  }))
+}
+
+describe('listReportedMessages — pagination au curseur', () => {
+  beforeEach(() => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+  })
+
+  it('refuse un non-admin (throw message exact)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-lambda' })
+    mockListMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+    await expect(listReportedMessages()).rejects.toThrow('Accès réservé aux administrateurs.')
+  })
+
+  it('nextCursor est null quand le lot revient incomplet (moins de 20)', async () => {
+    mockListDocuments.mockResolvedValue({ total: 6, documents: reportedMessageDocs(6) } as never)
+    const { nextCursor } = await listReportedMessages()
+    expect(nextCursor).toBeNull()
+  })
+
+  it('nextCursor pointe vers le dernier document quand le lot est plein (20)', async () => {
+    mockListDocuments.mockResolvedValue({ total: 100, documents: reportedMessageDocs(20) } as never)
+    const { nextCursor } = await listReportedMessages()
+    expect(nextCursor).toBe('msg-19')
+  })
+
+  it('transmet le curseur reçu via Query.cursorAfter à Appwrite', async () => {
+    mockListDocuments.mockResolvedValue({ total: 6, documents: reportedMessageDocs(6, 20) } as never)
+    await listReportedMessages('msg-19')
+    const queries = mockListDocuments.mock.calls[0][2] as string[]
+    expect(queries).toContain(Query.cursorAfter('msg-19'))
+  })
+})
+
+describe('listReportedProjects — pagination au curseur', () => {
+  beforeEach(() => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+  })
+
+  it('refuse un non-admin (throw message exact)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-lambda' })
+    mockListMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+    await expect(listReportedProjects()).rejects.toThrow('Accès réservé aux administrateurs.')
+  })
+
+  it('nextCursor est null quand le lot revient incomplet (moins de 20)', async () => {
+    mockListDocuments.mockResolvedValue({ total: 6, documents: reportedProjectDocs(6) } as never)
+    const { nextCursor } = await listReportedProjects()
+    expect(nextCursor).toBeNull()
+  })
+
+  it('nextCursor pointe vers le dernier document quand le lot est plein (20)', async () => {
+    mockListDocuments.mockResolvedValue({ total: 100, documents: reportedProjectDocs(20) } as never)
+    const { nextCursor } = await listReportedProjects()
+    expect(nextCursor).toBe('proj-19')
+  })
+
+  it('transmet le curseur reçu via Query.cursorAfter à Appwrite', async () => {
+    mockListDocuments.mockResolvedValue({ total: 6, documents: reportedProjectDocs(6, 20) } as never)
+    await listReportedProjects('proj-19')
+    const queries = mockListDocuments.mock.calls[0][2] as string[]
+    expect(queries).toContain(Query.cursorAfter('proj-19'))
+  })
+})
+
+describe('listAnnouncements — pagination au curseur', () => {
+  beforeEach(() => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+  })
+
+  it('refuse un non-admin (throw message exact)', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-lambda' })
+    mockListMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+    await expect(listAnnouncements()).rejects.toThrow('Accès réservé aux administrateurs.')
+  })
+
+  it('nextCursor est null quand le lot revient incomplet (moins de 20)', async () => {
+    mockListDocuments.mockResolvedValue({ total: 6, documents: announcementDocs(6) } as never)
+    const { nextCursor } = await listAnnouncements()
+    expect(nextCursor).toBeNull()
+  })
+
+  it('nextCursor pointe vers le dernier document quand le lot est plein (20)', async () => {
+    mockListDocuments.mockResolvedValue({ total: 100, documents: announcementDocs(20) } as never)
+    const { nextCursor } = await listAnnouncements()
+    expect(nextCursor).toBe('ann-19')
+  })
+
+  it('transmet le curseur reçu via Query.cursorAfter à Appwrite', async () => {
+    mockListDocuments.mockResolvedValue({ total: 6, documents: announcementDocs(6, 20) } as never)
+    await listAnnouncements('ann-19')
+    const queries = mockListDocuments.mock.calls[0][2] as string[]
+    expect(queries).toContain(Query.cursorAfter('ann-19'))
+  })
+})
+
 describe('getAdminDashboard', () => {
   beforeEach(() => {
     // mécanisme admin existant du fichier (requireAdmin -> isAdminUser -> listMemberships.total > 0)
@@ -440,5 +561,33 @@ describe('getAdminDashboard', () => {
     })
     const data = await getAdminDashboard()
     expect(data.recentRegistrations[0].name).toBe('Utilisateur supprimé')
+  })
+})
+
+describe('toggleJamFeatured — plafond des 6 jams à la une', () => {
+  beforeEach(() => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' } as never)
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+  })
+
+  it('refuse de mettre en avant une 7e jam quand 6 sont déjà featured', async () => {
+    mockListDocuments.mockResolvedValue({ total: 6, documents: [] } as never)
+
+    const res = await toggleJamFeatured('jam-7', true, 7)
+
+    expect(res.success).toBe(false)
+    expect(res.error).toBe("Maximum 6 jams à la une. Retirez-en une avant d'en ajouter une autre.")
+    expect(mockUpdateDocument).not.toHaveBeenCalled()
+  })
+
+  it('retirer une mise en avant reste toujours autorisé, même à 20 featured', async () => {
+    mockListDocuments.mockResolvedValue({ total: 20, documents: [] } as never)
+
+    const res = await toggleJamFeatured('jam-3', false)
+
+    expect(res).toEqual({ success: true })
+    expect(mockUpdateDocument).toHaveBeenCalledWith('konfitur-db', 'game_jams', 'jam-3', {
+      featured: false,
+    })
   })
 })

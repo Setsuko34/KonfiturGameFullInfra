@@ -1,6 +1,7 @@
 import { test, expect } from '../fixtures/auth'
 import path from 'path'
 import { writeFileSync } from 'fs'
+import { loadState, loadTestIds } from '../fixtures/test-data'
 
 // Module 6 — Profil utilisateur
 // Cahier de recettes §6.1, §6.2
@@ -56,15 +57,49 @@ test.describe('6.1 — Modifier le profil', () => {
     await expect(page.locator('[role="alert"], .success').first()).toBeVisible({ timeout: 10_000 })
   })
 
-  test('profil public accessible via /profile/:id', async ({ user1Page: page }) => {
-    await page.goto('/dashboard/profile')
+  test('profil public accessible depuis l\'auteur d\'un commentaire', async ({ user2Page: page }) => {
+    // Le commentaire posté par user2 dans 05-projets.spec.ts (§4.3) doit exister avant ce test
+    const { projectId } = loadState()
+    if (!projectId) test.skip()
 
-    // Chercher un lien vers le profil public
+    await page.goto(`/project/${projectId}`)
+
+    // Aucun `if` : le lien DOIT exister, sinon le test échoue (c'est la garantie recherchée)
     const profileLink = page.locator('a[href*="/profile/"]').first()
-    if (await profileLink.count() > 0) {
-      await profileLink.click()
-      await expect(page.locator('body')).toContainText(/E2E Joueur1/)
-    }
+    await expect(profileLink).toBeVisible()
+
+    await profileLink.click()
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('E2E Joueur2')
+  })
+
+  test('profil public accessible depuis un membre d\'équipe', async ({ user1Page: page }) => {
+    // user2 a rejoint la guilde de user1 dans 04-guildes.spec.ts
+    await page.goto('/dashboard/team')
+
+    const memberLink = page.locator('a[href*="/profile/"]').first()
+    await expect(memberLink).toBeVisible()
+
+    await memberLink.click()
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(/E2E Joueur/)
+  })
+
+  test('le profil public affiche les jams organisées et les projets postés', async ({ page }) => {
+    // Page publique : pas de session nécessaire
+    const { jamUser1Id } = loadTestIds()
+
+    await page.goto('/profile/e2e-user1')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText('E2E Joueur1')
+
+    // Jam organisée par user1 (créée dans global-setup, toujours présente)
+    await expect(page.locator('body')).toContainText('[E2E] Jam User1')
+
+    // Vérifie aussi que le lien vers cette jam pointe bien vers son ID réel
+    await expect(page.locator(`a[href="/jam/${jamUser1Id}"]`)).toBeVisible()
+  })
+
+  test('le profil public d\'un utilisateur inconnu renvoie une 404', async ({ page }) => {
+    const response = await page.goto('/profile/inconnu-e2e-xyz')
+    expect(response?.status()).toBe(404)
   })
 
   test('le profil propose le téléchargement des données personnelles (RGPD)', async ({ user1Page: page }) => {

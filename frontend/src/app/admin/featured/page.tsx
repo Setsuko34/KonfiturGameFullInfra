@@ -1,12 +1,9 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { Star, Trophy } from 'lucide-react'
-import {
-  listJamsForCuration,
-  listProjectsForJam,
-  toggleJamFeatured,
-} from '@/lib/actions/admin'
+import { listJamsForCuration, listProjectsForJam } from '@/lib/actions/admin'
 import PlacementButtons from '@/components/PlacementButtons'
+import FeaturedToggleButton from './FeaturedToggleButton'
 
 export const metadata: Metadata = { title: 'Mise en avant' }
 
@@ -66,22 +63,7 @@ export default async function AdminFeaturedPage({ searchParams }: Props) {
                   Gagnants
                 </Link>
                 {/* Featured toggle */}
-                <form action={async () => {
-                  'use server'
-                  await toggleJamFeatured(jam.id, !jam.featured, jam.featuredOrder)
-                }}>
-                  <button
-                    type="submit"
-                    className="px-2 py-1 text-xs border font-medium transition-opacity hover:opacity-80"
-                    style={{
-                      background: jam.featured ? 'var(--primary)' : 'transparent',
-                      borderColor: jam.featured ? 'var(--primary)' : 'var(--border)',
-                      color: jam.featured ? '#fff' : 'var(--muted-foreground)',
-                    }}
-                  >
-                    {jam.featured ? 'Retirer' : 'Mettre en avant'}
-                  </button>
-                </form>
+                <FeaturedToggleButton jamId={jam.id} featured={!!jam.featured} featuredOrder={jam.featuredOrder} />
               </div>
             </div>
           ))}

@@ -45,7 +45,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function ProjectPage({ params }: Props) {
   const { projectId } = await params
-  const [project, initialComments] = await Promise.all([
+  const [project, { comments: initialComments, nextCursor: initialCommentsCursor }] = await Promise.all([
     getProjectById(projectId),
     getCommentsByProject(projectId),
   ])
@@ -104,6 +104,7 @@ export default async function ProjectPage({ params }: Props) {
               buildFileId={project.buildFileId}
               repoUrl={project.repoUrl}
               initialComments={initialComments}
+              initialCommentsCursor={initialCommentsCursor}
               initialReported={project.reported ?? false}
             />
           </div>
