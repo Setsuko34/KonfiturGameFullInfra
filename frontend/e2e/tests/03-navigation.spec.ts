@@ -103,6 +103,53 @@ test.describe('2.3 — Page de détail d\'une jam', () => {
     expect([404, 200]).toContain(res?.status()) // 200 car Next.js peut servir la page d'erreur avec 200
     await expect(page.locator('body')).toContainText(/404|introuvable|not found/i)
   })
+
+  test('les sections Projets/Équipes/Annonces sont repliables (ouvertes par défaut)', async ({ page }) => {
+    const ids = loadTestIds()
+    await page.goto(`/jam/${ids.jamOngoingId}`)
+
+    const sectionAnchors = ['#projects', '#teams', '#announcements']
+
+    for (const anchor of sectionAnchors) {
+      const details = page.locator(`${anchor} details`)
+      const summary = details.locator('summary')
+      // Premier enfant hors <summary> : présent quelle que soit la donnée (liste ou état vide)
+      const content = details.locator('> :not(summary)').first()
+
+      // Ouvertes par défaut : contenu visible au premier rendu
+      await expect(content).toBeVisible()
+
+      // Un clic sur le titre replie
+      await summary.click()
+      await expect(content).not.toBeVisible()
+
+      // Un second clic rouvre
+      await summary.click()
+      await expect(content).toBeVisible()
+    }
+  })
+
+  test('le "Voir plus" des annonces survit à un cycle replier/rouvrir', async ({ page }) => {
+    // Le <details> natif masque son contenu en CSS (display:none) sans jamais démonter le DOM
+    // React sous-jacent : pas de useState/composant client pour le pli lui-même, donc l'état
+    // accumulé par LoadMoreList (Task 5) ne peut pas être perdu. Vérifié ici en comparant le
+    // contenu de la section Annonces avant/après un cycle repli-réouverture.
+    const ids = loadTestIds()
+    await page.goto(`/jam/${ids.jamOngoingId}`)
+
+    const details = page.locator('#announcements details')
+    const summary = details.locator('summary')
+    const content = details.locator('> :not(summary)').first()
+
+    const before = await content.innerHTML()
+
+    await summary.click() // replier
+    await expect(content).not.toBeVisible()
+    await summary.click() // rouvrir
+
+    await expect(content).toBeVisible()
+    expect(await content.innerHTML()).toBe(before)
+  })
 })
 
 test.describe('2.4 — Menu mobile : focus trap (WCAG 2.1.2)', () => {
