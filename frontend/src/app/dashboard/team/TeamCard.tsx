@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { Copy, Trash2, LogOut, UserPlus } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { updateMemberRole, removeMemberFromTeam, deleteTeam, registerTeamToJam } from '@/lib/actions/teams'
@@ -140,7 +141,7 @@ export default function TeamCard({
               className="flex items-center justify-between px-3 py-2 border"
               style={{ borderColor: 'var(--border)' }}
             >
-              <div className="flex items-center gap-2">
+              <Link href={`/profile/${member.userId}`} className="inline-flex items-center gap-2 min-h-11">
                 <div
                   className="w-7 h-7 flex items-center justify-center text-xs font-bold"
                   style={{ background: 'var(--muted)', color: 'var(--foreground)' }}
@@ -154,7 +155,7 @@ export default function TeamCard({
                     <p className="text-[9px] tracking-widest uppercase" style={{ color: 'var(--primary)' }}>Chef</p>
                   )}
                 </div>
-              </div>
+              </Link>
               <div className="flex items-center gap-2">
                 {isLeader && !member.isLeader ? (
                   <select

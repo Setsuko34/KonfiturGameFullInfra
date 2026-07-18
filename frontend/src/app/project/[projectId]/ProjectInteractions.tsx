@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import Link from 'next/link'
 import { Heart, Send, Flag, Download, Github, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { toggleLike, reportProject } from '@/lib/actions/projects'
-import { addComment } from '@/lib/actions/comments'
+import { addComment, getCommentsByProject } from '@/lib/actions/comments'
 import { storageFileUrl } from '@/lib/appwrite/file-url'
 import { BUCKETS } from '@/lib/appwrite/config'
 import type { Comment } from '@/types'
@@ -17,6 +18,7 @@ interface Props {
   buildFileId?: string
   repoUrl?: string
   initialComments: Comment[]
+  initialCommentsCursor: string | null
   initialReported: boolean
 }
 
@@ -28,6 +30,7 @@ export default function ProjectInteractions({
   buildFileId,
   repoUrl,
   initialComments,
+  initialCommentsCursor,
   initialReported,
 }: Props) {
   const { user } = useAuth()
@@ -35,8 +38,34 @@ export default function ProjectInteractions({
   const [likes, setLikes] = useState(initialLikesCount)
   const [comment, setComment] = useState('')
   const [comments, setComments] = useState<Comment[]>(initialComments)
+  const [commentsCursor, setCommentsCursor] = useState(initialCommentsCursor)
+  const [commentsError, setCommentsError] = useState<string | null>(null)
   const [isReported, setIsReported] = useState(initialReported)
   const [isPending, startTransition] = useTransition()
+  const [isLoadingMoreComments, startCommentsTransition] = useTransition()
+
+  // « Voir plus » : les commentaires sont triés du plus ancien au plus récent (Query.orderAsc),
+  // donc le lot suivant s'accumule en fin de liste (contrairement à JamChat qui charge vers le
+  // haut). ProjectInteractions gère déjà son propre état de commentaires (ajout optimiste via
+  // handleComment) : brancher LoadMoreList remplacerait cet état par le sien, cassant l'ajout
+  // immédiat d'un nouveau commentaire. Un bouton inline, comme le « charger plus anciens » de
+  // JamChat, est le plus petit changement qui respecte le contrat sans ce conflit d'état.
+  const handleLoadMoreComments = () => {
+    if (!commentsCursor || isLoadingMoreComments) return
+    setCommentsError(null)
+    startCommentsTransition(async () => {
+      try {
+        const res = await getCommentsByProject(projectId, commentsCursor)
+        // Un commentaire posté pendant qu'un curseur non-null était déjà chargé peut réapparaître
+        // dans le lot suivant (orderAsc : il prend la place la plus récente) : dédoublonner par id,
+        // même garde que JamChat (Task 4) pour les messages plus anciens.
+        setComments(prev => [...prev, ...res.comments.filter(c => !prev.some(p => p.id === c.id))])
+        setCommentsCursor(res.nextCursor)
+      } catch {
+        setCommentsError('Impossible de charger la suite. Réessayez.')
+      }
+    })
+  }
 
   const handleLike = () => {
     if (!user || isPending) return
@@ -175,14 +204,19 @@ export default function ProjectInteractions({
               aria-label={`Commentaire de ${c.authorName}`}
             >
               <div className="flex items-center gap-2 mb-2">
-                <div
-                  className="w-7 h-7 flex items-center justify-center text-xs font-bold"
-                  style={{ background: 'var(--surface-elevated)' }}
-                  aria-hidden="true"
+                <Link
+                  href={`/profile/${c.authorId}`}
+                  className="inline-flex items-center gap-2 min-h-11"
                 >
-                  {c.authorName.charAt(0)}
-                </div>
-                <span className="font-semibold text-sm">{c.authorName}</span>
+                  <div
+                    className="w-7 h-7 flex items-center justify-center text-xs font-bold"
+                    style={{ background: 'var(--surface-elevated)' }}
+                    aria-hidden="true"
+                  >
+                    {c.authorName.charAt(0)}
+                  </div>
+                  <span className="font-semibold text-sm">{c.authorName}</span>
+                </Link>
                 <time
                   className="label-tech"
                   style={{ color: 'var(--muted-foreground)' }}
@@ -197,6 +231,26 @@ export default function ProjectInteractions({
             </article>
           ))}
         </div>
+
+        {commentsCursor && (
+          <div className="flex flex-col items-center gap-2 mb-6">
+            <button
+              type="button"
+              onClick={handleLoadMoreComments}
+              disabled={isLoadingMoreComments}
+              aria-busy={isLoadingMoreComments}
+              className="min-h-11 px-6 text-sm font-semibold border transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ borderColor: 'var(--border)', color: 'var(--foreground)', background: 'var(--card)' }}
+            >
+              {isLoadingMoreComments ? 'Chargement…' : 'Voir plus'}
+            </button>
+            {commentsError && (
+              <p role="alert" className="text-xs" style={{ color: 'var(--secondary)' }}>
+                {commentsError}
+              </p>
+            )}
+          </div>
+        )}
 
         {user ? (
           <form onSubmit={handleComment} aria-label="Ajouter un commentaire">

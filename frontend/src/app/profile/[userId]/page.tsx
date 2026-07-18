@@ -1,13 +1,16 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowLeft, Trophy, Gamepad2 } from 'lucide-react'
+import { ArrowLeft, Trophy, Gamepad2, Rocket } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import { serverUsers, serverDatabases } from '@/lib/appwrite/server'
-import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
+import EmptyState from '@/components/EmptyState'
+import { serverUsers } from '@/lib/appwrite/server'
+import { COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'node-appwrite'
 import { mapDocToGameJam } from '@/lib/appwrite/types'
+import { fetchAllDocs } from '@/lib/appwrite/fetch-all'
+import { getPublicProfileProjects } from '@/lib/actions/profile'
 
 interface Props { params: Promise<{ userId: string }> }
 
@@ -36,13 +39,17 @@ export default async function PublicProfilePage({ params }: Props) {
     notFound()
   }
 
-  // Jams organisées
-  const organizedRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
+  // Jams organisées — TOUTES, pas de plafond : borné par l'effort humain d'organiser
+  // une jam, pas par la croissance de la plateforme (fetchAllDocs, pas de « voir plus »)
+  const organizedDocs = await fetchAllDocs(COLLECTIONS.GAME_JAMS, [
     Query.equal('organizer_id', userId),
     Query.orderDesc('$createdAt'),
-    Query.limit(6),
   ])
-  const organizedJams = organizedRes.documents.map(mapDocToGameJam)
+  const organizedJams = organizedDocs.map(mapDocToGameJam)
+
+  // Projets postés (team_members → team_id → projects) — l'information qu'un visiteur
+  // cherche réellement pour un participant qui n'a jamais organisé de jam
+  const postedProjects = await getPublicProfileProjects(userId)
 
   return (
     <>
@@ -110,6 +117,41 @@ export default async function PublicProfilePage({ params }: Props) {
               ))}
             </ul>
           </section>
+        )}
+
+        {/* Projets postés */}
+        {postedProjects.length > 0 && (
+          <section aria-labelledby="projects-heading" className={organizedJams.length > 0 ? 'mt-8' : undefined}>
+            <h2 id="projects-heading" className="text-base font-bold mb-4 flex items-center gap-2">
+              <Rocket size={14} aria-hidden="true" />
+              Projets postés
+            </h2>
+            <ul className="space-y-2" role="list">
+              {postedProjects.map(project => (
+                <li key={project.id}>
+                  <Link
+                    href={`/project/${project.id}`}
+                    className="block px-4 py-3 border transition-opacity hover:opacity-80 min-h-11"
+                    style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                  >
+                    <p className="font-semibold text-sm">{project.title}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--muted-foreground)' }}>
+                      {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
+                    </p>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {/* Profil sans contenu public : ni jams organisées, ni projets postés */}
+        {organizedJams.length === 0 && postedProjects.length === 0 && (
+          <EmptyState
+            icon={Gamepad2}
+            title="Aucun contenu public pour l'instant"
+            subtitle="Ce joueur n'a encore organisé aucune jam ni posté de projet."
+          />
         )}
       </main>
       <Footer />
