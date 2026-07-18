@@ -89,6 +89,32 @@ export default async function globalSetup() {
     await Promise.all(leftovers.users.map(u => users.delete(u.$id).catch(() => {})))
   }
 
+  // Purge des données de démo (seed-big-demo.sh) avant chaque run : leur volume
+  // évince les jams [E2E] des sections plafonnées de la homepage (top 6 « à venir »,
+  // hero featured) et fait échouer 03-navigation §2.1. Même logique que
+  // scripts/clean-big-demo.sh : tout document dont l'ID commence par « demo- ».
+  // Re-seed après les tests si besoin : ./scripts/seed-big-demo.sh
+  const DEMO_COLLECTIONS = [
+    'projects', 'team_members', 'teams', 'announcements',
+    'chat_messages', 'comments', 'game_jams', 'likes',
+  ]
+  let demoDeleted = 0
+  for (const col of DEMO_COLLECTIONS) {
+    for (;;) {
+      const batch = await databases
+        .listDocuments(DB, col, [Query.startsWith('$id', 'demo-'), Query.limit(100)])
+        .catch(() => null)
+      if (!batch || batch.documents.length === 0) break
+      for (const doc of batch.documents) {
+        await databases.deleteDocument(DB, col, doc.$id).catch(() => {})
+        demoDeleted++
+      }
+    }
+  }
+  if (demoDeleted > 0) {
+    console.log(`🧹 ${demoDeleted} document(s) de démo (demo-*) purgés avant le run E2E`)
+  }
+
   // Création des utilisateurs de test
   await Promise.all(
     Object.values(TEST_USERS).map(u =>
