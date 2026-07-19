@@ -233,6 +233,24 @@
                     "default": 0,
                     "min": -9223372036854775808,
                     "max": 9223372036854775807
+                },
+                {
+                    "key": "organizer",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 256,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "participants",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": 0,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
                 }
             ],
             "indexes": []
@@ -292,6 +310,13 @@
                     "size": 36,
                     "default": null,
                     "encrypt": false
+                },
+                {
+                    "key": "is_solo",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
                 }
             ],
             "indexes": []
@@ -355,6 +380,15 @@
                     "required": true,
                     "array": false,
                     "default": null
+                },
+                {
+                    "key": "avatar_url",
+                    "type": "string",
+                    "required": false,
+                    "array": false,
+                    "size": 512,
+                    "default": null,
+                    "encrypt": false
                 }
             ],
             "indexes": []
@@ -449,12 +483,12 @@
                     "format": ""
                 },
                 {
-                    "key": "likes_count",
+                    "key": "votes_count",
                     "type": "integer",
                     "required": false,
                     "array": false,
                     "default": 0,
-                    "min": 0,
+                    "min": -9223372036854775808,
                     "max": 9223372036854775807
                 },
                 {
@@ -476,6 +510,29 @@
                     "encrypt": false
                 },
                 {
+                    "key": "reported",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "winner",
+                    "type": "boolean",
+                    "required": false,
+                    "array": false,
+                    "default": false
+                },
+                {
+                    "key": "likes_count",
+                    "type": "integer",
+                    "required": false,
+                    "array": false,
+                    "default": 0,
+                    "min": -9223372036854775808,
+                    "max": 9223372036854775807
+                },
+                {
                     "key": "build_file_id",
                     "type": "string",
                     "required": false,
@@ -483,13 +540,6 @@
                     "size": 36,
                     "default": null,
                     "encrypt": false
-                },
-                {
-                    "key": "reported",
-                    "type": "boolean",
-                    "required": false,
-                    "array": false,
-                    "default": false
                 },
                 {
                     "key": "placement",
@@ -701,50 +751,6 @@
             "indexes": []
         },
         {
-            "$id": "likes",
-            "$permissions": [
-                "read(\"any\")",
-                "create(\"users\")",
-                "delete(\"users\")"
-            ],
-            "databaseId": "konfitur-db",
-            "name": "likes",
-            "enabled": true,
-            "rowSecurity": false,
-            "columns": [
-                {
-                    "key": "project_id",
-                    "type": "string",
-                    "required": true,
-                    "array": false,
-                    "size": 36,
-                    "default": null,
-                    "encrypt": false
-                },
-                {
-                    "key": "user_id",
-                    "type": "string",
-                    "required": true,
-                    "array": false,
-                    "size": 36,
-                    "default": null,
-                    "encrypt": false
-                }
-            ],
-            "indexes": [
-                {
-                    "key": "uniq_project_user",
-                    "type": "unique",
-                    "status": "available",
-                    "columns": [
-                        "project_id",
-                        "user_id"
-                    ],
-                    "orders": []
-                }
-            ]
-        },
-        {
             "$id": "audit_logs",
             "$permissions": [
                 "read(\"team:admin\")"
@@ -873,6 +879,50 @@
                     "status": "available",
                     "columns": [
                         "ip"
+                    ],
+                    "orders": []
+                }
+            ]
+        },
+        {
+            "$id": "likes",
+            "$permissions": [
+                "read(\"any\")",
+                "create(\"users\")",
+                "delete(\"users\")"
+            ],
+            "databaseId": "konfitur-db",
+            "name": "likes",
+            "enabled": true,
+            "rowSecurity": false,
+            "columns": [
+                {
+                    "key": "project_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                },
+                {
+                    "key": "user_id",
+                    "type": "string",
+                    "required": true,
+                    "array": false,
+                    "size": 36,
+                    "default": null,
+                    "encrypt": false
+                }
+            ],
+            "indexes": [
+                {
+                    "key": "uniq_project_user",
+                    "type": "unique",
+                    "status": "available",
+                    "columns": [
+                        "project_id",
+                        "user_id"
                     ],
                     "orders": []
                 }

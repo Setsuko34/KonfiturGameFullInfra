@@ -130,6 +130,17 @@ describe('mapDocToTeam', () => {
     }))
     expect('projectId' in team).toBe(false)
   })
+
+  it('mappe is_solo, false par défaut pour les documents antérieurs', () => {
+    const base = {
+      jam_ids: [],
+      name: 'Crew',
+      invite_code: 'KG-AAAAAAAA',
+      leader_id: 'u-1',
+    }
+    expect(mapDocToTeam(makeDoc(base)).isSolo).toBe(false)
+    expect(mapDocToTeam(makeDoc({ ...base, is_solo: true })).isSolo).toBe(true)
+  })
 })
 
 // ────────────────────────────────────────
