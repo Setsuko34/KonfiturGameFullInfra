@@ -1,6 +1,6 @@
 # KonfiturGame — Guide Claude
 
-Plateforme française de Game Jams. Stack: Next.js 16.2.3 (App Router), TypeScript strict, Tailwind CSS v4, Appwrite 1.9.0 self-hosted, Traefik v3.6.7, Docker Compose.
+Plateforme française de Game Jams. Stack: Next.js 16.2.9 (App Router), TypeScript strict, Tailwind CSS v4, Appwrite 1.9.0 self-hosted, Traefik v3.6.7, Docker Compose.
 
 ---
 
@@ -22,11 +22,12 @@ KonfiturGameFullInfra/
     ├── Dockerfile.dev          # DEV (hot-reload)
     └── src/
         ├── app/                # Next.js App Router
-        ├── components/         # Header, Footer, JamCard, JamChat, FooterCTA…
+        ├── components/         # Header, Footer, JamCard, JamChat, TeamChat, LoadMoreList…
+        │   └── chat/           # ChatMessageGroups, ChatComposer, ping — partagés JamChat/TeamChat
         ├── lib/
-        │   ├── appwrite/       # client.ts, server.ts, config.ts, types.ts, session.ts
-        │   └── actions/        # jams.ts, teams.ts, projects.ts, chat.ts, profile.ts, logs.ts…
-        ├── hooks/              # useRealtimeChat.ts
+        │   ├── appwrite/       # client.ts, server.ts, config.ts, types.ts, session.ts, fetch-all.ts
+        │   └── actions/        # jams.ts, teams.ts, projects.ts, chat.ts, team-chat.ts, profile.ts…
+        ├── hooks/              # useRealtimeChat.ts (souscription chat partagée), useFocusTrap.ts
         ├── proxy.ts            # Middleware bot-detection + ban IP (s'exécute avant middleware.ts)
         ├── middleware.ts       # Protège /dashboard + /admin, redirige /auth/login
         └── types/index.ts
@@ -65,8 +66,8 @@ KonfiturGameFullInfra/
 
 - **Version:** 1.9.0
 - **Database:** `konfitur-db`
-- **Collections:** `game_jams`, `teams`, `team_members`, `projects`, `chat_messages`, `announcements`, `comments`, `votes`, `audit_logs`, `banned_ips`
-- **Buckets:** `jam-covers`, `project-assets`, `avatars`
+- **Collections:** `game_jams`, `teams`, `team_members`, `projects`, `chat_messages`, `team_chat_messages`, `announcements`, `comments`, `likes`, `audit_logs`, `banned_ips`
+- **Buckets:** `jam-covers`, `project-assets`, `avatars`, `project-builds`
 - **IDs définis dans:** `frontend/src/lib/appwrite/config.ts` — toujours importer de là
 - `APPWRITE_API_KEY` → server only, jamais préfixer `NEXT_PUBLIC_`
 - `APPWRITE_INTERNAL_ENDPOINT` → utilisé dans `server.ts` pour les Server Actions (réseau Docker interne)
@@ -79,10 +80,17 @@ jam_ids: string[]   // tableau — [] = guilde pure sans jam active
 name: string
 invite_code: string // format KG-XXXXXXXX
 leader_id: string
-// project_id SUPPRIMÉ — projets retrouvés par (team_id, jam_id)
+is_solo: boolean    // team solo (inscriptions solo) — UNIQUE par user, réutilisée entre jams
+// project_id SUPPRIMÉ du code — projets retrouvés par (team_id, jam_id)
 ```
 
 Query pour les équipes d'une jam : `Query.contains('jam_ids', jamId)`
+
+### Tchat privé d'équipe (`team_chat_messages`)
+- **Zéro permission au niveau table + `rowSecurity: true`** — les permissions Appwrite s'additionnent, un `read("any")` rendrait tout public.
+- Chaque message est créé côté serveur (`team-chat.ts`) avec `Permission.read(Role.user(id))` pour chaque membre courant : un arrivant ne lit pas l'historique antérieur, un partant garde les messages de sa période.
+- Toute action revérifie l'appartenance côté serveur (`requireMembership`, via `fetchAllDocs`) ; les lectures paginées passent par le **client de session** (jamais la clé API, qui contournerait la row security).
+- Le realtime ne pousse que les documents lisibles par la session : la privacité est native côté client.
 
 ---
 

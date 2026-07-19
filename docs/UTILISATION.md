@@ -100,7 +100,7 @@ Une **guilde** est une équipe persistante — elle peut participer à plusieurs
 
 ### Créer une guilde
 
-1. Aller dans **Dashboard → Mon équipe**
+1. Aller dans **Dashboard → Mes équipes** (`/dashboard/teams`)
 2. Cliquer sur **Créer une guilde**
 3. Choisir un nom et son rôle (dev, artiste, son, designer, écrivain)
 4. La guilde est créée — un **code d'invitation** (`KG-XXXXXXXX`) est généré automatiquement
@@ -108,21 +108,29 @@ Une **guilde** est une équipe persistante — elle peut participer à plusieurs
 ### Rejoindre une guilde existante
 
 1. Obtenir le code d'invitation auprès du chef de guilde (`KG-XXXXXXXX`)
-2. Aller dans **Dashboard → Mon équipe**
+2. Aller dans **Dashboard → Mes équipes**
 3. Cliquer sur **Rejoindre une guilde**
 4. Entrer le code et valider
 
-### Gérer sa guilde (chef de guilde uniquement)
+### La page d'équipe (`/team/:id`)
 
-Depuis la page **Dashboard → Mon équipe** → carte de la guilde :
+Chaque guilde a une page à double visage :
+- **Vitrine publique** (tout visiteur) : nom, membres et rôles, jams, projets soumis. Le code d'invitation n'y est **jamais** visible.
+- **Hub privé** (membres) : en plus, le code d'invitation à partager, la gestion de l'équipe et le **tchat privé** (voir section 8).
+
+Depuis **Dashboard → Mes équipes**, cliquer sur une carte mène au hub de la guilde.
+
+### Gérer sa guilde
+
+Depuis le hub de la guilde (`/team/:id`, membres) :
 - Voir la liste des membres et leurs rôles
-- Voir les jams auxquelles la guilde est inscrite
+- Voir les jams auxquelles la guilde est inscrite et les projets soumis
 - Accéder au formulaire de soumission de projet
-- Gérer les membres
+- Renommer la guilde (chef uniquement), quitter la guilde
 
 ### Code d'invitation
 
-Le code `KG-XXXXXXXX` de la guilde est affiché sur la carte de guilde dans le dashboard. Le partager aux joueurs que l'on veut inviter.
+Le code `KG-XXXXXXXX` de la guilde est affiché sur le hub de l'équipe, pour ses membres uniquement. Le partager aux joueurs que l'on veut inviter.
 
 ---
 
@@ -130,7 +138,7 @@ Le code `KG-XXXXXXXX` de la guilde est affiché sur la carte de guilde dans le d
 
 ### S'inscrire à une jam (avec une guilde)
 
-Pour participer à une jam, il faut **avoir ou créer une guilde**, puis l'inscrire à la jam.
+Pour participer à une jam en équipe, il faut **avoir ou créer une guilde**, puis l'inscrire à la jam.
 
 1. Aller sur la page de détail de la jam (`/jam/:id`)
 2. Dans la section **Équipes**, cliquer sur **Inscrire ma guilde**
@@ -138,6 +146,17 @@ Pour participer à une jam, il faut **avoir ou créer une guilde**, puis l'inscr
 4. Valider — la guilde apparaît dans la liste des participants
 
 > Un utilisateur ne peut être dans qu'une seule équipe par jam. Si une guilde est déjà inscrite à la jam, ce n'est pas possible d'en inscrire une autre avec le même membre.
+
+### S'inscrire en solo
+
+Pour les jams de type **solo** ou **solo & équipe** :
+
+1. Aller sur la page de détail de la jam (`/jam/:id`)
+2. Cliquer sur **S'inscrire en solo**
+3. La plateforme réutilise votre **team solo personnelle** (créée automatiquement la première fois) — pas d'équipe à former
+
+- La désinscription solo est possible tant que la jam n'a pas commencé
+- Les participants solo sont comptés à part des équipes sur la page de la jam
 
 ### Suivre le déroulé d'une jam
 
@@ -159,12 +178,12 @@ Une fois inscrit, depuis la page de la jam :
 
 ## 6. Soumettre un projet
 
-La soumission se fait depuis le **Dashboard**, sur la carte de sa guilde.
+La soumission se fait depuis le **hub de sa guilde** (`/team/:id`).
 
 ### Accéder au formulaire
 
-1. Aller dans **Dashboard → Mon équipe**
-2. Sur la carte de la guilde, cliquer sur **Soumettre un projet** (visible pour les jams en cours)
+1. Aller sur le hub de la guilde (via **Dashboard → Mes équipes**)
+2. Cliquer sur **Soumettre un projet** (visible pour les jams en cours)
 3. Remplir le formulaire :
    - **Titre** du jeu
    - **Description** (ce que le jeu est, comment y jouer)
@@ -211,9 +230,11 @@ Les likes alimentent le **classement popularité** :
 
 ## 8. Le chat en direct
 
+### Chat de jam
+
 Chaque jam dispose d'un **chat en temps réel**, accessible depuis la page de détail de la jam.
 
-### Canaux disponibles
+#### Canaux disponibles
 
 | Canal | Utilisation |
 |-------|-------------|
@@ -221,11 +242,22 @@ Chaque jam dispose d'un **chat en temps réel**, accessible depuis la page de d�
 | **Recherche d'équipe** | Trouver des coéquipiers ou inviter des joueurs |
 | **Aide** | Questions sur les règles ou la plateforme |
 
-### Fonctionnalités
+#### Fonctionnalités
 
 - Les messages s'affichent en temps réel (pas besoin de recharger la page)
 - Les messages **épinglés** par les organisateurs apparaissent en haut du canal
 - Les messages des **organisateurs** et **modérateurs** sont identifiés visuellement
+- Un bouton **Signaler** (au survol d'un message) alerte les modérateurs
+
+### Tchat privé d'équipe
+
+Chaque guilde dispose d'un **tchat privé**, sur le hub de l'équipe (`/team/:id`), visible et lisible **uniquement par ses membres** :
+
+- Messages en temps réel avec notification sonore
+- **Épingler / désépingler** un message (tout membre) — les messages épinglés restent affichés dans un bandeau en haut
+- **Signaler** un message problématique — il est alors transmis à la modération admin
+- Un membre qui rejoint la guilde **après coup ne voit pas** les messages antérieurs à son arrivée ; un membre qui quitte conserve l'accès aux messages de sa période
+- Les non-membres (y compris techniques : requêtes directes, realtime) ne reçoivent **aucun** contenu du tchat
 
 ---
 
@@ -331,9 +363,11 @@ Le panneau admin est accessible à l'adresse `/admin`. L'accès est réservé au
 
 ### Modération (`/admin/moderation`)
 
-- Voir les messages et projets signalés, avec liens de contexte (jam du message, page du projet, gestion de la jam)
+- Voir les messages de jam, **messages de tchat d'équipe** et projets signalés, avec liens de contexte (jam du message, page de l'équipe, page du projet)
+- Supprimer un message signalé (la suppression se propage en direct chez les lecteurs) ou marquer le signalement comme résolu
 - **Retirer la soumission** d'un projet signalé directement depuis la carte
-- Marquer un signalement comme résolu
+
+> Les messages du tchat privé d'équipe ne sont visibles d'un admin **que** s'ils ont été signalés par un membre.
 
 ### Mise en avant et podium (`/admin/featured`)
 
@@ -369,4 +403,4 @@ Le panneau admin est accessible à l'adresse `/admin`. L'accès est réservé au
 
 ---
 
-*KonfiturGame · Manuel d'utilisation · Mis à jour : 2026-07-14*
+*KonfiturGame · Manuel d'utilisation · Mis à jour : 2026-07-19*

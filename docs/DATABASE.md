@@ -36,6 +36,7 @@ erDiagram
         string name
         string invite_code "format KG-XXXXXXXX"
         string leader_id
+        bool is_solo "team solo unique par user"
     }
 
     team_members {
@@ -73,6 +74,16 @@ erDiagram
         string author_name
         string content
         enum role "user | organizer | moderator"
+        bool pinned
+        bool reported
+    }
+
+    team_chat_messages {
+        string id PK
+        string team_id FK
+        string author_id
+        string author_name
+        string content
         bool pinned
         bool reported
     }
@@ -124,6 +135,7 @@ erDiagram
     game_jams ||--o{ announcements : "jam_id"
     teams ||--o{ team_members : "team_id"
     teams ||--o{ projects : "team_id"
+    teams ||--o{ team_chat_messages : "team_id"
     projects ||--o{ likes : "project_id"
     projects ||--o{ comments : "project_id"
 ```
@@ -162,6 +174,7 @@ erDiagram
 | `name` | String(256) | Oui | |
 | `invite_code` | String(16) | Oui | Format `KG-XXXXXXXX` |
 | `leader_id` | String(36) | Oui | User ID Appwrite |
+| `is_solo` | Boolean | Non | Défaut `false` — team solo personnelle (inscriptions solo), **unique par utilisateur** et réutilisée entre les jams ; masquée des listes d'équipes classiques |
 | `project_id` | String(36) | Non | **Déprécié** — colonne résiduelle non utilisée par le code. Les projets sont retrouvés par `(team_id, jam_id)` |
 
 > Query pour retrouver les équipes d'une jam : `Query.contains('jam_ids', jamId)`
@@ -175,6 +188,7 @@ erDiagram
 | `name` | String(128) | Oui | Nom affiché |
 | `role` | Enum | Oui | `dev`, `artist`, `sound`, `designer`, `writer` |
 | `is_leader` | Boolean | Oui | |
+| `avatar_url` | String(512) | Non | |
 
 ### `projects`
 
@@ -207,6 +221,19 @@ erDiagram
 | `role` | Enum | Oui | `user`, `organizer`, `moderator` |
 | `pinned` | Boolean | Non | Défaut `false` |
 | `reported` | Boolean | Non | Défaut `false` — signalement pour modération |
+
+### `team_chat_messages`
+
+Tchat privé des équipes. **Aucune permission au niveau table + `rowSecurity: true`** : chaque message est créé côté serveur avec `Permission.read(Role.user(id))` pour chaque membre courant de l'équipe. Un membre qui rejoint après coup ne lit pas l'historique antérieur ; un membre qui part garde les messages de sa période. Les non-membres ne reçoivent ni documents ni événements realtime.
+
+| Attribut | Type | Requis | Notes |
+|----------|------|--------|-------|
+| `team_id` | String(36) | Oui | Index `idx_team_id` |
+| `author_id` | String(36) | Oui | |
+| `author_name` | String(128) | Oui | |
+| `content` | String(2048) | Oui | Échappé côté serveur (`<`/`>`) |
+| `pinned` | Boolean | Non | Défaut `false` — épinglable/désépinglable par tout membre |
+| `reported` | Boolean | Non | Défaut `false` — signalement par un membre, modéré via `/admin/moderation` ; index `idx_reported` |
 
 ### `announcements`
 
@@ -340,4 +367,4 @@ Les utilisateurs ne sont pas dans `konfitur-db` — ils sont gérés nativement 
 
 ---
 
-*KonfiturGame · Appwrite 1.9.0 · Base : `konfitur-db` · Mis à jour : 2026-07-14*
+*KonfiturGame · Appwrite 1.9.0 · Base : `konfitur-db` · Mis à jour : 2026-07-19*

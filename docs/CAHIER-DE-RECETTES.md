@@ -183,7 +183,7 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 
 | # | Étape | Résultat attendu |
 |---|-------|-----------------|
-| 1 | Aller dans Dashboard → Mon équipe | Page des guildes affichée |
+| 1 | Aller dans Dashboard → Mes équipes (`/dashboard/teams`) | Liste des guildes affichée |
 | 2 | Cliquer sur "Créer une guilde" | Modale ou formulaire s'ouvre |
 | 3 | Entrer un nom de guilde et choisir un rôle | Champs validés |
 | 4 | Valider | Guilde créée, code `KG-XXXXXXXX` affiché |
@@ -204,7 +204,7 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 | # | Étape | Résultat attendu |
 |---|-------|-----------------|
 | 1 | Se connecter avec un second compte | Connecté |
-| 2 | Aller dans Dashboard → Mon équipe | Pas de guilde affichée |
+| 2 | Aller dans Dashboard → Mes équipes (`/dashboard/teams`) | Pas de guilde affichée |
 | 3 | Cliquer sur "Rejoindre une guilde" | Champ code d'invitation |
 | 4 | Entrer le code `KG-XXXXXXXX` de la guilde créée en 3.1 | Guilde rejointe |
 | 5 | Vérifier la liste des membres | Deux membres visibles |
@@ -236,6 +236,24 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 
 ---
 
+### 3.4 S'inscrire en solo à une jam
+
+**Prérequis :** 1.1, jam de type solo ou solo & équipe, statut À venir  
+**Bloquant :** non
+
+| # | Étape | Résultat attendu |
+|---|-------|-----------------|
+| 1 | Aller sur `/jam/:id`, cliquer « S'inscrire en solo » | Inscription confirmée, compteur de participants solo incrémenté |
+| 2 | Se désinscrire puis se réinscrire | La **même** team solo personnelle est réutilisée (pas de doublon) |
+| 3 | S'inscrire en solo à une **seconde** jam | Toujours la même team solo (unique par utilisateur) |
+| 4 | Après le début de la jam, tenter de se désinscrire | Refus avec message en français |
+
+**Critères d'acceptation :**
+- [ ] Une seule team `is_solo` par utilisateur, quelle que soit la séquence inscription/désinscription
+- [ ] Les participants solo sont comptés à part des équipes sur la page de la jam
+
+---
+
 ## Module 4 — Projets
 
 ### 4.1 Soumettre un projet
@@ -245,7 +263,7 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 
 | # | Étape | Résultat attendu |
 |---|-------|-----------------|
-| 1 | Aller dans Dashboard → Mon équipe | Card de la guilde avec section jam |
+| 1 | Aller sur le hub de la guilde (`/team/:id`, via Dashboard → Mes équipes) | Card de la guilde avec section jam |
 | 2 | Cliquer sur "Soumettre un projet" | Formulaire de soumission |
 | 3 | Remplir titre, description, technologies, URL | Champs validés |
 | 4 | Uploader une image de couverture | Upload dans le bucket `project-assets` |
@@ -314,6 +332,26 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 **Critères d'acceptation :**
 - [ ] Les messages s'affichent en temps réel (WebSocket fonctionnel)
 - [ ] La séparation des canaux est respectée (général ≠ aide)
+
+### 5.2 Tchat privé d'équipe
+
+**Prérequis :** 3.1 (guilde avec 2 membres : sessions A et B), un compte C non-membre  
+**Bloquant :** oui (sécurité)
+
+| # | Étape | Résultat attendu |
+|---|-------|-----------------|
+| 1 | A ouvre `/team/:id` | Section « Tchat d'équipe » visible, envoi OK, le message revient par realtime sans doublon |
+| 2 | B (membre) ouvre la page dans un autre navigateur | Réception en temps réel + notification sonore |
+| 3 | A épingle un message | Bandeau épinglé chez A **et** chez B sans rechargement ; désépinglage depuis le bandeau |
+| 4 | A signale un message | Bouton passe à « Signalé », le message apparaît en modération admin (8.5) |
+| 5 | C (non-membre connecté) ouvre `/team/:id` | Aucune section tchat |
+| 6 | C force `databases.listDocuments` sur `team_chat_messages` depuis la console navigateur | **Zéro document** retourné |
+| 7 | C s'abonne au canal realtime (console) pendant que A envoie un message | **Aucun événement** reçu |
+| 8 | Un nouveau membre rejoint la guilde (historique existant), clique « Charger les messages plus anciens » | Rien d'antérieur à son arrivée ne remonte |
+
+**Critères d'acceptation :**
+- [ ] La privacité est garantie côté données (row security), pas seulement côté UI
+- [ ] Épinglage et signalement se propagent en temps réel entre membres
 
 ---
 
@@ -476,6 +514,23 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 **Critères d'acceptation :**
 - [ ] Toute action admin sur une ressource dont il n'est pas propriétaire crée une entrée `admin_action`
 - [ ] `/admin/teams` liste toutes les équipes (y compris les guildes sans jam) avec recherche par nom
+
+### 8.5 Modération des messages de tchat d'équipe
+
+**Prérequis :** 5.2 étape 4 (un message de team signalé)  
+**Bloquant :** non
+
+| # | Étape | Résultat attendu |
+|---|-------|-----------------|
+| 1 | Aller sur `/admin/moderation` | Section « Messages de team signalés » avec le message, lien « Voir l'équipe » |
+| 2 | Vérifier le dashboard `/admin` | Le compteur « Signalements en attente » inclut le message de team |
+| 3 | « Marquer comme résolu » sur un signalement | Le message disparaît de la liste, reste visible dans le tchat |
+| 4 | « Supprimer » sur un autre message signalé | Le message disparaît de la liste **et** du tchat des membres en temps réel (événement realtime) |
+| 5 | Aller sur `/admin/logs?type=admin_action` | Entrées de suppression / résolution journalisées |
+
+**Critères d'acceptation :**
+- [ ] Un admin ne voit un message de tchat privé que s'il a été signalé par un membre
+- [ ] Suppression et résolution sont journalisées et rafraîchissent les compteurs
 
 ---
 
