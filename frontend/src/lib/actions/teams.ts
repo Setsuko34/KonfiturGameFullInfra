@@ -56,6 +56,10 @@ export async function createTeam(data: {
 }): Promise<{ success: boolean; team?: Team; error?: string }> {
   try {
     if (data.jamId) {
+      const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, data.jamId)
+      if (jamDoc.type === 'solo') {
+        return { success: false, error: 'Cette jam est réservée aux participants solo.' }
+      }
       const conflict = await isUserInTeamForJam(data.leaderId, data.jamId)
       if (conflict) {
         return { success: false, error: 'Tu es déjà dans une équipe pour cette jam.' }
@@ -109,6 +113,10 @@ export async function joinTeamByCode(
       return { success: false, error: "Code d'invitation invalide." }
     }
     const teamDoc = res.documents[0]
+
+    if (teamDoc.is_solo) {
+      return { success: false, error: 'Ce code correspond à une inscription solo, pas à une équipe.' }
+    }
 
     // Déjà membre de cette team ?
     const existing = await serverDatabases.listDocuments(
@@ -185,6 +193,10 @@ export async function registerTeamToJam(
       return { success: false, error: 'Seul le leader peut inscrire une équipe.' }
     }
 
+    if (teamDoc.is_solo) {
+      return { success: false, error: 'Une inscription solo est liée à sa jam d\'origine.' }
+    }
+
     const jamIds: string[] = teamDoc.jam_ids ?? []
     if (jamIds.includes(jamId)) {
       return { success: false, error: 'Cette équipe est déjà inscrite à cette jam.' }
@@ -195,6 +207,10 @@ export async function registerTeamToJam(
     const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
     if (computeJamStatus(new Date(jamDoc.start_date), new Date(jamDoc.end_date)) === 'ended') {
       return { success: false, error: 'Impossible de rejoindre une jam terminée.' }
+    }
+
+    if (jamDoc.type === 'solo') {
+      return { success: false, error: 'Cette jam est réservée aux participants solo.' }
     }
 
     // Vérifier qu'aucun membre de la team n'est déjà dans cette jam
@@ -354,6 +370,9 @@ export async function renameTeam(
     if (!actorRole) {
       return { success: false, error: 'Seul le leader peut renommer l\'équipe.' }
     }
+    if (teamDoc.is_solo) {
+      return { success: false, error: 'Une inscription solo ne peut pas être renommée.' }
+    }
 
     await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId, { name: trimmed })
 
@@ -364,6 +383,49 @@ export async function renameTeam(
     return { success: true }
   } catch {
     return { success: false, error: 'Une erreur est survenue.' }
+  }
+}
+
+// ── registerSoloToJam ─────────────────────────────────────────────────────────
+
+export async function registerSoloToJam(
+  jamId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
+    const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
+    if (jamDoc.type === 'team') {
+      return { success: false, error: 'Cette jam est réservée aux équipes.' }
+    }
+    if (computeJamStatus(new Date(jamDoc.start_date), new Date(jamDoc.end_date)) === 'ended') {
+      return { success: false, error: 'Impossible de rejoindre une jam terminée.' }
+    }
+    if (await isUserInTeamForJam(user.$id, jamId)) {
+      return { success: false, error: 'Tu es déjà inscrit à cette jam.' }
+    }
+
+    // Team technique de 1 : tout le circuit (projets, compteurs, unicité) reste inchangé
+    const teamDoc = await serverDatabases.createDocument(
+      DATABASE_ID, COLLECTIONS.TEAMS, 'unique()',
+      {
+        jam_ids: [jamId],
+        name: user.name,
+        invite_code: generateInviteCode(),
+        leader_id: user.$id,
+        is_solo: true,
+      }
+    )
+    await serverDatabases.createDocument(
+      DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, 'unique()',
+      { team_id: teamDoc.$id, user_id: user.$id, name: user.name, role: 'dev', is_leader: true }
+    )
+
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
+    return { success: false, error: msg }
   }
 }
 

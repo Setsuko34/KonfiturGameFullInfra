@@ -98,7 +98,7 @@ export default async function JamPage({ params }: Props) {
   // Teams dont l'user est leader, pas encore inscrites à cette jam
   const leaderTeamsNotInJam = currentUser
     ? userTeamsData
-        .filter(({ isLeader, team }) => isLeader && !team.jamIds.includes(jamId))
+        .filter(({ isLeader, team }) => isLeader && !team.isSolo && !team.jamIds.includes(jamId))
         .map(({ team }) => ({ id: team.id, name: team.name }))
     : []
 
@@ -113,6 +113,10 @@ export default async function JamPage({ params }: Props) {
     .filter(p => (p.placement ?? 0) > 0)
     .sort((a, b) => (a.placement ?? 0) - (b.placement ?? 0))
   const teamNames = Object.fromEntries(teams.map(t => [t.id, t.name]))
+
+  // Compteur dérivé des inscrits réels (équipes + solos) : le champ stocké
+  // jam.participants n'est jamais mis à jour par les inscriptions
+  const participantsCount = teams.reduce((sum, t) => sum + t.members.length, 0)
 
   const tabs = [
     { id: 'info', label: 'Informations', icon: Info },
@@ -172,7 +176,7 @@ export default async function JamPage({ params }: Props) {
                   <div className="flex items-center gap-2">
                     <Users size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
                     <span className="label-tech" style={{ color: 'var(--muted-foreground)' }}>
-                      {jam.participants.toLocaleString('fr-FR')} participants
+                      {participantsCount.toLocaleString('fr-FR')} participant{participantsCount !== 1 ? 's' : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -334,6 +338,7 @@ export default async function JamPage({ params }: Props) {
                 jamId={jam.id}
                 jamTitle={jam.title}
                 jamStatus={effectiveStatus}
+                jamType={jam.type}
                 startDate={jam.startDate}
                 teams={teams}
                 currentUser={currentUser}

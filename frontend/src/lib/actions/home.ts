@@ -6,6 +6,7 @@ import { DATABASE_ID, COLLECTIONS, MAX_FEATURED_JAMS } from '@/lib/appwrite/conf
 import { mapDocToGameJam, mapDocToProject, type AppwriteDoc } from '@/lib/appwrite/types'
 import { getPopularProjects } from '@/lib/actions/projects'
 import { fetchAllByField } from '@/lib/appwrite/fetch-all'
+import { getParticipantCountsByJam } from '@/lib/appwrite/participant-counts'
 import type { GameJam, PastWinner, SiteStats, Project } from '@/types'
 
 export async function getHomePageData(): Promise<{
@@ -117,6 +118,11 @@ export async function getHomePageData(): Promise<{
       projectsSubmitted: projectsCountRes.total,
       countriesRepresented: 47, // pas de champ pays dans le schéma Appwrite
     }
+
+    // Compteurs par jam dérivés des inscrits réels (le champ stocké n'est jamais mis à jour)
+    const displayedJams = [...(ongoingJam ? [ongoingJam] : []), ...upcomingJams]
+    const participantCounts = await getParticipantCountsByJam(displayedJams.map(j => j.id))
+    for (const jam of displayedJams) jam.participants = participantCounts[jam.id] ?? 0
 
     return { ongoingJam, upcomingJams, winners, popularProjects, stats }
   } catch {

@@ -42,6 +42,7 @@ export function mapDocToTeam(doc: AppwriteDoc): Team {
     name: doc.name,
     inviteCode: doc.invite_code,
     leaderId: doc.leader_id,
+    isSolo: doc.is_solo ?? false,
     members: [],
   }
 }

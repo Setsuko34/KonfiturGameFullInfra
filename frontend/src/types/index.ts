@@ -40,6 +40,7 @@ export interface Team {
   name: string
   inviteCode: string
   leaderId: string
+  isSolo: boolean        // inscription solo = team technique de 1
   members: TeamMember[]
   // projectId supprimé — requête projects par team_id + jam_id
 }
