@@ -73,8 +73,12 @@ test.describe('6.1 — Modifier le profil', () => {
   })
 
   test('profil public accessible depuis un membre d\'équipe', async ({ user1Page: page }) => {
-    // user2 a rejoint la guilde de user1 dans 04-guildes.spec.ts
-    await page.goto('/dashboard/team')
+    // user2 a rejoint la guilde de user1 dans 04-guildes.spec.ts ; la liste des
+    // membres vit désormais sur le hub d'équipe (/team/:id), plus sur /dashboard/team
+    const { guildeId } = loadState()
+    if (!guildeId) test.skip()
+
+    await page.goto(`/team/${guildeId}`)
 
     const memberLink = page.locator('a[href*="/profile/"]').first()
     await expect(memberLink).toBeVisible()
@@ -162,12 +166,14 @@ test.describe('6.9 — Dashboard vue d\'ensemble enrichi', () => {
 
     await expect(page.getByText('À venir', { exact: true })).toBeVisible()
     await expect(page.getByText('Activité récente')).toBeVisible()
-    await expect(page.getByText('Mes équipes')).toBeVisible()
+    // getByText seul est ambigu depuis le rename de la nav ("Mon équipe" → "Mes équipes")
+    // qui duplique désormais le titre du widget TeamsWidget sur cette même page
+    await expect(page.getByRole('heading', { name: 'Mes équipes' })).toBeVisible()
     await expect(page.getByText('Mes projets')).toBeVisible()
 
     // Refresh : la page reste rendue après clic
     await page.getByRole('button', { name: 'Rafraîchir les données' }).click()
     await expect(page.getByRole('heading', { name: 'Vue d\'ensemble' })).toBeVisible()
-    await expect(page.getByText('Mes équipes')).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Mes équipes' })).toBeVisible()
   })
 })
