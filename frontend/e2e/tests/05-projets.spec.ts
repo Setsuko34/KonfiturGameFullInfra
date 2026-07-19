@@ -8,7 +8,11 @@ import { loadTestIds, saveState, loadState } from '../fixtures/test-data'
 test.describe('4.1 — Soumettre un projet', () => {
   test('user1 soumet un projet pour sa guilde inscrite', async ({ user1Page: page }) => {
     const ids = loadTestIds()
-    await page.goto('/dashboard/team')
+    const { guildeId } = loadState()
+    if (!guildeId) test.skip()
+
+    // Le formulaire de soumission vit sur le hub d'équipe (/team/:id), plus sur /dashboard/team
+    await page.goto(`/team/${guildeId}`)
 
     // Le formulaire de soumission n'apparaît que pour une jam en cours :
     // inscrire la guilde à la jam ongoing via le TeamCard si ce n'est pas déjà fait
@@ -87,7 +91,10 @@ test.describe('4.1 — Soumettre un projet', () => {
   })
 
   test('un membre modifie le projet soumis (titre) et la modification est visible', async ({ user1Page: page }) => {
-    await page.goto('/dashboard/team')
+    const { guildeId } = loadState()
+    if (!guildeId) test.skip()
+
+    await page.goto(`/team/${guildeId}`)
     const editBtn = page.getByRole('button', { name: /modifier le projet/i })
     await expect(editBtn).toBeVisible({ timeout: 15_000 })
     await editBtn.click()

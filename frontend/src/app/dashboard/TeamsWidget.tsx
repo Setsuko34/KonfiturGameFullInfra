@@ -6,7 +6,6 @@ export interface TeamsWidgetTeam {
   name: string
   membersCount: number
   activeJams: number
-  inviteCode: string
 }
 
 export default function TeamsWidget({ teams }: { teams: TeamsWidgetTeam[] }) {
@@ -17,7 +16,7 @@ export default function TeamsWidget({ teams }: { teams: TeamsWidgetTeam[] }) {
           Mes équipes
         </h2>
         <Link
-          href="/dashboard/team"
+          href="/dashboard/teams"
           className="flex items-center gap-1 text-xs min-h-11 transition-opacity hover:opacity-80"
           style={{ color: 'var(--primary)' }}
         >
@@ -39,9 +38,6 @@ export default function TeamsWidget({ teams }: { teams: TeamsWidgetTeam[] }) {
               </div>
               <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>
                 {team.membersCount} membre{team.membersCount > 1 ? 's' : ''} · {team.activeJams} jam{team.activeJams > 1 ? 's' : ''} active{team.activeJams > 1 ? 's' : ''}
-              </p>
-              <p className="text-xs" style={{ fontFamily: 'var(--font-mono)', color: 'var(--muted-foreground)' }}>
-                Code : {team.inviteCode}
               </p>
             </li>
           ))}

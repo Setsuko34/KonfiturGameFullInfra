@@ -102,6 +102,10 @@ export default async function JamPage({ params }: Props) {
         .map(({ team }) => ({ id: team.id, name: team.name }))
     : []
 
+  // Page publique : le code d'invitation ne doit jamais être servi aux visiteurs
+  // (getTeamsByJam renvoie le code brut, contrairement à getTeamById qui le blanchit déjà)
+  const publicTeams = teams.map(t => ({ ...t, inviteCode: '' }))
+
   const now = new Date()
   const effectiveStatus: 'upcoming' | 'ongoing' | 'ended' =
     now >= jam.endDate ? 'ended' : now >= jam.startDate ? 'ongoing' : 'upcoming'
@@ -340,7 +344,7 @@ export default async function JamPage({ params }: Props) {
                 jamStatus={effectiveStatus}
                 jamType={jam.type}
                 startDate={jam.startDate}
-                teams={teams}
+                teams={publicTeams}
                 currentUser={currentUser}
                 userTeamInThisJam={userTeamInThisJam}
                 leaderTeamsNotInJam={leaderTeamsNotInJam}

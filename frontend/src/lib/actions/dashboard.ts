@@ -31,23 +31,28 @@ export async function getUserTeams(): Promise<
   if (memberships.length === 0) return []
 
   const teamIds = memberships.map(m => m.team_id as string)
-  const teamDocs = await fetchAllByField<AppwriteDoc>(COLLECTIONS.TEAMS, '$id', teamIds)
+  const [teamDocs, memberDocs] = await Promise.all([
+    fetchAllByField<AppwriteDoc>(COLLECTIONS.TEAMS, '$id', teamIds),
+    fetchAllByField<AppwriteDoc>(COLLECTIONS.TEAM_MEMBERS, 'team_id', teamIds),
+  ])
 
-  return Promise.all(
-    teamDocs.map(async doc => {
-      const team = mapDocToTeam(doc)
-      const membersRes = await serverDatabases.listDocuments(
-        DATABASE_ID, COLLECTIONS.TEAM_MEMBERS,
-        [Query.equal('team_id', team.id), Query.limit(20)]
-      )
-      team.members = membersRes.documents.map(mapDocToTeamMember)
-      return {
-        team,
-        members: team.members,
-        isLeader: doc.leader_id === user.$id,
-      }
-    })
-  )
+  const membersByTeam = new Map<string, TeamMember[]>()
+  for (const doc of memberDocs) {
+    const teamId = doc.team_id as string
+    const list = membersByTeam.get(teamId) ?? []
+    list.push(mapDocToTeamMember(doc))
+    membersByTeam.set(teamId, list)
+  }
+
+  return teamDocs.map(doc => {
+    const team = mapDocToTeam(doc)
+    team.members = membersByTeam.get(team.id) ?? []
+    return {
+      team,
+      members: team.members,
+      isLeader: doc.leader_id === user.$id,
+    }
+  })
 }
 
 // ── Participations ─────────────────────────────────────────────────────────
@@ -223,7 +228,7 @@ export interface UserDashboardData {
   ongoingJam: GameJam | null
   upcomingJams: { id: string; title: string; startDate: Date }[]
   feed: FeedItem[]
-  teams: { id: string; name: string; membersCount: number; activeJams: number; inviteCode: string }[]
+  teams: { id: string; name: string; membersCount: number; activeJams: number }[]
   myProjects: { id: string; title: string; likes: number; comments: number }[]
 }
 
@@ -321,7 +326,6 @@ export async function getUserDashboard(): Promise<UserDashboardData> {
       name: t.name,
       membersCount: teamMemberCounts[i],
       activeJams: t.jamIds.length,
-      inviteCode: t.inviteCode,
     })),
     myProjects: projects.slice(0, 5).map((p, i) => ({ // cap volontaire d'affichage, pas un plafond Appwrite
       id: p.id,

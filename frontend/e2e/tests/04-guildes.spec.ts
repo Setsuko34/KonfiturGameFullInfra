@@ -6,40 +6,44 @@ import { loadTestIds, saveState, loadState } from '../fixtures/test-data'
 
 test.describe('3.1 — Créer une guilde', () => {
   test('user1 crée une guilde depuis le dashboard', async ({ user1Page: page }) => {
-    await page.goto('/dashboard/team')
+    await page.goto('/dashboard/teams')
     await expect(page.locator('h1')).toBeVisible()
 
-    // Ouvrir le formulaire de création (deux boutons identiques : barre d'action + état vide)
+    // Ouvrir le formulaire de création
     await page.getByRole('button', { name: /créer une équipe/i }).first().click()
 
-    // Remplir le formulaire
-    const nameInput = page.locator('input[name="name"], input[placeholder*="nom"], #team-name')
+    // Remplir le formulaire (CreateTeamModal : nom + jam optionnelle, pas de champ rôle)
+    const nameInput = page.locator('#team-name')
     await nameInput.fill('[E2E] Guilde Test')
 
-    // Sélectionner un rôle si un champ existe
-    const roleSelect = page.locator('select[name="role"], [data-role-select]')
-    if (await roleSelect.count() > 0) {
-      await roleSelect.selectOption({ index: 1 })
-    } else {
-      // Cliquer sur le premier rôle disponible
-      const roleBtn = page.getByRole('button', { name: /dev|artiste|designer|sound/i }).first()
-      if (await roleBtn.count() > 0) await roleBtn.click()
-    }
+    await page.getByRole('button', { name: /créer/i }).last().click()
 
-    await page.getByRole('button', { name: /valider|créer|confirmer/i }).last().click()
+    // La liste (/dashboard/teams) se rafraîchit et affiche la carte de la nouvelle guilde
+    const teamLink = page.getByRole('link', { name: /\[E2E\] Guilde Test/i })
+    await expect(teamLink).toBeVisible({ timeout: 10_000 })
 
-    // La guilde créée doit apparaître avec un code KG-
+    // Le code KG- vit désormais sur le hub d'équipe (/team/:id), pas sur la liste
+    const href = await teamLink.getAttribute('href') ?? ''
+    const idMatch = href.match(/\/team\/([^/]+)/)
+    await teamLink.click()
+
     await expect(page.locator('body')).toContainText(/KG-[A-Z0-9]{8}/i, { timeout: 10_000 })
     await expect(page.locator('body')).toContainText('[E2E] Guilde Test')
 
-    // Extraction du code pour les tests suivants
+    // Extraction du code + de l'ID pour les tests suivants
     const bodyText = await page.locator('body').textContent() ?? ''
     const match = bodyText.match(/KG-([A-Z0-9]{8})/i)
-    if (match) saveState({ guildeInviteCode: match[0] })
+    saveState({
+      ...(match ? { guildeInviteCode: match[0] } : {}),
+      ...(idMatch ? { guildeId: idMatch[1] } : {}),
+    })
   })
 
   test('le code est au format KG-XXXXXXXX', async ({ user1Page: page }) => {
-    await page.goto('/dashboard/team')
+    const { guildeId } = loadState()
+    if (!guildeId) test.skip()
+
+    await page.goto(`/team/${guildeId}`)
     const bodyText = await page.locator('body').textContent() ?? ''
     expect(bodyText).toMatch(/KG-[A-Z0-9]{8}/i)
   })
@@ -50,7 +54,7 @@ test.describe('3.2 — Rejoindre une guilde via code', () => {
     const { guildeInviteCode } = loadState()
     if (!guildeInviteCode) test.skip()
 
-    await page.goto('/dashboard/team')
+    await page.goto('/dashboard/teams')
 
     // "Rejoindre" (barre d'action) et "Rejoindre via code" (état vide) coexistent
     await page.getByRole('button', { name: /rejoindre/i }).first().click()
@@ -63,7 +67,7 @@ test.describe('3.2 — Rejoindre une guilde via code', () => {
   })
 
   test('erreur avec un code invalide', async ({ user2Page: page }) => {
-    await page.goto('/dashboard/team')
+    await page.goto('/dashboard/teams')
 
     const joinBtn = page.getByRole('button', { name: /rejoindre/i })
     if (await joinBtn.count() === 0) test.skip()

@@ -23,12 +23,14 @@ import {
   createTeam,
   joinTeamByCode,
   getTeamsByJam,
+  getTeamById,
   updateMemberRole,
   removeMemberFromTeam,
   deleteTeam,
   renameTeam,
   registerTeamToJam,
   registerSoloToJam,
+  unregisterSoloFromJam,
 } from '@/lib/actions/teams'
 import { serverDatabases, serverTeams } from '@/lib/appwrite/server'
 
@@ -596,10 +598,12 @@ describe('registerSoloToJam', () => {
     expect(mockCreate).not.toHaveBeenCalled()
   })
 
-  it('succès : crée une team is_solo de 1 avec son membre leader', async () => {
+  it('succès : aucune team solo existante -> crée une team is_solo de 1 avec son membre leader', async () => {
     mockAccountGet.mockResolvedValue({ $id: 'u-1', name: 'Alice' })
     mockGet.mockResolvedValueOnce(makeJamDoc({}) as never)
-    mockList.mockResolvedValueOnce({ documents: [], total: 0 } as never) // aucun membership
+    mockList
+      .mockResolvedValueOnce({ documents: [], total: 0 } as never) // aucun membership
+      .mockResolvedValueOnce({ documents: [], total: 0 } as never) // aucune team solo existante
     mockCreate.mockImplementation(async (_db, col) =>
       col === 'teams'
         ? makeTeamDoc({ jam_ids: ['jam-1'], name: 'Alice', invite_code: 'KG-AAAAAAAA', leader_id: 'u-1', is_solo: true }) as never
@@ -615,6 +619,24 @@ describe('registerSoloToJam', () => {
       expect.objectContaining({ user_id: 'u-1', is_leader: true }))
   })
 
+  it('succès : team solo existante -> jam ajoutée par update, aucune création', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'u-1', name: 'Alice' })
+    mockGet.mockResolvedValueOnce(makeJamDoc({ $id: 'jam-2' }) as never)
+    mockList
+      .mockResolvedValueOnce({ documents: [], total: 0 } as never) // aucun membership
+      .mockResolvedValueOnce({
+        documents: [makeTeamDoc({ jam_ids: ['jam-1'], name: 'Alice', invite_code: 'KG-AAAAAAAA', leader_id: 'u-1', is_solo: true })],
+        total: 1,
+      } as never) // team solo existante
+    mockUpdate.mockResolvedValue({} as never)
+
+    const res = await registerSoloToJam('jam-2')
+
+    expect(res.success).toBe(true)
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'teams', 'team-1', { jam_ids: ['jam-1', 'jam-2'] })
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
   it('sans session : refus, aucun appel DB', async () => {
     mockAccountGet.mockRejectedValue(new Error('no session'))
 
@@ -623,5 +645,124 @@ describe('registerSoloToJam', () => {
     expect(res.success).toBe(false)
     expect(mockGet).not.toHaveBeenCalled()
     expect(mockCreate).not.toHaveBeenCalled()
+  })
+})
+
+// ── unregisterSoloFromJam ───────────────────────────────────────────────────
+
+describe('unregisterSoloFromJam', () => {
+  it('nominal : retire la jam de jam_ids, la team reste vivante', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'u-1' })
+    mockList.mockResolvedValueOnce({
+      documents: [makeTeamDoc({ jam_ids: ['jam-1', 'jam-2'], name: 'Alice', invite_code: 'KG-AAAAAAAA', leader_id: 'u-1', is_solo: true })],
+      total: 1,
+    } as never)
+    mockGet.mockResolvedValueOnce(makeJamDoc({}) as never) // jam upcoming par défaut
+    mockUpdate.mockResolvedValue({} as never)
+
+    const res = await unregisterSoloFromJam('jam-1')
+
+    expect(res.success).toBe(true)
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'teams', 'team-1', { jam_ids: ['jam-2'] })
+    expect(mockDelete).not.toHaveBeenCalled()
+  })
+
+  it('aucune team solo : refus message exact', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'u-1' })
+    mockList.mockResolvedValueOnce({ documents: [], total: 0 } as never)
+
+    const res = await unregisterSoloFromJam('jam-1')
+
+    expect(res.success).toBe(false)
+    expect(res.error).toBeTruthy()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it("jam absente de jam_ids : refus, aucun appel jam/update", async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'u-1' })
+    mockList.mockResolvedValueOnce({
+      documents: [makeTeamDoc({ jam_ids: ['jam-2'], name: 'Alice', invite_code: 'KG-AAAAAAAA', leader_id: 'u-1', is_solo: true })],
+      total: 1,
+    } as never)
+
+    const res = await unregisterSoloFromJam('jam-1')
+
+    expect(res.success).toBe(false)
+    expect(mockGet).not.toHaveBeenCalled()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('jam déjà commencée : refus, aucun update', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'u-1' })
+    mockList.mockResolvedValueOnce({
+      documents: [makeTeamDoc({ jam_ids: ['jam-1'], name: 'Alice', invite_code: 'KG-AAAAAAAA', leader_id: 'u-1', is_solo: true })],
+      total: 1,
+    } as never)
+    mockGet.mockResolvedValueOnce(makeJamDoc({
+      start_date: '2020-01-01T00:00:00.000Z',
+      end_date: '2999-01-03T00:00:00.000Z',
+    }) as never) // ongoing : déjà commencée
+
+    const res = await unregisterSoloFromJam('jam-1')
+
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/commencé/i)
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+})
+
+// ── getTeamById — viewerRole + masquage inviteCode ──────────────────────────
+
+describe('getTeamById — viewerRole', () => {
+  function mockTeamPageFetches(memberUserIds: string[], leaderId = 'leader-1') {
+    mockGet.mockResolvedValueOnce(makeTeamDoc({
+      jam_ids: [], name: 'Crew', invite_code: 'KG-SECRET99', leader_id: leaderId,
+    }) as never)
+    mockList
+      .mockResolvedValueOnce({ // team_members
+        documents: memberUserIds.map((uid, i) => makeMemberDoc({ $id: `m-${i}`, team_id: 'team-1', user_id: uid, is_leader: uid === leaderId })),
+        total: memberUserIds.length,
+      } as never)
+      .mockResolvedValueOnce({ documents: [], total: 0 } as never) // projects
+  }
+
+  it('visiteur (pas de session) : viewerRole visitor et inviteCode vidé', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+    mockTeamPageFetches(['leader-1', 'u-2'])
+
+    const res = await getTeamById('team-1')
+
+    expect(res?.viewerRole).toBe('visitor')
+    expect(res?.team.inviteCode).toBe('')
+  })
+
+  it('connecté non-membre : visitor, inviteCode vidé', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'etranger' })
+    mockTeamPageFetches(['leader-1', 'u-2'])
+
+    const res = await getTeamById('team-1')
+
+    expect(res?.viewerRole).toBe('visitor')
+    expect(res?.team.inviteCode).toBe('')
+  })
+
+  it('membre : viewerRole member, viewerId rempli, inviteCode présent', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'u-2' })
+    mockTeamPageFetches(['leader-1', 'u-2'])
+
+    const res = await getTeamById('team-1')
+
+    expect(res?.viewerRole).toBe('member')
+    expect(res?.viewerId).toBe('u-2')
+    expect(res?.team.inviteCode).toBe('KG-SECRET99')
+  })
+
+  it('leader : viewerRole leader', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'leader-1' })
+    mockTeamPageFetches(['leader-1', 'u-2'])
+
+    const res = await getTeamById('team-1')
+
+    expect(res?.viewerRole).toBe('leader')
   })
 })

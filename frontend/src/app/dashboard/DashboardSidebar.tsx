@@ -48,7 +48,7 @@ export default function DashboardSidebar() {
           Participant
         </p>
         <SidebarNavLink href="/dashboard/participations" icon={Trophy} label="Mes participations" onClose={closeMenu} />
-        <SidebarNavLink href="/dashboard/team" icon={Users} label="Mon équipe" onClose={closeMenu} />
+        <SidebarNavLink href="/dashboard/teams" icon={Users} label="Mes équipes" onClose={closeMenu} />
         <SidebarNavLink href="/dashboard/profile" icon={User} label="Mon profil" onClose={closeMenu} />
         {/* "Mes soumissions" est une sous-section de participations — déférée Phase 1.5.
             Pour l'instant, les soumissions sont visibles dans /dashboard/participations. */}
