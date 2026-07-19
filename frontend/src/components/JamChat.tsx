@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useLayoutEffect, useRef, useTransition } from 'react'
-import { Pin, Send, Wifi, WifiOff, Flag, ChevronUp } from 'lucide-react'
+import { Wifi, WifiOff, ChevronUp } from 'lucide-react'
 import { client, databases } from '@/lib/appwrite/client'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'appwrite'
@@ -9,6 +9,9 @@ import { mapDocToChatMessage } from '@/lib/appwrite/types'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { reportMessage, getOlderChatMessages } from '@/lib/actions/chat'
 import type { ChatMessage, ChatChannel } from '@/types'
+import { playPing } from '@/components/chat/ping'
+import ChatMessageGroups, { PinnedBanner } from '@/components/chat/ChatMessageGroups'
+import ChatComposer from '@/components/chat/ChatComposer'
 
 interface JamChatProps {
   jamId: string
@@ -27,16 +30,6 @@ const roleConfig = {
   organizer: { label: 'ORGA', color: 'var(--secondary)' },
   moderator: { label: 'MOD', color: 'var(--primary)' },
   user: null,
-}
-
-function groupByDate(messages: ChatMessage[]) {
-  const groups: Record<string, ChatMessage[]> = {}
-  for (const msg of messages) {
-    const key = msg.createdAt.toLocaleDateString('fr-FR')
-    if (!groups[key]) groups[key] = []
-    groups[key].push(msg)
-  }
-  return groups
 }
 
 export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
@@ -59,22 +52,6 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
   // avec un curseur périmé pendant cette fenêtre.
   const cursorChannelRef = useRef<ChatChannel | null>(null)
   const pendingScrollAdjust = useRef<{ scrollHeight: number; scrollTop: number } | null>(null)
-  const playPing = () => {
-    try {
-      const ctx = new AudioContext()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.frequency.value = 880
-      gain.gain.setValueAtTime(0.2, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25)
-      osc.start()
-      osc.stop(ctx.currentTime + 0.25)
-    } catch {
-      // AudioContext non disponible (SSR ou politique navigateur)
-    }
-  }
 
   // Charger les messages initiaux du canal
   useEffect(() => {
@@ -195,16 +172,11 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
     })
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      sendMessage()
-    }
-  }
-
   const filteredMessages = messages.filter(m => m.channel === activeChannel)
-  const pinnedMessages = filteredMessages.filter(m => m.pinned)
-  const groups = groupByDate(filteredMessages.filter(m => !m.pinned))
+  const displayMessages = filteredMessages.map(m => ({
+    ...m,
+    roleBadge: roleConfig[m.role],
+  }))
 
   return (
     <section
@@ -256,26 +228,7 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
       </div>
 
       {/* Messages épinglés */}
-      {pinnedMessages.length > 0 && (
-        <div
-          className="px-4 py-2 border-b"
-          style={{
-            background: 'var(--primary-muted)',
-            borderColor: 'var(--border)',
-            flexShrink: 0,
-          }}
-        >
-          {pinnedMessages.map(msg => (
-            <div key={msg.id} className="flex items-start gap-2">
-              <Pin size={12} style={{ color: 'var(--primary)', flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
-              <p className="text-xs" style={{ color: 'var(--foreground)' }}>
-                <span className="font-semibold">{msg.authorName} : </span>
-                {msg.content}
-              </p>
-            </div>
-          ))}
-        </div>
-      )}
+      <PinnedBanner messages={displayMessages} />
 
       {/* Zone de messages */}
       <div
@@ -302,78 +255,7 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
           </div>
         )}
 
-        {Object.entries(groups).map(([date, msgs]) => (
-          <div key={date}>
-            {/* Séparateur de date */}
-            <div className="flex items-center gap-3 my-4" aria-hidden="true">
-              <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-              <span className="label-tech" style={{ color: 'var(--muted-foreground)' }}>{date}</span>
-              <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
-            </div>
-
-            {/* Messages du jour */}
-            {msgs.map(msg => {
-              const roleInfo = roleConfig[msg.role]
-              return (
-                <article key={msg.id} className="flex gap-3 group" aria-label={`Message de ${msg.authorName}`}>
-                  {/* Avatar initiales */}
-                  <div
-                    className="w-8 h-8 flex-shrink-0 flex items-center justify-center text-xs font-bold"
-                    style={{ background: 'var(--surface-elevated)', color: 'var(--foreground)' }}
-                    aria-hidden="true"
-                  >
-                    {msg.authorName.charAt(0).toUpperCase()}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-baseline gap-2 mb-0.5">
-                      <span className="text-sm font-semibold">{msg.authorName}</span>
-                      {roleInfo && (
-                        <span
-                          className="label-tech"
-                          style={{ color: roleInfo.color }}
-                          aria-label={`Rôle : ${roleInfo.label}`}
-                        >
-                          {roleInfo.label}
-                        </span>
-                      )}
-                      <time
-                        dateTime={msg.createdAt.toISOString()}
-                        className="label-tech"
-                        style={{ color: 'var(--muted-foreground)' }}
-                      >
-                        {msg.createdAt.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                      </time>
-                    </div>
-                    <p className="text-sm break-words" style={{ color: 'var(--foreground)' }}>
-                      {msg.content}
-                    </p>
-                    {user && (
-                      <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-1">
-                        <button
-                          onClick={() => handleReportMessage(msg.id)}
-                          disabled={msg.reported}
-                          className="flex items-center gap-1 text-xs px-2 py-1 disabled:opacity-40"
-                          style={{
-                            color: 'var(--muted-foreground)',
-                            background: 'var(--surface-elevated)',
-                          }}
-                          aria-label={
-                            msg.reported
-                              ? 'Message déjà signalé'
-                              : `Signaler le message de ${msg.authorName}`
-                          }
-                        >
-                          <Flag size={11} aria-hidden="true" />
-                          {msg.reported ? 'Signalé' : 'Signaler'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </article>
-              )
-            })}
-          </div>
-        ))}
+        <ChatMessageGroups messages={displayMessages} canReport={!!user} onReport={handleReportMessage} />
 
         {filteredMessages.length === 0 && (
           <p className="text-center py-8 text-sm" style={{ color: 'var(--muted-foreground)' }}>
@@ -388,48 +270,20 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
         style={{ borderColor: 'var(--border)', flexShrink: 0 }}
       >
         {user ? (
-          <div className="flex gap-2">
-            <label htmlFor="chat-input" className="sr-only">
-              Message dans #{channels.find(c => c.id === activeChannel)?.label}
-            </label>
-            <input
-              id="chat-input"
-              type="text"
-              value={input}
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={`Message #${channels.find(c => c.id === activeChannel)?.label}...`}
-              maxLength={2048}
-              className="flex-1 px-3 py-2 text-sm"
-              style={{
-                background: 'var(--input-background)',
-                border: '1px solid var(--border)',
-                color: 'var(--foreground)',
-                fontFamily: 'var(--font-sans)',
-              }}
-              aria-describedby="chat-hint"
-            />
-            <button
-              onClick={sendMessage}
-              disabled={!input.trim() || sending}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold transition-opacity disabled:opacity-40"
-              style={{
-                background: 'var(--primary)',
-                color: 'var(--primary-foreground)',
-              }}
-              aria-label="Envoyer le message"
-            >
-              <Send size={15} aria-hidden="true" />
-            </button>
-          </div>
+          <ChatComposer
+            value={input}
+            onChange={setInput}
+            onSend={sendMessage}
+            disabled={sending}
+            placeholder={`Message #${channels.find(c => c.id === activeChannel)?.label}...`}
+            inputId="chat-input"
+            srLabel={`Message dans #${channels.find(c => c.id === activeChannel)?.label}`}
+          />
         ) : (
           <p className="text-sm text-center py-1" style={{ color: 'var(--muted-foreground)' }}>
             <a href="/auth/login" style={{ color: 'var(--primary)' }}>Connectez-vous</a> pour participer au chat.
           </p>
         )}
-        <p id="chat-hint" className="sr-only">
-          Appuyez sur Entrée pour envoyer, Maj+Entrée pour une nouvelle ligne.
-        </p>
       </div>
     </section>
   )
