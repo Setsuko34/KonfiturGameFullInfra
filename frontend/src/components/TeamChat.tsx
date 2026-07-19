@@ -2,14 +2,14 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useTransition } from 'react'
 import { Wifi, WifiOff, ChevronUp } from 'lucide-react'
-import { client, databases } from '@/lib/appwrite/client'
+import { databases } from '@/lib/appwrite/client'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'appwrite'
 import { mapDocToTeamChatMessage } from '@/lib/appwrite/types'
 import { sendTeamChatMessage, getOlderTeamChatMessages, reportTeamMessage, setTeamMessagePinned } from '@/lib/actions/team-chat'
 import ChatMessageGroups, { PinnedBanner } from '@/components/chat/ChatMessageGroups'
 import ChatComposer from '@/components/chat/ChatComposer'
-import { playPing } from '@/components/chat/ping'
+import { useRealtimeChat } from '@/hooks/useRealtimeChat'
 import type { TeamChatMessage } from '@/types'
 
 const CHAT_INITIAL_BATCH = 50 // cohérent avec « charger plus anciens »
@@ -18,7 +18,6 @@ export default function TeamChat({ teamId, currentUserId }: { teamId: string; cu
   const [messages, setMessages] = useState<TeamChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [olderCursor, setOlderCursor] = useState<string | null>(null)
@@ -84,36 +83,13 @@ export default function TeamChat({ teamId, currentUserId }: { teamId: string; cu
   }, [messages])
 
   // Realtime — Appwrite ne pousse que les documents lisibles par la session
-  useEffect(() => {
-    const unsubscribe = client.subscribe(
-      `databases.${DATABASE_ID}.collections.${COLLECTIONS.TEAM_CHAT_MESSAGES}.documents`,
-      (response) => {
-        const events = response.events as string[]
-        const doc = response.payload as Record<string, unknown>
-        if (doc.team_id !== teamId) return
-
-        if (events.some(e => e.includes('.create'))) {
-          const msg = mapDocToTeamChatMessage(doc as Parameters<typeof mapDocToTeamChatMessage>[0])
-          setMessages(prev => prev.some(m => m.id === msg.id) ? prev : [...prev, msg])
-          if (doc.author_id !== currentUserId) playPing()
-        }
-        if (events.some(e => e.includes('.update'))) {
-          // Propage épinglage/signalement faits par un autre membre ou un admin
-          const msg = mapDocToTeamChatMessage(doc as Parameters<typeof mapDocToTeamChatMessage>[0])
-          setMessages(prev => prev.map(m => m.id === msg.id ? msg : m))
-        }
-        if (events.some(e => e.includes('.delete'))) {
-          setMessages(prev => prev.filter(m => m.id !== (doc.$id as string)))
-        }
-      }
-    )
-    const timer = setTimeout(() => setConnected(true), 0)
-    return () => {
-      clearTimeout(timer)
-      unsubscribe()
-      setConnected(false)
-    }
-  }, [teamId, currentUserId])
+  const { connected } = useRealtimeChat<TeamChatMessage>({
+    collectionId: COLLECTIONS.TEAM_CHAT_MESSAGES,
+    setMessages,
+    map: doc => mapDocToTeamChatMessage(doc as Parameters<typeof mapDocToTeamChatMessage>[0]),
+    accept: doc => doc.team_id === teamId,
+    isOwn: doc => doc.author_id === currentUserId,
+  })
 
   const sendMessage = async () => {
     if (!input.trim() || sending) return

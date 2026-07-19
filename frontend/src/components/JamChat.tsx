@@ -2,16 +2,16 @@
 
 import { useState, useEffect, useLayoutEffect, useRef, useTransition } from 'react'
 import { Wifi, WifiOff, ChevronUp } from 'lucide-react'
-import { client, databases } from '@/lib/appwrite/client'
+import { databases } from '@/lib/appwrite/client'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'appwrite'
 import { mapDocToChatMessage } from '@/lib/appwrite/types'
 import { useAuth } from '@/components/providers/AuthProvider'
 import { reportMessage, getOlderChatMessages } from '@/lib/actions/chat'
 import type { ChatMessage, ChatChannel } from '@/types'
-import { playPing } from '@/components/chat/ping'
 import ChatMessageGroups, { PinnedBanner } from '@/components/chat/ChatMessageGroups'
 import ChatComposer from '@/components/chat/ChatComposer'
+import { useRealtimeChat } from '@/hooks/useRealtimeChat'
 
 interface JamChatProps {
   jamId: string
@@ -38,7 +38,6 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
-  const [connected, setConnected] = useState(false)
 
   // Chargement vers le haut (messages plus anciens)
   const [olderCursor, setOlderCursor] = useState<string | null>(null)
@@ -117,28 +116,14 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
     }
   }, [messages])
 
-  // Souscription Realtime
-  useEffect(() => {
-    const unsubscribe = client.subscribe(
-      `databases.${DATABASE_ID}.collections.${COLLECTIONS.CHAT_MESSAGES}.documents`,
-      (response) => {
-        if (response.events.includes('databases.*.collections.*.documents.*.create')) {
-          const doc = response.payload as Record<string, unknown>
-          if (doc.jam_id === jamId && doc.channel === activeChannel) {
-            const msg = mapDocToChatMessage(doc as Parameters<typeof mapDocToChatMessage>[0])
-            setMessages(prev => [...prev, msg])
-            if (doc.author_id !== user?.$id) playPing()
-          }
-        }
-      }
-    )
-    const timer = setTimeout(() => setConnected(true), 0)
-    return () => {
-      clearTimeout(timer)
-      unsubscribe()
-      setConnected(false)
-    }
-  }, [jamId, activeChannel, user])
+  // Souscription Realtime (update/delete inclus : modération admin propagée en direct)
+  const { connected } = useRealtimeChat<ChatMessage>({
+    collectionId: COLLECTIONS.CHAT_MESSAGES,
+    setMessages,
+    map: doc => mapDocToChatMessage(doc as Parameters<typeof mapDocToChatMessage>[0]),
+    accept: doc => doc.jam_id === jamId && doc.channel === activeChannel,
+    isOwn: doc => doc.author_id === user?.$id,
+  })
 
   const sendMessage = async () => {
     if (!input.trim() || !user || sending) return
