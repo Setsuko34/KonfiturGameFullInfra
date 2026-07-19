@@ -99,6 +99,17 @@ export interface ChatMessage {
   createdAt: Date
 }
 
+export interface TeamChatMessage {
+  id: string
+  teamId: string
+  authorId: string
+  authorName: string
+  content: string
+  pinned: boolean
+  reported?: boolean
+  createdAt: Date
+}
+
 export interface PastWinner {
   id: string
   jamId: string

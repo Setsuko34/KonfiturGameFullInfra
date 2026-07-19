@@ -1,5 +1,5 @@
 import type { Models } from 'appwrite'
-import type { GameJam, Team, TeamMember, Project, ChatMessage, Announcement, Comment } from '@/types'
+import type { GameJam, Team, TeamMember, Project, ChatMessage, Announcement, Comment, TeamChatMessage } from '@/types'
 import { computeJamStatus } from '@/lib/jam-status'
 
 // Mappeurs Appwrite Document → Types applicatifs
@@ -88,6 +88,19 @@ export function mapDocToChatMessage(doc: AppwriteDoc): ChatMessage {
     authorName: doc.author_name,
     content: doc.content,
     role: doc.role,
+    pinned: doc.pinned ?? false,
+    reported: doc.reported ?? false,
+    createdAt: new Date(doc.$createdAt),
+  }
+}
+
+export function mapDocToTeamChatMessage(doc: AppwriteDoc): TeamChatMessage {
+  return {
+    id: doc.$id,
+    teamId: doc.team_id,
+    authorId: doc.author_id,
+    authorName: doc.author_name,
+    content: doc.content,
     pinned: doc.pinned ?? false,
     reported: doc.reported ?? false,
     createdAt: new Date(doc.$createdAt),
