@@ -1,16 +1,22 @@
 import type { Metadata } from 'next'
-import { listReportedMessages, listReportedProjects } from '@/lib/actions/admin'
+import { listReportedMessages, listReportedProjects, listReportedTeamMessages } from '@/lib/actions/admin'
 import ReportedMessagesList from './ReportedMessagesList'
 import ReportedProjectsList from './ReportedProjectsList'
+import ReportedTeamMessagesList from './ReportedTeamMessagesList'
 import LoadMoreList from '@/components/LoadMoreList'
-import type { ChatMessage, Project } from '@/types'
+import type { ChatMessage, Project, TeamChatMessage } from '@/types'
 
 export const metadata: Metadata = { title: 'Modération' }
 
 export default async function AdminModerationPage() {
-  const [{ messages, nextCursor: messagesCursor }, { projects, nextCursor: projectsCursor }] = await Promise.all([
+  const [
+    { messages, nextCursor: messagesCursor },
+    { projects, nextCursor: projectsCursor },
+    { messages: teamMessages, nextCursor: teamMessagesCursor },
+  ] = await Promise.all([
     listReportedMessages(),
     listReportedProjects(),
+    listReportedTeamMessages(),
   ])
 
   async function loadMoreMessages(cursor: string): Promise<{ items: ChatMessage[]; nextCursor: string | null }> {
@@ -25,6 +31,12 @@ export default async function AdminModerationPage() {
     return { items: res.projects, nextCursor: res.nextCursor }
   }
 
+  async function loadMoreTeamMessages(cursor: string): Promise<{ items: TeamChatMessage[]; nextCursor: string | null }> {
+    'use server'
+    const res = await listReportedTeamMessages(cursor)
+    return { items: res.messages, nextCursor: res.nextCursor }
+  }
+
   return (
     <div>
       <a href="#main-content" className="sr-only focus:not-sr-only">Aller au contenu principal</a>
@@ -33,7 +45,7 @@ export default async function AdminModerationPage() {
         Modération
       </h1>
       <p className="text-sm mb-8" style={{ color: 'var(--muted-foreground)' }}>
-        {messages.length + projects.length} signalement(s) en attente
+        {messages.length + projects.length + teamMessages.length} signalement(s) en attente
       </p>
 
       {/* Messages signalés */}
@@ -46,6 +58,19 @@ export default async function AdminModerationPage() {
           initialCursor={messagesCursor}
           loadMore={loadMoreMessages}
           List={ReportedMessagesList}
+        />
+      </section>
+
+      {/* Messages de team signalés */}
+      <section className="mb-10">
+        <h2 className="text-base font-semibold mb-4 pb-2 border-b" style={{ borderColor: 'var(--border)' }}>
+          Messages de team signalés ({teamMessages.length})
+        </h2>
+        <LoadMoreList
+          initialItems={teamMessages}
+          initialCursor={teamMessagesCursor}
+          loadMore={loadMoreTeamMessages}
+          List={ReportedTeamMessagesList}
         />
       </section>
 

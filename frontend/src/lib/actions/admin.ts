@@ -12,9 +12,10 @@ import {
   mapDocToAnnouncement,
   mapDocToTeam,
   mapDocToTeamMember,
+  mapDocToTeamChatMessage,
   type AppwriteDoc,
 } from '@/lib/appwrite/types'
-import type { GameJam, Project, ChatMessage, Announcement, Team, TeamMember } from '@/types'
+import type { GameJam, Project, ChatMessage, Announcement, Team, TeamMember, TeamChatMessage } from '@/types'
 import { isAdminUser, logAdminAction } from '@/lib/appwrite/guards'
 import { aggregateByDay, type DayCount } from '@/lib/dashboard-utils'
 import { fetchAllDocs, fetchAllByField } from '@/lib/appwrite/fetch-all'
@@ -82,7 +83,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
 
   const [
     totalUsers, totalJams, activeJams, totalTeams, totalProjects,
-    reportedMessages, reportedProjects, botsBlocked24h, errors24h, bannedIPs,
+    reportedMessages, reportedProjects, reportedTeamMessages, botsBlocked24h, errors24h, bannedIPs,
     authLogs, registerDocs, recentJamDocs, errorDocs,
   ] = await Promise.all([
     serverUsers.list([Query.limit(1)]).then(r => r.total).catch(() => 0),
@@ -92,6 +93,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
     count(COLLECTIONS.PROJECTS),
     count(COLLECTIONS.CHAT_MESSAGES, [Query.equal('reported', true)]),
     count(COLLECTIONS.PROJECTS, [Query.equal('reported', true)]),
+    count(COLLECTIONS.TEAM_CHAT_MESSAGES, [Query.equal('reported', true)]),
     count(COLLECTIONS.AUDIT_LOGS, [Query.equal('type', 'bot_blocked'), Query.greaterThan('$createdAt', dayAgo)]),
     count(COLLECTIONS.AUDIT_LOGS, [Query.equal('type', 'error'), Query.greaterThan('$createdAt', dayAgo)]),
     count(COLLECTIONS.BANNED_IPS),
@@ -139,7 +141,7 @@ export async function getAdminDashboard(): Promise<AdminDashboardData> {
     activeJams,
     totalTeams,
     totalProjects,
-    pendingReports: reportedMessages + reportedProjects,
+    pendingReports: reportedMessages + reportedProjects + reportedTeamMessages,
     botsBlocked24h,
     errors24h,
     bannedIPs,
@@ -329,6 +331,44 @@ export async function listReportedProjects(
   const nextCursor = res.documents.length < REPORTED_BATCH_SIZE ? null : res.documents[res.documents.length - 1].$id
 
   return { projects, nextCursor }
+}
+
+/** Même contrat que listReportedMessages, pour le tchat privé des équipes. Un admin
+ *  ne voit ces messages que parce qu'ils ont été signalés par un membre. */
+export async function listReportedTeamMessages(
+  cursor?: string,
+): Promise<{ messages: TeamChatMessage[]; nextCursor: string | null }> {
+  await requireAdminOrThrow()
+  const queries = [Query.equal('reported', true), Query.orderDesc('$createdAt'), Query.limit(REPORTED_BATCH_SIZE)]
+  if (cursor) queries.push(Query.cursorAfter(cursor))
+
+  const res = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_CHAT_MESSAGES, queries)
+  const messages = res.documents.map(mapDocToTeamChatMessage)
+  const nextCursor = res.documents.length < REPORTED_BATCH_SIZE ? null : res.documents[res.documents.length - 1].$id
+
+  return { messages, nextCursor }
+}
+
+export async function deleteTeamMessage(messageId: string): Promise<{ success: boolean; error?: string }> {
+  const admin = await requireAdmin()
+  if (!admin) return REFUS_ADMIN
+  await serverDatabases.deleteDocument(DATABASE_ID, COLLECTIONS.TEAM_CHAT_MESSAGES, messageId)
+  await logAdminAction(admin.userId, `Suppression d'un message de team (${messageId})`, '/admin/moderation')
+  revalidatePath('/admin/moderation')
+  revalidatePath('/admin')
+  return { success: true }
+}
+
+export async function resolveTeamMessageReport(messageId: string): Promise<{ success: boolean; error?: string }> {
+  const admin = await requireAdmin()
+  if (!admin) return REFUS_ADMIN
+  await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.TEAM_CHAT_MESSAGES, messageId, {
+    reported: false,
+  })
+  await logAdminAction(admin.userId, `Résolution du signalement d'un message de team (${messageId})`, '/admin/moderation')
+  revalidatePath('/admin/moderation')
+  revalidatePath('/admin')
+  return { success: true }
 }
 
 export async function deleteMessage(messageId: string): Promise<{ success: boolean; error?: string }> {
