@@ -23,6 +23,10 @@
 - [x] Superpouvoirs admin (chantier E) — édition de n'importe quelle jam (`/admin/jams/[id]`), gestion des équipes (renommer, retirer un membre, dissoudre), retrait de soumission ; toutes les actions journalisées (`admin_action`)
 - [x] Corrections dashboard admin (chantier F) — fix `await searchParams` (Next 16, 5 pages), filtres logs fonctionnels, sélection « Gagnants », modération actionnable (liens + retrait de soumission), page `/admin/teams` (recherche + actions)
 - [x] Garde admin sur les actions de lecture/écriture de `logs.ts` (`getRecentLogs`, `getCountryStats`, `getBannedIPs`, `banIP`, `unbanIP`) — endpoints `'use server'` désormais réservés aux admins
+- [x] Vérification d'email à l'inscription (`/auth/verify-email`) et mot de passe oublié (`/auth/forgot-password`, `/auth/reset-password`)
+- [x] Inscriptions solo — team solo personnelle **unique** par utilisateur (`teams.is_solo`), réutilisée entre les jams, désinscription possible avant le début de la jam ; compteurs participants dérivés des teams réelles (`participant-counts.ts`)
+- [x] Pages équipes hub/vitrine — liste `/dashboard/teams`, page `/team/[teamId]` à double mode (vitrine publique sans code d'invitation, hub membre avec code + gestion) ; `getTeamById` expose `viewerRole`/`viewerId`
+- [x] Tchat privé d'équipe — table `team_chat_messages` (row security, zéro permission table, `read(user:X)` par membre à l'envoi), composants chat partagés extraits de JamChat (`components/chat/`), hook realtime commun `useRealtimeChat`, épinglage/signalement par les membres, modération admin dédiée sur `/admin/moderation`
 
 ### À faire
 
@@ -40,23 +44,34 @@
 
 | Fichier | Couvre |
 |---------|--------|
-| `appwrite-mappers.test.ts` | Mappers Appwrite → types TS |
+| `appwrite-mappers.test.ts` | Mappers Appwrite → types TS (dont `mapDocToTeamChatMessage`) |
+| `appwrite-fetch-all.test.ts` | `fetchAllDocs` / `fetchAllByField` (pagination complète, chunking) |
+| `participant-counts.test.ts` | Compteurs participants dérivés des teams |
 | `profile-validators.test.ts` | validateUpdateProfile* (bug NaN corrigé) |
 | `actions-profile.test.ts` | updateProfileName, updateProfileBio |
-| `actions-chat.test.ts` | sendMessage, pinMessage, reportMessage |
-| `actions-teams.test.ts` | createTeam, joinTeamByCode, getTeamsByJam, renameTeam, deleteTeam, removeMemberFromTeam (doubles gardes admin/leader) |
+| `actions-profile-public.test.ts` | Profil public |
+| `actions-chat.test.ts` | sendMessage, pinMessage, reportMessage (chat de jam) |
+| `actions-team-chat.test.ts` | Tchat d'équipe : envoi avec permissions par membre, refus non-membre, pagination session client, longueur post-échappement, épinglage, signalement |
+| `actions-teams.test.ts` | createTeam, joinTeamByCode, getTeamsByJam, renameTeam, deleteTeam, removeMemberFromTeam, registerSoloToJam/unregisterSoloFromJam, getTeamById (viewerRole, masquage inviteCode) |
 | `actions-projects.test.ts` | toggleLike (like/unlike, compteur jamais négatif), unsubmitProject |
+| `actions-jams.test.ts` | Actions jams |
+| `actions-comments.test.ts` | Commentaires |
+| `actions-export.test.ts` | Export RGPD |
 | `actions-home.test.ts` | getHomePageData (placement réel des gagnants) |
-| `actions-admin.test.ts` | Actions admin (listAllJams, listAllTeams, refus non-admin avec message exact) |
+| `actions-admin.test.ts` | Actions admin (listAllJams, listAllTeams, modération des messages de team, refus non-admin avec message exact) |
 | `actions-logs.test.ts` | getCountryStats, logAuthEvent, gardes admin des actions logs |
 | `actions-dashboard.test.ts` | Actions dashboard |
 | `actions-announcements.test.ts` | Annonces |
+| `dashboard-utils.test.ts` | Utilitaires dashboard |
 | `guards.test.ts` | Gardes d'accès |
 | `file-url.test.ts` | Helpers URLs de fichiers |
+| `api-banned-ips.test.ts` | Endpoint interne banned-ips |
+| `proxy.test.ts` | Middleware proxy (bots, bans) |
 | `bot-detection.test.ts` | Détection bots (User-Agent + URL patterns) |
 | `seo.test.ts` | JSON-LD helpers |
+| `sitemap.test.ts` | Sitemap dynamique |
 
-> État : **196 tests** répartis sur 15 fichiers (juillet 2026). Exécution dans le container : `docker exec konfitur-frontend sh -c "cd /app && npx vitest run"`.
+> État : **354 tests** répartis sur 26 fichiers (2026-07-19). Exécution dans le container : `docker exec konfitur-frontend sh -c "cd /app && npx vitest run"`.
 
 ### End-to-end (Playwright — `frontend/e2e/`)
 
@@ -68,6 +83,7 @@
 - [ ] Améliorer la couverture de `actions-profile.test.ts` (certaines fonctions non exportées)
 - [ ] Tests de `actions-teams.test.ts` : couvrir registerTeamToJam, leaveTeam
 - [ ] Tests E2E des likes et du podium organisateur (specs à ajouter à la suite Playwright)
+- [ ] Tests E2E du tchat privé d'équipe (privacité non-membre, realtime, épinglage)
 
 ---
 

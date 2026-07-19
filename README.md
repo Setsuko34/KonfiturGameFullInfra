@@ -12,19 +12,20 @@ Le projet est développé dans le cadre d'une formation en développement d'appl
 
 - **Organiser des game jams** — Créer une jam avec un thème, des règles, des dates et des prix
 - **Guildes multi-jam** — Créer ou rejoindre une équipe persistante (guilde) réutilisable sur plusieurs jams, via un code d'invitation unique
-- **Collaborer en temps réel** — Chat intégré avec WebSocket (channels : general, team-search, help)
+- **Participer en solo** — S'inscrire seul à une jam (team solo unique et réutilisable, créée automatiquement)
+- **Collaborer en temps réel** — Chat de jam avec WebSocket (canaux : general, team-search, help) et tchat privé par équipe (membres uniquement, épinglage et signalement de messages)
 - **Soumettre des projets** — Uploader son jeu avec screenshots, technologies et liens
-- **Voter et commenter** — Système de votes et commentaires sur les projets soumis
+- **Liker et commenter** — Bouton « J'aime » togglable et commentaires sur les projets soumis
 - **Gérer son profil** — Modifier son nom, sa bio, son mot de passe, supprimer son compte
-- **Administrer** — Panel admin avec modération du chat, gestion des utilisateurs, logs d'audit et ban IP
+- **Administrer** — Panel admin avec modération des chats (jam et équipe), gestion des utilisateurs, logs d'audit et ban IP
 
 ## Stack technique
 
 | Couche | Technologie |
 |--------|------------|
-| Frontend | Next.js 16.2.3 (App Router), React 18, TypeScript strict |
+| Frontend | Next.js 16.2.9 (App Router), React 19, TypeScript strict |
 | Styles | Tailwind CSS v4, design system dark tricolore (CSS variables) |
-| Backend | Appwrite 1.8.0 self-hosted (Auth, Database, Realtime, Storage) |
+| Backend | Appwrite 1.9.0 self-hosted (Auth, Database, Realtime, Storage) |
 | Base de données | MariaDB 10.11 (via Appwrite) |
 | Cache / Realtime | Redis 7 |
 | Reverse proxy | Traefik v3.6.7 (TLS Let's Encrypt, rate limiting, security headers) |
@@ -79,7 +80,7 @@ Accès en dev :
 docker exec konfitur-frontend sh -c "cd /app && npx vitest run"
 ```
 
-Couverture actuelle : 47+ tests unitaires répartis sur 6 fichiers.
+Couverture actuelle : 354 tests unitaires répartis sur 26 fichiers.
 
 ## Documentation
 
@@ -96,11 +97,14 @@ Couverture actuelle : 47+ tests unitaires répartis sur 6 fichiers.
 - [x] Page d'accueil avec stats, countdown, Hall of Fame
 - [x] Exploration et filtrage des jams
 - [x] Page de détail d'une jam (infos, équipes, projets, annonces, chat)
-- [x] Authentification email/mot de passe + OAuth Google & Discord
+- [x] Authentification email/mot de passe + OAuth Google & Discord, vérification d'email, mot de passe oublié
 - [x] Dashboard participant : participations, équipes, profil
 - [x] Guildes multi-jam : création, invitation, inscription à plusieurs jams, gestion des rôles
+- [x] Inscriptions solo (team solo unique par utilisateur, réutilisée entre les jams)
+- [x] Pages équipes : liste `/dashboard/teams` + hub/vitrine `/team/[teamId]`
+- [x] Tchat privé d'équipe (permissions par membre, épinglage, signalement, modération admin)
 - [x] Soumission de projets par équipe
-- [x] Votes et commentaires sur les projets
+- [x] Likes et commentaires sur les projets
 - [x] Dashboard organisateur : créer/éditer une jam, publier des annonces
 - [x] Panel admin : utilisateurs, jams, modération, mise en avant, logs d'audit, ban IP
 - [x] Gestion du profil (modifier nom/bio/mot de passe, supprimer le compte)
@@ -125,7 +129,7 @@ Il y a **4 types d'utilisateurs** sur KonfiturGame :
 | Type | Qui ? | Ce qu'il peut faire |
 |------|-------|---------------------|
 | **Visiteur** | Tout le monde (sans compte) | Voir les jams, les projets, lire les infos |
-| **Participant** | Toute personne inscrite | Rejoindre des jams, former des équipes, voter |
+| **Participant** | Toute personne inscrite | Rejoindre des jams (solo ou en équipe), former des équipes, liker |
 | **Organisateur** | Participant qui crée une jam | Créer et gérer des jams |
 | **Administrateur** | Équipe KonfiturGame | Modérer, gérer utilisateurs, configurer la plateforme |
 
@@ -166,7 +170,7 @@ La page d'une jam spécifique. Elle contient des **onglets** :
 |--------|---------|
 | **Informations** | Règles numérotées, Prix (médailles) |
 | **Équipes** | Liste des équipes inscrites |
-| **Projets** | Projets soumis, avec vote possible si connecté |
+| **Projets** | Projets soumis, avec bouton « J'aime » si connecté |
 | **Annonces** | Annonces officielles de l'organisateur |
 | **Chat** | Chat en direct, 3 canaux (Général, Cherche équipe, Aide) |
 
@@ -177,16 +181,20 @@ Sur le côté : organisateur, tags, dates de début/fin, type de jam.
 La page d'un projet soumis pendant une jam.
 
 - Titre, description, technologies utilisées
-- Boutons : **Voter**, Télécharger, Code source (GitHub)
+- Boutons : **J'aime**, Télécharger, Code source (GitHub)
 - Screenshots si disponibles
 - Commentaires (lecture libre, écriture si connecté)
 
 ### Détail d'une Équipe — `/team/[teamId]`
 
-- Nom de l'équipe, nombre de membres
-- Code d'invitation (pour rejoindre)
-- Liste des membres avec leur rôle (dev, artiste, son, designer, auteur)
-- Lien vers le projet de l'équipe
+Page à double visage selon le visiteur :
+
+**Vitrine publique** (visiteur ou non-membre) :
+- Nom de l'équipe, membres et leurs rôles (dev, artiste, son, designer, auteur)
+- Jams auxquelles l'équipe participe, projets soumis
+- Le code d'invitation n'est **jamais** exposé publiquement
+
+**Hub privé** (membre) : en plus de la vitrine, code d'invitation à partager, gestion (renommage par le chef, quitter l'équipe) et **tchat privé de l'équipe** (temps réel, épinglage et signalement de messages)
 
 ### Pages d'auth — `/auth/login` et `/auth/register`
 
@@ -224,20 +232,20 @@ La liste de toutes les jams auxquelles on participe.
 - Cliquer sur une card mène à la page de la jam
 - Si aucune participation : message "Tu n'as pas encore rejoint de jam" avec un lien pour explorer
 
-### Mon Équipe — `/dashboard/team`
+### Mes Équipes — `/dashboard/teams`
 
-L'équipe active (dans la jam en cours).
+La liste de toutes ses guildes (une guilde est réutilisable sur plusieurs jams).
 
-- Nom de l'équipe
-- Code d'invitation à partager pour recruter
-- Liste des membres avec leurs rôles et le badge "Chef d'équipe"
-- Si pas d'équipe : message pour en rejoindre ou en créer une
+- Chaque card mène au **hub de l'équipe** (`/team/[teamId]`) : membres, code d'invitation, jams, projets, tchat privé
+- Boutons pour créer une équipe ou en rejoindre une avec un code
 
 ### Comment rejoindre une Jam ?
 
 1. Aller sur la page de la jam (`/jam/[jamId]`)
-2. Cliquer sur "Participer" (visible si connecté et jam `upcoming` ou `ongoing`)
-3. Choisir : **rejoindre une équipe** (avec code) ou **créer une équipe**
+2. Cliquer sur "Participer" (visible si connecté et jam `upcoming`)
+3. Choisir selon le type de la jam : **s'inscrire en solo**, **rejoindre une équipe** (avec code) ou **inscrire une de ses équipes**
+
+> L'inscription solo réutilise une team solo personnelle unique (créée automatiquement la première fois), et la désinscription est possible tant que la jam n'a pas commencé.
 
 ### Comment rejoindre une Équipe ?
 
@@ -246,11 +254,11 @@ L'équipe active (dans la jam en cours).
 3. Choisir son rôle : Développeur, Artiste, Compositeur, Designer, Auteur
 4. Cliquer "Rejoindre"
 
-### Comment voter pour un projet ?
+### Comment liker un projet ?
 
 1. Aller sur la page d'un projet (`/project/[projectId]`)
-2. Cliquer le bouton "Voter" (pouce levé)
-3. Un seul vote par projet par utilisateur est autorisé
+2. Cliquer le bouton "J'aime"
+3. Un seul « J'aime » par projet et par utilisateur ; re-cliquer le retire (toggle)
 
 ---
 
@@ -305,7 +313,7 @@ La page de gestion d'une jam créée :
 - **En-tête** : titre, thème
 - **Stats rapides** : nombre d'équipes inscrites, nombre de projets soumis
 - **Liste des équipes** : nom + code d'invitation de chaque équipe
-- **Liste des projets soumis** : titre, votes, date de soumission
+- **Liste des projets soumis** : titre, likes, date de soumission
 
 ---
 
@@ -345,11 +353,16 @@ Actions rapides : "Voir les signalements", "Nouvelle annonce"
 
 ### Modération — `/admin/moderation`
 
-Deux sections :
+Trois sections :
 
-**Messages signalés :**
+**Messages signalés** (chat de jam) :
 - Affichage : auteur, date, contenu du message
 - Actions : Supprimer le message / Marquer comme résolu (garder le message)
+
+**Messages de team signalés** (tchat privé d'équipe) :
+- Affichage : auteur, date, contenu, lien vers la page de l'équipe (contexte)
+- Actions : Supprimer le message / Marquer comme résolu
+- Un admin ne voit ces messages privés que parce qu'un membre les a signalés
 
 **Projets signalés :**
 - Affichage : titre, description
@@ -364,9 +377,9 @@ Deux fonctions en une page :
 - Toggle "Featured" (met la jam en avant sur la page d'accueil)
 - Bouton "Gagnants" pour aller désigner les gagnants
 
-**Désignation des gagnants :**
+**Désignation du podium :**
 - Sélectionner une jam → affiche tous ses projets
-- Toggle "Gagnant" (icône trophée) sur chaque projet
+- Attribuer une place (1re, 2e, 3e) à chaque projet primé
 - Ces projets apparaissent dans le Hall of Fame de l'accueil
 
 ### Annonces Globales — `/admin/announcements`
@@ -399,11 +412,14 @@ Deux fonctions en une page :
 - En tant que participant, je veux créer une équipe pour collaborer avec d'autres
 - En tant que participant, je veux partager mon code d'invitation pour recruter des coéquipiers
 - En tant que participant, je veux rejoindre une équipe existante avec un code pour collaborer
+- En tant que participant, je veux m'inscrire en solo à une jam sans devoir créer d'équipe
 - En tant que participant, je veux chatter en direct dans la jam pour communiquer
 - En tant que participant, je veux chatter dans le canal "Cherche équipe" pour trouver des coéquipiers
+- En tant que membre d'équipe, je veux un tchat privé avec mes coéquipiers, invisible des non-membres
+- En tant que membre d'équipe, je veux épingler les messages importants et signaler les messages problématiques
 - En tant que participant, je veux voir le countdown de la jam pour gérer mon temps
 - En tant que participant, je veux voir mes participations passées pour suivre mon historique
-- En tant que participant, je veux voter pour les projets qui m'ont impressionné
+- En tant que participant, je veux liker les projets qui m'ont impressionné
 - En tant que participant, je veux commenter les projets pour donner du feedback
 
 ### Organisateur

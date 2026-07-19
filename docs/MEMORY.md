@@ -60,3 +60,23 @@ Rollback forcé à `8cb74f9` (commit précédant le merge de `feat/teams-multija
 - Ne JAMAIS faire `git worktree` sans vérifier que `node_modules` n'est pas dans le staging avant le merge
 - Appwrite 1.8.0 : après upgrade depuis 1.6.x, lancer manuellement `php cli.php migrate` + vérifier `_console__metadata`
 - Force push sur `develop` pour nettoyer les commits du serveur avant de repousser le travail propre
+
+---
+
+## Sessions 2026-07 (résumé) — Dashboards, plafonds Appwrite, solo, équipes, tchat
+
+### Accompli
+
+- **Dashboards admin et user** refondus (chantiers E/F) : superpouvoirs admin (`/admin/jams/[id]`, `/admin/teams`), logs filtrables, modération actionnable
+- **Plafonds silencieux Appwrite** éradiqués : helpers `fetchAllDocs`/`fetchAllByField` (`lib/appwrite/fetch-all.ts`), pattern `LoadMoreList` (curseur, jamais d'offset) pour toute liste rendue
+- **Inscriptions solo** : `teams.is_solo`, team solo personnelle unique par utilisateur réutilisée entre les jams, désinscription avant début de jam, compteurs participants dérivés des teams réelles (`participant-counts.ts`)
+- **Pages équipes hub/vitrine** : liste `/dashboard/teams`, page `/team/[teamId]` à double mode (`viewerRole`/`viewerId` via `getTeamById`), codes d'invitation jamais exposés publiquement (fuite préexistante sur la page jam bouchée)
+- **Tchat privé d'équipe** : table `team_chat_messages` (row security, zéro permission table, `read(user:X)` par membre à l'envoi), composants chat partagés extraits de JamChat (`components/chat/`), hook realtime commun `useRealtimeChat` (create/update/delete), épinglage et signalement par les membres, modération admin dédiée
+- Suite de tests : 196 → **354 tests / 26 fichiers** ; e2e retargetés sur `/dashboard/teams` et le hub
+
+### Décisions clés
+
+- Les permissions Appwrite s'additionnent : le tchat privé exige **zéro permission de table** (un `read("any")` rendrait tout public) ; privacité par document, native côté realtime
+- Les lectures paginées du tchat passent par le **client de session** (la clé API contournerait la row security : un arrivant pourrait lire l'historique pré-arrivée)
+- Un nouvel arrivant dans la guilde ne lit pas l'historique antérieur ; un partant garde les messages de sa période (choix produit assumé)
+- Validation de longueur des messages **après** échappement HTML (l'expansion `&lt;` peut dépasser la colonne 2048)

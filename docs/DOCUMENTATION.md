@@ -31,11 +31,11 @@
 
 KonfiturGame est une **plateforme web de game jams** (compétitions de création de jeux vidéo). Elle permet de :
 
-- Créer et rejoindre des game jams
-- Former des guildes (équipes persistantes réutilisables sur plusieurs jams)
+- Créer et rejoindre des game jams (en équipe ou en solo, via une team solo personnelle unique)
+- Former des guildes (équipes persistantes réutilisables sur plusieurs jams), avec liste `/dashboard/teams` et page hub/vitrine `/team/[teamId]`
 - Soumettre des projets, les liker et les commenter
 - Désigner un podium (top 3) par jam, côté organisateur
-- Chatter en temps réel pendant la jam
+- Chatter en temps réel pendant la jam, et en privé au sein de son équipe (épinglage, signalement)
 - Gérer son profil utilisateur
 - Administrer la plateforme (utilisateurs, jams, équipes, modération, logs, ban IP — actions admin journalisées)
 
@@ -233,7 +233,11 @@ src/app/
 │   ├── JamTeamsSection.tsx     ← Section équipes avec actions (Client)
 │   └── loading.tsx             ← Skeleton
 │
-├── team/[teamId]/page.tsx      ← /team/:id — Page publique d'une équipe
+├── team/[teamId]/              ← /team/:id — Vitrine publique / hub privé (double mode selon viewerRole)
+│   ├── page.tsx                ← Server Component — tchat privé rendu pour les membres uniquement
+│   ├── TeamCard.tsx            ← Gestion membre (code d'invitation, renommage, quitter)
+│   ├── SubmitProjectForm.tsx
+│   └── FileUploadField.tsx
 │
 ├── project/[projectId]/
 │   ├── page.tsx                ← /project/:id — Page d'un projet soumis
@@ -253,13 +257,11 @@ src/app/
 │   ├── page.tsx                ← /dashboard — Vue d'ensemble
 │   ├── DashboardSidebar.tsx
 │   ├── participations/page.tsx ← /dashboard/participations
-│   ├── team/                   ← /dashboard/team — Mes guildes
+│   ├── teams/                  ← /dashboard/teams — Liste de mes guildes (cards → hub /team/:id)
 │   │   ├── page.tsx            ← Server Component
-│   │   ├── TeamPageClient.tsx  ← Wrapper client (modales)
-│   │   ├── TeamCard.tsx
+│   │   ├── TeamsListClient.tsx ← Liste + modales (Client)
 │   │   ├── CreateTeamModal.tsx
-│   │   ├── JoinTeamModal.tsx
-│   │   └── SubmitProjectForm.tsx
+│   │   └── JoinTeamModal.tsx
 │   ├── profile/
 │   │   ├── page.tsx            ← /dashboard/profile — Modifier son profil
 │   │   └── ProfileForm.tsx
@@ -284,7 +286,11 @@ src/app/
 │   │       ├── AdminTeamActions.tsx    ← Renommer / retirer un membre / dissoudre
 │   │       └── AdminProjectActions.tsx ← Retirer la soumission d'un projet
 │   ├── teams/page.tsx          ← /admin/teams — Toutes les équipes (recherche + actions)
-│   ├── moderation/page.tsx     ← Signalements avec liens de contexte + retrait de soumission
+│   ├── moderation/             ← Signalements avec liens de contexte + retrait de soumission
+│   │   ├── page.tsx            ← 3 sections : messages de jam, messages de team, projets
+│   │   ├── ReportedMessagesList.tsx
+│   │   ├── ReportedTeamMessagesList.tsx
+│   │   └── ReportedProjectsList.tsx
 │   ├── featured/page.tsx       ← Mises en avant + podium (« Gagnants »)
 │   ├── announcements/page.tsx
 │   └── logs/
@@ -295,7 +301,10 @@ src/app/
 │
 └── auth/
     ├── login/page.tsx + layout.tsx
-    └── register/page.tsx + layout.tsx
+    ├── register/page.tsx + layout.tsx
+    ├── forgot-password/        ← Demande de réinitialisation du mot de passe
+    ├── reset-password/         ← Saisie du nouveau mot de passe (lien email)
+    └── verify-email/           ← Vérification d'adresse email
 ```
 
 ### Détail `src/lib/` (la logique)
@@ -304,18 +313,24 @@ src/app/
 src/lib/
 ├── appwrite/
 │   ├── client.ts           ← SDK Appwrite navigateur (package `appwrite` 23.0.0)
-│   ├── server.ts           ← SDK Appwrite serveur (package `node-appwrite`)
+│   ├── server.ts           ← SDK Appwrite serveur (package `node-appwrite`, clé API)
 │   ├── config.ts           ← IDs collections, buckets, ADMIN_TEAM_ID — source de vérité
 │   ├── types.ts            ← Mappers : Documents Appwrite → Types TypeScript
-│   ├── session.ts          ← getCurrentUser()
+│   ├── session.ts          ← createSessionClient() — client serveur scopé par le cookie de session
+│   ├── fetch-all.ts        ← fetchAllDocs / fetchAllByField — pagination complète (anti-plafond 25)
+│   ├── guards.ts           ← Gardes réutilisables
+│   ├── file-url.ts         ← URLs des fichiers de bucket
+│   ├── participant-counts.ts ← Compteurs participants dérivés des teams (2 requêtes batchées)
 │   └── internal-host.ts    ← URL Appwrite interne Docker (Server Actions)
 │
 ├── actions/
 │   ├── jams.ts             ← CRUD jams
 │   ├── teams.ts            ← Guildes : créer, rejoindre, inscrire, gérer rôles
 │   ├── projects.ts         ← Soumettre un projet, toggleLike, getPopularProjects, getProjectByTeamAndJam
-│   ├── chat.ts             ← Envoyer/épingler/signaler des messages
+│   ├── chat.ts             ← Chat de jam : épingler/signaler, pagination des messages
+│   ├── team-chat.ts        ← Tchat privé d'équipe : envoi avec permissions par membre, pagination, épinglage, signalement
 │   ├── comments.ts         ← CRUD commentaires
+│   ├── export.ts           ← Export RGPD des données utilisateur
 │   ├── announcements.ts    ← CRUD annonces
 │   ├── dashboard.ts        ← getUserTeams, getUserParticipations
 │   ├── home.ts             ← Stats page d'accueil (jams en cours, gagnants)
@@ -333,7 +348,7 @@ src/lib/
 
 ### Tests unitaires (`src/__tests__/`)
 
-**196 tests** répartis sur 15 fichiers (mappers, validators, actions — profil, chat, teams, projects, home, dashboard, announcements, admin, logs —, gardes, URLs de fichiers, bot-detection, SEO). Détail par fichier : `docs/TODO.md → TESTS`.
+**354 tests** répartis sur 26 fichiers (mappers, validators, actions — profil, chat, team-chat, teams, projects, home, dashboard, announcements, admin, logs, export —, gardes, URLs de fichiers, compteurs participants, bot-detection, SEO). Détail par fichier : `docs/TODO.md → TESTS`.
 
 ### Tests end-to-end (`e2e/`)
 
@@ -572,16 +587,17 @@ admin/layout   → vérifie appartenance équipe admin → si non : notFound() (
 ```
 Base de données : konfitur-db
 │
-├── game_jams       ← Les jams (titre, thème, dates, règles, statut, featured…)
-├── teams           ← Les guildes (jam_ids[], nom, code invitation, chef)
-├── team_members    ← Membres des guildes (rôle, is_leader)
-├── projects        ← Jeux soumis (likes_count, placement 0-3, retrouvés par team_id + jam_id)
-├── chat_messages   ← Messages du chat en direct
-├── announcements   ← Annonces des organisateurs
-├── comments        ← Commentaires sur les projets
-├── likes           ← Likes togglables (1 doc par couple user + projet)
-├── audit_logs      ← Logs d'actions admin et erreurs
-└── banned_ips      ← IPs bannies par les admins
+├── game_jams          ← Les jams (titre, thème, dates, règles, statut, featured…)
+├── teams              ← Les guildes (jam_ids[], nom, code invitation, chef, is_solo)
+├── team_members       ← Membres des guildes (rôle, is_leader, avatar_url)
+├── projects           ← Jeux soumis (likes_count, placement 0-3, retrouvés par team_id + jam_id)
+├── chat_messages      ← Messages du chat de jam (3 canaux)
+├── team_chat_messages ← Tchat privé des équipes (row security, permissions read par membre, 0 permission table)
+├── announcements      ← Annonces des organisateurs
+├── comments           ← Commentaires sur les projets
+├── likes              ← Likes togglables (1 doc par couple user + projet)
+├── audit_logs         ← Logs d'actions admin et erreurs
+└── banned_ips         ← IPs bannies par les admins
 ```
 
 > Voir `docs/DATABASE.md` pour le schéma ERD complet et les types de chaque attribut.
@@ -595,12 +611,12 @@ Base de données : konfitur-db
 | `project-builds` | Builds jouables (zip) — scan ClamAV | 150 Mo |
 | `avatars` | Photos de profil | 1 Mo |
 
-### Realtime (chat en direct)
+### Realtime (chats en direct)
 
 1. Le browser ouvre une WebSocket vers `wss://api.konfiturgame.fr/v1/realtime`
-2. Il s'abonne : `databases.konfitur-db.collections.chat_messages.documents`
-3. Quand un message est inséré, Appwrite notifie tous les abonnés
-4. Le hook `useRealtimeChat` reçoit l'événement et déclenche un re-render React
+2. Il s'abonne : `databases.konfitur-db.collections.{chat_messages | team_chat_messages}.documents`
+3. Quand un document est créé/modifié/supprimé, Appwrite notifie les abonnés **autorisés à le lire** (pour `team_chat_messages`, seuls les membres porteurs d'une permission `read` reçoivent l'événement : la privacité est native)
+4. Le hook partagé `useRealtimeChat` (utilisé par `JamChat` et `TeamChat`) reçoit l'événement : create dédoublonné par id + ping sonore, update remplacé (épinglage/signalement propagés), delete retiré
 
 ### IDs — source de vérité
 
@@ -641,18 +657,20 @@ admin/layout.tsx → équipe admin → notFound() si non-admin
 ### Envoyer un message dans le chat
 
 ```
-Client Component JamChat
-    │
-    │ 1. databases.createDocument(...)   ← SDK Appwrite (browser)
-    │
-    ▼
+Chat de jam (public)                          Tchat d'équipe (privé)
+Client Component JamChat                      Client Component TeamChat
+    │                                             │
+    │ databases.createDocument(...)               │ sendTeamChatMessage(...) ← Server Action
+    │ ← SDK Appwrite (browser)                    │   revérifie l'appartenance, échappe le
+    │                                             │   contenu, pose read(user:X) par membre
+    ▼                                             ▼
 Appwrite (vérifie session + permissions → insère en MariaDB → publie dans Redis)
     │
     ▼
-Appwrite Realtime Worker (lit Redis → notifie WebSocket subscribers)
+Appwrite Realtime Worker (lit Redis → notifie les WebSocket subscribers autorisés)
     │
     ▼
-useRealtimeChat → setMessages() → React re-render
+useRealtimeChat → setMessages() → React re-render (dédoublonné par id, pas d'ajout optimiste côté team)
 ```
 
 ### Créer une guilde et s'inscrire à une jam
