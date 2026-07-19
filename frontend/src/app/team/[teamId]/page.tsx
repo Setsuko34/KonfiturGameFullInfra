@@ -13,6 +13,7 @@ import { DATABASE_ID, COLLECTIONS, BUCKETS } from '@/lib/appwrite/config'
 import { mapDocToGameJam } from '@/lib/appwrite/types'
 import { storageFileUrl } from '@/lib/appwrite/file-url'
 import TeamCard from './TeamCard'
+import TeamChat from '@/components/TeamChat'
 import type { Project } from '@/types'
 
 // generateMetadata + le composant de page appellent tous deux getTeamById : cache() par requête
@@ -115,6 +116,14 @@ export default async function TeamPage({ params }: Props) {
               projectsByJam={projectsByJam}
               availableJamsToRegister={availableJamsToRegister}
             />
+          )}
+
+          {/* Tchat privé (membres uniquement — la vraie barrière est la row security Appwrite) */}
+          {isMember && (
+            <section aria-labelledby="team-chat-heading">
+              <h2 id="team-chat-heading" className="text-xl font-bold mb-4">Tchat d&apos;équipe</h2>
+              <TeamChat teamId={team.id} currentUserId={currentUserId} />
+            </section>
           )}
 
           {/* Vitrine : membres en lecture seule (visiteurs uniquement, TeamCard liste déjà les membres) */}
