@@ -1,12 +1,23 @@
+import { cache } from 'react'
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
+import Link from 'next/link'
+import { Query } from 'node-appwrite'
 import { Crown, ExternalLink } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { getTeamById } from '@/lib/actions/teams'
+import { getProjectByTeamAndJam } from '@/lib/actions/projects'
+import { serverDatabases } from '@/lib/appwrite/server'
+import { DATABASE_ID, COLLECTIONS, BUCKETS } from '@/lib/appwrite/config'
+import { mapDocToGameJam } from '@/lib/appwrite/types'
 import { storageFileUrl } from '@/lib/appwrite/file-url'
-import { BUCKETS } from '@/lib/appwrite/config'
-import CopyInviteButton from './CopyInviteButton'
+import TeamCard from './TeamCard'
+import type { Project } from '@/types'
+
+// generateMetadata + le composant de page appellent tous deux getTeamById : cache() par requête
+// évite de dupliquer les 3 requêtes Appwrite (membres/projets/jams) pour un seul rendu.
+const getTeamCached = cache(getTeamById)
 
 const roleConfig = {
   dev: { label: 'Développeur', color: 'var(--primary)' },
@@ -22,7 +33,7 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { teamId } = await params
-  const data = await getTeamById(teamId)
+  const data = await getTeamCached(teamId)
   if (!data) return { title: 'Équipe introuvable', robots: { index: false } }
 
   return {
@@ -34,10 +45,33 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function TeamPage({ params }: Props) {
   const { teamId } = await params
-  const data = await getTeamById(teamId)
+  const data = await getTeamCached(teamId)
   if (!data) notFound()
 
-  const { team, members, jams, projects } = data
+  const { team, members, jams, projects, viewerRole, viewerId } = data
+  const isMember = viewerRole !== 'visitor'
+  const currentUserId = viewerId ?? ''
+
+  // Contexte de gestion (membres uniquement)
+  const projectsByJam: Record<string, Project | null> = {}
+  let availableJamsToRegister: { id: string; title: string; status: 'upcoming' | 'ongoing' | 'ended' }[] = []
+  if (isMember) {
+    const ongoing = jams.filter(j => j.status === 'ongoing')
+    await Promise.all(ongoing.map(async j => {
+      projectsByJam[j.id] = await getProjectByTeamAndJam(team.id, j.id)
+    }))
+
+    if (viewerRole === 'leader' && !team.isSolo) {
+      const availableJamsRes = await serverDatabases.listDocuments(
+        DATABASE_ID, COLLECTIONS.GAME_JAMS,
+        [Query.notEqual('status', 'ended'), Query.limit(50)]
+      )
+      const teamJamIds = new Set(team.jamIds)
+      availableJamsToRegister = availableJamsRes.documents.map(mapDocToGameJam)
+        .filter(j => j.type !== 'solo' && !teamJamIds.has(j.id))
+        .map(j => ({ id: j.id, title: j.title, status: j.status }))
+    }
+  }
 
   return (
     <>
@@ -50,7 +84,7 @@ export default async function TeamPage({ params }: Props) {
         >
           <div className="max-w-4xl mx-auto">
             <p className="label-tech mb-2" style={{ color: 'var(--muted-foreground)' }}>
-              ÉQUIPE
+              {team.isSolo ? 'PARTICIPANT SOLO' : 'ÉQUIPE'}
             </p>
             <h1 className="text-3xl font-bold mb-4">{team.name}</h1>
             <div className="flex items-center gap-3">
@@ -70,74 +104,70 @@ export default async function TeamPage({ params }: Props) {
         </div>
 
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-          {/* Code d'invitation */}
-          <section aria-labelledby="invite-heading">
-            <h2 id="invite-heading" className="text-xl font-bold mb-4">Code d&apos;invitation</h2>
-            <div
-              className="flex items-center gap-4 p-5 border"
-              style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-            >
-              <code
-                className="timer-font text-2xl font-bold flex-1"
-                style={{ color: 'var(--primary)' }}
-                aria-label={`Code d'invitation : ${team.inviteCode}`}
-              >
-                {team.inviteCode}
-              </code>
-              <CopyInviteButton code={team.inviteCode} />
-            </div>
-            <p className="text-sm mt-2" style={{ color: 'var(--muted-foreground)' }}>
-              Partagez ce code à vos coéquipiers pour qu&apos;ils rejoignent votre équipe.
-            </p>
-          </section>
+          {/* Hub membre : gestion complète (code, membres, soumission, suppression) */}
+          {isMember && (
+            <TeamCard
+              team={team}
+              members={members}
+              viewerRole={viewerRole === 'leader' ? 'leader' : 'member'}
+              currentUserId={currentUserId}
+              jams={jams.map(j => ({ id: j.id, title: j.title, status: j.status }))}
+              projectsByJam={projectsByJam}
+              availableJamsToRegister={availableJamsToRegister}
+            />
+          )}
 
-          {/* Membres */}
-          <section aria-labelledby="members-heading">
-            <h2 id="members-heading" className="text-xl font-bold mb-4">Membres de l&apos;équipe</h2>
-            <ul className="space-y-3" role="list">
-              {members.map(member => {
-                const roleInfo = roleConfig[member.role]
-                return (
-                  <li
-                    key={member.id}
-                    className="flex items-center gap-4 p-4 border"
-                    style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
-                    aria-label={`${member.name}, ${roleInfo.label}${member.isLeader ? ', chef d\'équipe' : ''}`}
-                  >
-                    <div
-                      className="w-10 h-10 flex items-center justify-center text-sm font-bold flex-shrink-0"
-                      style={{ background: 'var(--surface-elevated)', color: 'var(--foreground)' }}
-                      aria-hidden="true"
+          {/* Vitrine : membres en lecture seule (visiteurs uniquement, TeamCard liste déjà les membres) */}
+          {!isMember && (
+            <section aria-labelledby="members-heading">
+              <h2 id="members-heading" className="text-xl font-bold mb-4">Membres de l&apos;équipe</h2>
+              <ul className="space-y-3" role="list">
+                {members.map(member => {
+                  const roleInfo = roleConfig[member.role]
+                  return (
+                    <li
+                      key={member.id}
+                      className="flex items-center gap-4 p-4 border"
+                      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                      aria-label={`${member.name}, ${roleInfo.label}${member.isLeader ? ', chef d\'équipe' : ''}`}
                     >
-                      {member.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold">{member.name}</span>
-                        {member.isLeader && (
-                          <Crown size={14} style={{ color: '#FFD700' }} aria-label="Chef d'équipe" />
-                        )}
+                      <div
+                        className="w-10 h-10 flex items-center justify-center text-sm font-bold flex-shrink-0"
+                        style={{ background: 'var(--surface-elevated)', color: 'var(--foreground)' }}
+                        aria-hidden="true"
+                      >
+                        {member.name.charAt(0).toUpperCase()}
                       </div>
-                      <span className="label-tech" style={{ color: roleInfo.color }}>
-                        {roleInfo.label.toUpperCase()}
-                      </span>
-                    </div>
-                  </li>
-                )
-              })}
-            </ul>
-          </section>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <Link href={`/profile/${member.userId}`} className="font-semibold">
+                            {member.name}
+                          </Link>
+                          {member.isLeader && (
+                            <Crown size={14} style={{ color: '#FFD700' }} aria-label="Chef d'équipe" />
+                          )}
+                        </div>
+                        <span className="label-tech" style={{ color: roleInfo.color }}>
+                          {roleInfo.label.toUpperCase()}
+                        </span>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            </section>
+          )}
 
-          {/* Jams */}
+          {/* Participations (tous les visiteurs) */}
           {jams.length > 0 && (
             <section aria-labelledby="jams-heading">
               <h2 id="jams-heading" className="text-xl font-bold mb-4">
-                Game Jams ({jams.length})
+                Participations ({jams.length})
               </h2>
               <ul className="space-y-3" role="list">
                 {jams.map(jam => (
                   <li key={jam.id}>
-                    <a
+                    <Link
                       href={`/jam/${jam.id}`}
                       className="flex items-center gap-4 p-4 border"
                       style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
@@ -149,21 +179,21 @@ export default async function TeamPage({ params }: Props) {
                         </p>
                       </div>
                       <ExternalLink size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>
             </section>
           )}
 
-          {/* Projets */}
+          {/* Projets soumis (tous les visiteurs) */}
           <section aria-labelledby="projects-heading">
             <h2 id="projects-heading" className="text-xl font-bold mb-4">Projets</h2>
             {projects.length > 0 ? (
               <ul className="space-y-3" role="list">
                 {projects.map(project => (
                   <li key={project.id}>
-                    <a
+                    <Link
                       href={`/project/${project.id}`}
                       className="block p-5 border"
                       style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
@@ -197,7 +227,7 @@ export default async function TeamPage({ params }: Props) {
                           <ExternalLink size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
                         </div>
                       </div>
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>

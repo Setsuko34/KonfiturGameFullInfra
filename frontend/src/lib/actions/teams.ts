@@ -406,6 +406,21 @@ export async function registerSoloToJam(
       return { success: false, error: 'Tu es déjà inscrit à cette jam.' }
     }
 
+    // Une seule team solo par user : réutilisée d'une jam à l'autre plutôt que
+    // d'en recréer une (le membre existe déjà, jam_ids s'étend simplement)
+    const existingSolo = await serverDatabases.listDocuments(
+      DATABASE_ID, COLLECTIONS.TEAMS,
+      [Query.equal('leader_id', user.$id), Query.equal('is_solo', true), Query.limit(1)]
+    )
+    if (existingSolo.documents.length > 0) {
+      const soloTeamDoc = existingSolo.documents[0]
+      const jamIds: string[] = soloTeamDoc.jam_ids ?? []
+      await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.TEAMS, soloTeamDoc.$id, {
+        jam_ids: [...jamIds, jamId],
+      })
+      return { success: true }
+    }
+
     // Team technique de 1 : tout le circuit (projets, compteurs, unicité) reste inchangé
     const teamDoc = await serverDatabases.createDocument(
       DATABASE_ID, COLLECTIONS.TEAMS, 'unique()',
@@ -429,6 +444,47 @@ export async function registerSoloToJam(
   }
 }
 
+// ── unregisterSoloFromJam ─────────────────────────────────────────────────────
+
+export async function unregisterSoloFromJam(
+  jamId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { account } = await createSessionClient()
+    const user = await account.get()
+
+    // La team solo est partagée entre jams : on ne la supprime jamais ici, on
+    // retire seulement la jam de jam_ids (réutilisée à la prochaine inscription solo)
+    const soloRes = await serverDatabases.listDocuments(
+      DATABASE_ID, COLLECTIONS.TEAMS,
+      [Query.equal('leader_id', user.$id), Query.equal('is_solo', true), Query.limit(1)]
+    )
+    if (soloRes.documents.length === 0) {
+      return { success: false, error: 'Aucune inscription solo trouvée.' }
+    }
+    const teamDoc = soloRes.documents[0]
+    const jamIds: string[] = teamDoc.jam_ids ?? []
+    if (!jamIds.includes(jamId)) {
+      return { success: false, error: 'Tu n\'es pas inscrit à cette jam en solo.' }
+    }
+
+    // Désinscription possible uniquement avant le début de la jam, comme pour les équipes
+    const jamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, jamId)
+    if (computeJamStatus(new Date(jamDoc.start_date), new Date(jamDoc.end_date)) !== 'upcoming') {
+      return { success: false, error: 'Impossible de se désinscrire, la jam a déjà commencé.' }
+    }
+
+    await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamDoc.$id, {
+      jam_ids: jamIds.filter(id => id !== jamId),
+    })
+
+    return { success: true }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
+    return { success: false, error: msg }
+  }
+}
+
 // ── getTeamById (page publique équipe) ────────────────────────────────────────
 
 export async function getTeamById(teamId: string): Promise<{
@@ -436,36 +492,44 @@ export async function getTeamById(teamId: string): Promise<{
   members: TeamMember[]
   jams: GameJam[]
   projects: Project[]
+  viewerRole: 'visitor' | 'member' | 'leader'
+  viewerId: string | null
 } | null> {
   try {
     const teamDoc = await serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, teamId)
     const team = mapDocToTeam(teamDoc)
 
-    const [membersRes, projectsRes] = await Promise.all([
-      serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.TEAM_MEMBERS, [
-        Query.equal('team_id', teamId),
-        Query.limit(20),
-      ]),
-      serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.PROJECTS, [
+    const [membersDocs, projectsDocs] = await Promise.all([
+      fetchAllDocs<AppwriteDoc>(COLLECTIONS.TEAM_MEMBERS, [Query.equal('team_id', teamId)]),
+      fetchAllDocs<AppwriteDoc>(COLLECTIONS.PROJECTS, [
         Query.equal('team_id', teamId),
         Query.equal('submitted', true),
-        Query.limit(10),
       ]),
     ])
 
-    const members = membersRes.documents.map(mapDocToTeamMember)
-    const projects = projectsRes.documents.map(mapDocToProject)
+    const members = membersDocs.map(mapDocToTeamMember)
+    const projects = projectsDocs.map(mapDocToProject)
 
-    let jams: GameJam[] = []
-    if (team.jamIds.length > 0) {
-      const jamsRes = await serverDatabases.listDocuments(DATABASE_ID, COLLECTIONS.GAME_JAMS, [
-        Query.equal('$id', team.jamIds),
-        Query.limit(20),
-      ])
-      jams = jamsRes.documents.map(mapDocToGameJam)
+    // Rôle du viewer — session facultative (page publique)
+    let viewerRole: 'visitor' | 'member' | 'leader' = 'visitor'
+    let viewerId: string | null = null
+    try {
+      const { account } = await createSessionClient()
+      const user = await account.get()
+      viewerId = user.$id
+      if (team.leaderId === user.$id) viewerRole = 'leader'
+      else if (members.some(m => m.userId === user.$id)) viewerRole = 'member'
+    } catch {
+      // non connecté — visitor
     }
 
-    return { team, members, jams, projects }
+    // Le code d'invitation ne quitte jamais le serveur pour un visiteur
+    if (viewerRole === 'visitor') team.inviteCode = ''
+
+    const jamDocs = await fetchAllByField<AppwriteDoc>(COLLECTIONS.GAME_JAMS, '$id', team.jamIds)
+    const jams: GameJam[] = jamDocs.map(mapDocToGameJam)
+
+    return { team, members, jams, projects, viewerRole, viewerId }
   } catch {
     return null
   }

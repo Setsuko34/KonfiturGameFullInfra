@@ -95,6 +95,29 @@ describe('getUserTeams — pas de plafond', () => {
     const result = await getUserTeams()
     expect(result).toHaveLength(60)
   })
+
+  it("remonte plus de 20 membres par équipe (l'ancien Query.limit(20) capait le comptage)", async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1' })
+    const allMembers = Array.from({ length: 25 }, (_, i) =>
+      ({ $id: `m${i}`, team_id: 't1', user_id: `u${i}`, name: `U${i}`, role: 'dev', is_leader: i === 0 }))
+    const team = { $id: 't1', name: 'T1', jam_ids: [], invite_code: 'KG-BIG', leader_id: 'u0' }
+
+    mockList.mockImplementation(async (_db: string, col: string, queries: string[] = []) => {
+      const page500 = hasPage500(queries)
+      if (col === 'team_members' && equalValues(queries, 'user_id').length > 0) {
+        return { total: 1, documents: [allMembers[0]] } as never
+      }
+      if (col === 'team_members') {
+        // Simule Appwrite : sans le marqueur de page de fetchAllDocs, le limit(20) de l'ancien code cape ici
+        return { total: allMembers.length, documents: page500 ? allMembers : allMembers.slice(0, 20) } as never
+      }
+      if (col === 'teams') return { total: 1, documents: [team] } as never
+      return { total: 0, documents: [] } as never
+    })
+
+    const result = await getUserTeams()
+    expect(result[0].members).toHaveLength(25)
+  })
 })
 
 describe('getUserParticipations — pas de plafond', () => {
@@ -315,7 +338,7 @@ describe('getUserDashboard', () => {
     expect(data.submittedProjectsCount).toBe(1)
     expect(data.likesReceived).toBe(7) // somme des likes_count
     expect(data.upcomingJams[0]).toMatchObject({ id: 'jam-9', title: 'Jam Future' })
-    expect(data.teams[0]).toMatchObject({ name: 'Les Confituriers', membersCount: 3, activeJams: 1, inviteCode: 'KG-ABCD1234' })
+    expect(data.teams[0]).toMatchObject({ name: 'Les Confituriers', membersCount: 3, activeJams: 1 })
     expect(data.myProjects[0]).toMatchObject({ id: 'proj-1', title: 'Mon Jeu', likes: 7, comments: 1 })
 
     // Feed : le commentaire d'Alice et le like de user-3, PAS mon propre commentaire (c2 filtré)

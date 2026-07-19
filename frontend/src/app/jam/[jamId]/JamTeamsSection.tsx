@@ -3,11 +3,11 @@
 import { useState, useTransition } from 'react'
 import { Plus, LogIn, UserPlus, ChevronDown, User, Trash2 } from 'lucide-react'
 import Link from 'next/link'
-import { registerTeamToJam, registerSoloToJam, deleteTeam } from '@/lib/actions/teams'
+import { registerTeamToJam, registerSoloToJam, unregisterSoloFromJam } from '@/lib/actions/teams'
 import { useRouter } from 'next/navigation'
 import type { Team } from '@/types'
-import CreateTeamModal from '../../dashboard/team/CreateTeamModal'
-import JoinTeamModal from '../../dashboard/team/JoinTeamModal'
+import CreateTeamModal from '../../dashboard/teams/CreateTeamModal'
+import JoinTeamModal from '../../dashboard/teams/JoinTeamModal'
 
 interface Jam {
   id: string
@@ -72,7 +72,7 @@ export default function JamTeamsSection({
   const handleSoloUnregister = () => {
     if (!userTeamInThisJam) return
     startTransition(async () => {
-      const res = await deleteTeam(userTeamInThisJam.id)
+      const res = await unregisterSoloFromJam(jamId)
       if (!res.success) setError(res.error ?? 'Erreur')
       else router.refresh()
     })
