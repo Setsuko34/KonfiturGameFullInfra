@@ -113,7 +113,7 @@ export default function TeamCard({
       )}
 
       {/* Code d'invitation (leader seulement) */}
-      {isLeader && (
+      {isLeader && !team.isSolo && (
         <div className="flex items-center gap-3">
           <span className="label-tech" style={{ color: 'var(--muted-foreground)' }}>CODE</span>
           <code className="px-3 py-1.5 font-mono text-sm font-bold" style={{ background: 'var(--muted)', color: 'var(--foreground)' }}>
@@ -228,7 +228,7 @@ export default function TeamCard({
         ))}
 
       {/* Inscrire à une jam */}
-      {isLeader && availableJamsToRegister.length > 0 && (
+      {isLeader && !team.isSolo && availableJamsToRegister.length > 0 && (
         <div>
           <h3 className="label-tech mb-2" style={{ color: 'var(--muted-foreground)' }}>INSCRIRE À UNE JAM</h3>
           <div className="flex gap-2">
