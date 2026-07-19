@@ -10,6 +10,7 @@ export const COLLECTIONS = {
   TEAM_MEMBERS: 'team_members',
   PROJECTS: 'projects',
   CHAT_MESSAGES: 'chat_messages',
+  TEAM_CHAT_MESSAGES: 'team_chat_messages',
   ANNOUNCEMENTS: 'announcements',
   COMMENTS: 'comments',
   LIKES: 'likes',

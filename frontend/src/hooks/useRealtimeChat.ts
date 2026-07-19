@@ -1,75 +1,70 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { client, databases } from '@/lib/appwrite/client'
-import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
-import { Query } from 'appwrite'
-import { mapDocToChatMessage, type AppwriteDoc } from '@/lib/appwrite/types'
-import type { ChatMessage, ChatChannel } from '@/types'
+import { useState, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
+import { client } from '@/lib/appwrite/client'
+import { DATABASE_ID } from '@/lib/appwrite/config'
+import { playPing } from '@/components/chat/ping'
 
-export function useRealtimeChat(jamId: string, channel: ChatChannel) {
-  const [messages, setMessages] = useState<ChatMessage[]>([])
+type RealtimeDoc = Record<string, unknown>
+
+/**
+ * Souscription realtime commune aux chats (JamChat, TeamChat) : create avec
+ * dédoublonnage par id + ping si le message vient d'un autre auteur, update
+ * remplacé par id (épinglage/signalement propagés), delete retiré par id.
+ * `accept` filtre les documents du chat courant (jam+canal, team...) ; les
+ * callbacks sont lus via une ref, la souscription ne dépend que de la table.
+ */
+export function useRealtimeChat<T extends { id: string }>({
+  collectionId,
+  setMessages,
+  map,
+  accept,
+  isOwn,
+}: {
+  collectionId: string
+  setMessages: Dispatch<SetStateAction<T[]>>
+  map: (doc: RealtimeDoc) => T
+  accept: (doc: RealtimeDoc) => boolean
+  isOwn: (doc: RealtimeDoc) => boolean
+}): { connected: boolean } {
   const [connected, setConnected] = useState(false)
-  const [loading, setLoading] = useState(true)
-
-  // Chargement initial + reset sur changement de canal
+  const handlers = useRef({ setMessages, map, accept, isOwn })
   useEffect(() => {
-    let cancelled = false
+    // Ref « dernière version » : la souscription lit toujours les callbacks à jour
+    // sans se réabonner à chaque rendu (interdit en rendu par react-hooks/refs)
+    handlers.current = { setMessages, map, accept, isOwn }
+  })
 
-    databases.listDocuments(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, [
-      Query.equal('jam_id', jamId),
-      Query.equal('channel', channel),
-      Query.orderAsc('$createdAt'),
-      Query.limit(100),
-    ]).then(res => {
-      if (!cancelled) {
-        setMessages(res.documents.map(mapDocToChatMessage))
-        setLoading(false)
-      }
-    }).catch(err => {
-      console.error('Erreur chargement messages', err)
-      if (!cancelled) setLoading(false)
-    })
-
-    return () => {
-      cancelled = true
-      setMessages([])
-      setLoading(true)
-    }
-  }, [jamId, channel])
-
-  // Souscription Realtime
   useEffect(() => {
     const unsubscribe = client.subscribe(
-      `databases.${DATABASE_ID}.collections.${COLLECTIONS.CHAT_MESSAGES}.documents`,
+      `databases.${DATABASE_ID}.collections.${collectionId}.documents`,
       (response) => {
+        const { setMessages, map, accept, isOwn } = handlers.current
         const events = response.events as string[]
-        const doc = response.payload as AppwriteDoc
+        const doc = response.payload as RealtimeDoc
+        if (!accept(doc)) return
 
         if (events.some(e => e.includes('.create'))) {
-          if (doc.jam_id === jamId && doc.channel === channel) {
-            const msg = mapDocToChatMessage(doc)
-            setMessages(prev => {
-              if (prev.some(m => m.id === msg.id)) return prev
-              return [...prev, msg]
-            })
-          }
+          const msg = map(doc)
+          setMessages(prev => (prev.some(m => m.id === msg.id) ? prev : [...prev, msg]))
+          if (!isOwn(doc)) playPing()
         }
-
+        if (events.some(e => e.includes('.update'))) {
+          const msg = map(doc)
+          setMessages(prev => prev.map(m => (m.id === msg.id ? msg : m)))
+        }
         if (events.some(e => e.includes('.delete'))) {
-          setMessages(prev => prev.filter(m => m.id !== doc.$id))
+          setMessages(prev => prev.filter(m => m.id !== (doc.$id as string)))
         }
       }
     )
-
     const timer = setTimeout(() => setConnected(true), 0)
-
     return () => {
       clearTimeout(timer)
       unsubscribe()
       setConnected(false)
     }
-  }, [jamId, channel])
+  }, [collectionId])
 
-  return { messages, connected, loading }
+  return { connected }
 }

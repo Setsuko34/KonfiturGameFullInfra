@@ -7,6 +7,7 @@ import {
   mapDocToChatMessage,
   mapDocToAnnouncement,
   mapDocToComment,
+  mapDocToTeamChatMessage,
 } from '@/lib/appwrite/types'
 import type { AppwriteDoc } from '@/lib/appwrite/types'
 
@@ -305,6 +306,25 @@ describe('mapDocToAnnouncement', () => {
       author_id: 'user-1',
     }))
     expect(ann.important).toBe(false)
+  })
+})
+
+// ────────────────────────────────────────
+// mapDocToTeamChatMessage
+// ────────────────────────────────────────
+describe('mapDocToTeamChatMessage', () => {
+  it('mapping complet + défauts', () => {
+    const doc = {
+      $id: 'msg-1', $createdAt: '2026-07-18T10:00:00.000Z', $updatedAt: '2026-07-18T10:00:00.000Z',
+      $permissions: [], $collectionId: 'team_chat_messages', $databaseId: 'konfitur-db',
+      team_id: 'team-1', author_id: 'u-1', author_name: 'Alice', content: 'Salut',
+    }
+    const msg = mapDocToTeamChatMessage(doc as never)
+    expect(msg).toEqual({
+      id: 'msg-1', teamId: 'team-1', authorId: 'u-1', authorName: 'Alice',
+      content: 'Salut', pinned: false, reported: false,
+      createdAt: new Date('2026-07-18T10:00:00.000Z'),
+    })
   })
 })
 

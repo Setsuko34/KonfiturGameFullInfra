@@ -44,6 +44,9 @@ import {
   listReportedProjects,
   listAnnouncements,
   toggleJamFeatured,
+  listReportedTeamMessages,
+  deleteTeamMessage,
+  resolveTeamMessageReport,
 } from '@/lib/actions/admin'
 import { serverDatabases, serverTeams, serverUsers } from '@/lib/appwrite/server'
 
@@ -561,6 +564,79 @@ describe('getAdminDashboard', () => {
     })
     const data = await getAdminDashboard()
     expect(data.recentRegistrations[0].name).toBe('Utilisateur supprimé')
+  })
+})
+
+describe('modération des messages de team', () => {
+  it('listReportedTeamMessages : admin, lot incomplet → nextCursor null', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockListDocuments.mockResolvedValueOnce({
+      documents: [{
+        $id: 'tmsg-1', $createdAt: '2026-07-18T10:00:00.000Z', $updatedAt: '2026-07-18T10:00:00.000Z',
+        $permissions: [], $collectionId: 'team_chat_messages', $databaseId: 'konfitur-db',
+        team_id: 'team-1', author_id: 'u-1', author_name: 'Alice', content: 'insulte', reported: true,
+      }],
+      total: 1,
+    } as never)
+
+    const res = await listReportedTeamMessages()
+
+    expect(res.messages).toHaveLength(1)
+    expect(res.messages[0].teamId).toBe('team-1')
+    expect(res.nextCursor).toBeNull()
+    const queries = mockListDocuments.mock.calls[0][2] as string[]
+    expect(queries).toContain(Query.equal('reported', true))
+  })
+
+  it('listReportedTeamMessages : non-admin → throw', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'quidam' })
+    mockListMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+
+    await expect(listReportedTeamMessages()).rejects.toThrow('Accès réservé aux administrateurs.')
+  })
+
+  it('deleteTeamMessage : admin supprime + audit', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockDeleteDocument.mockResolvedValueOnce({} as never)
+    mockCreateDocument.mockResolvedValueOnce({} as never)
+
+    const res = await deleteTeamMessage('tmsg-1')
+
+    expect(res.success).toBe(true)
+    expect(mockDeleteDocument).toHaveBeenCalledWith('konfitur-db', 'team_chat_messages', 'tmsg-1')
+  })
+
+  it('deleteTeamMessage : non-admin refusé, aucune suppression', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'quidam' })
+    mockListMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+
+    const res = await deleteTeamMessage('tmsg-1')
+
+    expect(res).toEqual({ success: false, error: 'Accès réservé aux administrateurs.' })
+    expect(mockDeleteDocument).not.toHaveBeenCalled()
+  })
+
+  it('resolveTeamMessageReport : admin repasse reported à false', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1' })
+    mockListMemberships.mockResolvedValue({ total: 1, memberships: [] } as never)
+    mockCreateDocument.mockResolvedValueOnce({} as never)
+
+    const res = await resolveTeamMessageReport('tmsg-1')
+
+    expect(res.success).toBe(true)
+    expect(mockUpdateDocument).toHaveBeenCalledWith('konfitur-db', 'team_chat_messages', 'tmsg-1', { reported: false })
+  })
+
+  it('resolveTeamMessageReport : non-admin refusé, aucune écriture', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'quidam' })
+    mockListMemberships.mockResolvedValue({ total: 0, memberships: [] } as never)
+
+    const res = await resolveTeamMessageReport('tmsg-1')
+
+    expect(res).toEqual({ success: false, error: 'Accès réservé aux administrateurs.' })
+    expect(mockUpdateDocument).not.toHaveBeenCalled()
   })
 })
 
