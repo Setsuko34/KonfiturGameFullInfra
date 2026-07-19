@@ -1,13 +1,15 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import { getProjectById, hasUserLiked } from '@/lib/actions/projects'
 import { generateProjectJsonLd, serializeJsonLd, truncateDescription } from '@/lib/seo'
 import { getCommentsByProject } from '@/lib/actions/comments'
 import { createSessionClient } from '@/lib/appwrite/session'
+import { serverDatabases } from '@/lib/appwrite/server'
 import { storageFileUrl } from '@/lib/appwrite/file-url'
-import { BUCKETS } from '@/lib/appwrite/config'
+import { DATABASE_ID, COLLECTIONS, BUCKETS } from '@/lib/appwrite/config'
 import ProjectInteractions from './ProjectInteractions'
 
 interface Props {
@@ -52,6 +54,14 @@ export default async function ProjectPage({ params }: Props) {
 
   if (!project) notFound()
 
+  // Byline équipe/jam — dégradation silencieuse si l'un des deux docs a été supprimé
+  const [teamDoc, jamDoc] = await Promise.all([
+    serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.TEAMS, project.teamId).catch(() => null),
+    serverDatabases.getDocument(DATABASE_ID, COLLECTIONS.GAME_JAMS, project.jamId).catch(() => null),
+  ])
+  const teamName = teamDoc?.name as string | undefined
+  const jamTitle = jamDoc?.title as string | undefined
+
   let initialLiked = false
   if (project) {
     try {
@@ -84,6 +94,24 @@ export default async function ProjectPage({ params }: Props) {
               PROJET
             </p>
             <h1 className="text-3xl sm:text-4xl font-bold mb-3">{project.title}</h1>
+            <p className="text-sm mb-4" style={{ color: 'var(--muted-foreground)' }}>
+              Le projet de{' '}
+              {teamName ? (
+                <Link href={`/team/${project.teamId}`} className="underline" style={{ color: 'var(--primary)' }}>
+                  {teamName}
+                </Link>
+              ) : (
+                'une équipe'
+              )}{' '}
+              pour la{' '}
+              {jamTitle ? (
+                <Link href={`/jam/${project.jamId}`} className="underline" style={{ color: 'var(--primary)' }}>
+                  {jamTitle}
+                </Link>
+              ) : (
+                'jam'
+              )}
+            </p>
             {project.coverImage && (
               /* eslint-disable-next-line @next/next/no-img-element -- fichier storage externe à l'optimiseur Next */
               <img
