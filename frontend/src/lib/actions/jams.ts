@@ -4,6 +4,7 @@ import { Query } from 'node-appwrite'
 import { serverDatabases } from '@/lib/appwrite/server'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { mapDocToGameJam, mapDocToAnnouncement } from '@/lib/appwrite/types'
+import { getParticipantCountsByJam } from '@/lib/appwrite/participant-counts'
 import type { GameJam, Announcement } from '@/types'
 
 const JAMS_BATCH_SIZE = 50   // taille de lot délibérée pour « Voir plus » (pas un plafond accidentel)
@@ -25,6 +26,10 @@ export async function getJams(
     const nextCursor = res.documents.length < JAMS_BATCH_SIZE
       ? null
       : res.documents[res.documents.length - 1].$id
+
+    // Compteurs dérivés des inscrits réels (le champ stocké n'est jamais mis à jour)
+    const participantCounts = await getParticipantCountsByJam(jams.map(j => j.id))
+    for (const jam of jams) jam.participants = participantCounts[jam.id] ?? 0
 
     return { jams, nextCursor }
   } catch {

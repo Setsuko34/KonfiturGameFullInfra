@@ -10,6 +10,7 @@ import { COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'node-appwrite'
 import { mapDocToGameJam } from '@/lib/appwrite/types'
 import { fetchAllDocs } from '@/lib/appwrite/fetch-all'
+import { getParticipantCountsByJam } from '@/lib/appwrite/participant-counts'
 import { getPublicProfileProjects } from '@/lib/actions/profile'
 
 interface Props { params: Promise<{ userId: string }> }
@@ -46,6 +47,10 @@ export default async function PublicProfilePage({ params }: Props) {
     Query.orderDesc('$createdAt'),
   ])
   const organizedJams = organizedDocs.map(mapDocToGameJam)
+
+  // Compteurs dérivés des inscrits réels (le champ stocké n'est jamais mis à jour)
+  const participantCounts = await getParticipantCountsByJam(organizedJams.map(j => j.id))
+  for (const jam of organizedJams) jam.participants = participantCounts[jam.id] ?? 0
 
   // Projets postés (team_members → team_id → projects) — l'information qu'un visiteur
   // cherche réellement pour un participant qui n'a jamais organisé de jam
