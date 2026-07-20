@@ -77,6 +77,15 @@ while IFS= read -r var; do
 done <<< "$VARS"
 [ "$VAR_ERRORS" -eq 0 ] && ok "Variables d'environnement : toutes documentées dans .env.example"
 
+STATIC="$ROOT/traefik/traefik.yml"
+if [ -f "$STATIC" ]; then
+  if grep -vE '^[[:space:]]*#' "$STATIC" | grep -qE '\$\{[A-Za-z_]'; then
+    fail "traefik/traefik.yml contient un \${VAR} : la config statique de Traefik n'est pas interpolée, écrire la valeur en dur"
+  else
+    ok "Config statique Traefik : aucune variable non interpolée"
+  fi
+fi
+
 echo
 if [ "$ERRORS" -gt 0 ]; then
   echo "Config de production : ÉCHEC ($ERRORS erreur(s))"

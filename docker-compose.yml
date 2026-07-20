@@ -1,7 +1,9 @@
 networks:
   konfitur-net:
+    name: konfitur-net
     driver: bridge
   appwrite-net:
+    name: appwrite-net
     driver: bridge
   runtimes:
     driver: bridge

@@ -184,7 +184,9 @@ bash ./scripts/restore.sh ./backups/2026-xx-xx_xx-xx-xx
 - **`new URL()` crash** — le fallback doit contenir `http://`, pas juste `'localhost'`
 - **`getaddrinfo for redis failed`** — toujours déclarer `networks:` explicitement dans l'override pour `appwrite` et `appwrite-realtime`
 - **appwrite-realtime crash Traefik dev** — `traefik.enable=false` dans l'override (entrypoint `websecure` absent de `traefik.dev.yml`)
-- **ADMIN_EMAIL ACME vide** — passer `ADMIN_EMAIL` dans `environment:` du service Traefik (pas depuis `.env` Docker Compose)
+- **Email ACME `${ADMIN_EMAIL}` littéral** — Traefik n'interpole **aucune** `${VAR}` dans sa config **statique** (`traefik.yml`), uniquement dans les fichiers dynamiques. La chaîne partait telle quelle chez Let's Encrypt → `400 invalidContact`, zéro certificat. L'email est en dur dans `traefik.yml` ; garde vérifiée par `scripts/ci/prod-config-check.sh`
+- **Réseaux préfixés par Compose** — sans `name:` explicite, `konfitur-net` devient `konfiturgamefullinfra_konfitur-net` et le `network:` de `traefik.yml` ne résout plus : Traefik retombe sur « le premier réseau disponible ». `name:` épinglé sur `konfitur-net` et `appwrite-net` (pas sur `runtimes`, référencé préfixé par `_APP_COMPUTE_RUNTIMES_NETWORK`)
+- **Middlewares inter-providers** — un router déclaré en label Docker qui référence un middleware du provider fichier **doit** utiliser le suffixe `@file`, sinon Traefik désactive le router entier (404 sur tout le site)
 - **CSP `connect-src` hardcodée** — Traefik file provider ne substitue pas les vars d'env → modifier `middlewares.yml` manuellement en prod
 - **Redis sans `--requirepass`** — Appwrite a un bug dans Queue\Connection\Redis qui n'envoie jamais AUTH → Redis isolé sur `appwrite-net` uniquement
 - **pnpm-lock.yaml sur Windows FS** — générer dans `/tmp` (voir commande ci-dessus)
