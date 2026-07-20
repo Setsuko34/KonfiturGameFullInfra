@@ -44,6 +44,7 @@ export default function JamTeamsSection({
   const [showJoin, setShowJoin] = useState(false)
   const [registerTeamId, setRegisterTeamId] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [confirmUnregister, setConfirmUnregister] = useState(false)
 
   const handleRegister = () => {
     if (!registerTeamId || !currentUser) return
@@ -72,6 +73,7 @@ export default function JamTeamsSection({
   const handleSoloUnregister = () => {
     if (!userTeamInThisJam) return
     startTransition(async () => {
+      setConfirmUnregister(false)
       const res = await unregisterSoloFromJam(jamId)
       if (!res.success) setError(res.error ?? 'Erreur')
       else router.refresh()
@@ -190,15 +192,36 @@ export default function JamTeamsSection({
               </>
             )}
             {isSoloRegistration && now < startDate.getTime() && (
-              <button
-                onClick={handleSoloUnregister}
-                disabled={isPending}
-                className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-xs font-semibold disabled:opacity-40"
-                style={{ background: 'var(--muted)', color: 'var(--secondary)', border: '1px solid var(--border)' }}
-              >
-                <Trash2 size={12} aria-hidden="true" />
-                Me désinscrire
-              </button>
+              confirmUnregister ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <p className="text-xs" style={{ color: 'var(--muted-foreground)' }}>Confirmer la désinscription ?</p>
+                  <button
+                    onClick={handleSoloUnregister}
+                    disabled={isPending}
+                    className="px-3 py-1.5 text-xs font-semibold min-h-11 disabled:opacity-40"
+                    style={{ background: 'var(--secondary)', color: 'var(--primary-foreground)' }}
+                  >
+                    Me désinscrire
+                  </button>
+                  <button
+                    onClick={() => setConfirmUnregister(false)}
+                    className="px-3 py-1.5 text-xs min-h-11"
+                    style={{ color: 'var(--muted-foreground)' }}
+                  >
+                    Annuler
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmUnregister(true)}
+                  disabled={isPending}
+                  className="flex items-center gap-1.5 mt-2 px-3 py-1.5 text-xs font-semibold min-h-11 disabled:opacity-40"
+                  style={{ background: 'var(--muted)', color: 'var(--secondary)', border: '1px solid var(--border)' }}
+                >
+                  <Trash2 size={12} aria-hidden="true" />
+                  Me désinscrire
+                </button>
+              )
             )}
           </div>
         )}
