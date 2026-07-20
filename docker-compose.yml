@@ -105,7 +105,10 @@ services:
       - appwrite-functions:/storage/functions
     environment:
       - _APP_ENV=production
-      - _APP_DOMAIN=api.${DOMAIN}
+      # Domaine RACINE (pas api.), sinon Appwrite pose le cookie de session sur
+      # .api.${DOMAIN} : le frontend SSR sur ${DOMAIN} ne le voit pas → boucle de
+      # login. La racine donne un cookie .${DOMAIN} partagé par les deux sous-domaines.
+      - _APP_DOMAIN=${DOMAIN}
       - _APP_DOMAIN_TARGET=api.${DOMAIN}
       - _APP_DOMAIN_TARGET_CNAME=api.${DOMAIN}
       - _APP_DOMAIN_TARGET_A=

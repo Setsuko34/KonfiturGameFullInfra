@@ -312,7 +312,7 @@ curl https://api.konfiturgame.fr/v1/health/version
 # → {"version":"1.9.0"}
 
 # Healthcheck complet (nécessite une clé API avec scope health.read)
-curl -H "X-Appwrite-Project: konfitur-game" -H "X-Appwrite-Key: $APPWRITE_API_KEY" \
+curl -H "X-Appwrite-Project: 69b1a2b500083affc894" -H "X-Appwrite-Key: $APPWRITE_API_KEY" \
   https://api.konfiturgame.fr/v1/health
 # → {"status":"pass",...}
 
@@ -322,7 +322,7 @@ curl -I https://traefik.konfiturgame.fr/dashboard/
 
 # Test OAuth Google (doit rediriger vers accounts.google.com)
 curl -Ls -o /dev/null -w '%{url_effective}' \
-  "https://api.konfiturgame.fr/v1/account/sessions/oauth2/google?project=konfitur-game&success=https://konfiturgame.fr&failure=https://konfiturgame.fr/auth/login"
+  "https://api.konfiturgame.fr/v1/account/sessions/oauth2/google?project=69b1a2b500083affc894&success=https://konfiturgame.fr&failure=https://konfiturgame.fr/auth/login"
 ```
 
 ---
