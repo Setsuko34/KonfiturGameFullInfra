@@ -19,7 +19,7 @@ entryPoints:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: "${ADMIN_EMAIL}"
+      email: "admin@konfiturgame.fr"
       storage: /etc/traefik/acme/acme.json
       httpChallenge:
         entryPoint: web
