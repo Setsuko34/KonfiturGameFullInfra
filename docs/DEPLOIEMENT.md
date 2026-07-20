@@ -222,7 +222,7 @@ npm install -g appwrite-cli@17.3.1
 
 appwrite client \
   --endpoint https://api.konfiturgame.fr/v1 \
-  --project-id 69a19b8d00175f1d0b99 \
+  --project-id 69b1a2b500083affc894 \
   --key "$APPWRITE_API_KEY"
 ```
 
