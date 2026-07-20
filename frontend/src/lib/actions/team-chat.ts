@@ -6,10 +6,9 @@ import { createSessionClient } from '@/lib/appwrite/session'
 import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { mapDocToTeamChatMessage } from '@/lib/appwrite/types'
 import { fetchAllDocs } from '@/lib/appwrite/fetch-all'
+import { CHAT_BATCH_SIZE, sanitizeChatContent } from '@/lib/chat-utils'
 import type { TeamChatMessage } from '@/types'
 import type { AppwriteDoc } from '@/lib/appwrite/types'
-
-const CHAT_BATCH_SIZE = 50 // taille de lot délibérée, identique au chat de jam
 
 // La table team_chat_messages n'a AUCUNE permission de niveau table (rowSecurity) :
 // chaque message porte read(user:X) pour les membres au moment de l'envoi. Toute
@@ -31,18 +30,8 @@ export async function sendTeamChatMessage(
   teamId: string,
   content: string
 ): Promise<{ success: boolean; message?: TeamChatMessage; error?: string }> {
-  // Sanitisation basique — pas de HTML (même règle que le chat de jam)
-  const sanitized = content
-    .trim()
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-
-  if (!sanitized) {
-    return { success: false, error: 'Le message ne peut pas être vide.' }
-  }
-  if (sanitized.length > 2048) {
-    return { success: false, error: 'Le message est trop long.' }
-  }
+  const sanitized = sanitizeChatContent(content)
+  if (!sanitized.ok) return { success: false, error: sanitized.error }
 
   try {
     const ctx = await requireMembership(teamId)
@@ -54,7 +43,7 @@ export async function sendTeamChatMessage(
         team_id: teamId,
         author_id: ctx.user.$id,
         author_name: ctx.user.name,
-        content: sanitized,
+        content: sanitized.content,
         pinned: false,
       },
       // Membres courants uniquement : un arrivant ne lit pas l'historique antérieur,
@@ -62,9 +51,8 @@ export async function sendTeamChatMessage(
       ctx.memberIds.map(id => Permission.read(Role.user(id)))
     )
     return { success: true, message: mapDocToTeamChatMessage(doc) }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
-    return { success: false, error: msg }
+  } catch {
+    return { success: false, error: 'Une erreur est survenue. Réessayez.' }
   }
 }
 
@@ -105,9 +93,8 @@ export async function reportTeamMessage(
 
     await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.TEAM_CHAT_MESSAGES, messageId, { reported: true })
     return { success: true }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
-    return { success: false, error: msg }
+  } catch {
+    return { success: false, error: 'Une erreur est survenue. Réessayez.' }
   }
 }
 
@@ -122,8 +109,7 @@ export async function setTeamMessagePinned(
 
     await serverDatabases.updateDocument(DATABASE_ID, COLLECTIONS.TEAM_CHAT_MESSAGES, messageId, { pinned })
     return { success: true }
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Erreur inconnue'
-    return { success: false, error: msg }
+  } catch {
+    return { success: false, error: 'Une erreur est survenue. Réessayez.' }
   }
 }

@@ -112,7 +112,7 @@ describe('sendTeamChatMessage', () => {
   it('sans session : refus, aucune écriture', async () => {
     mockAccountGet.mockRejectedValue(new Error('no session'))
     const res = await sendTeamChatMessage('team-1', 'coucou')
-    expect(res.success).toBe(false)
+    expect(res).toEqual({ success: false, error: 'Une erreur est survenue. Réessayez.' })
     expect(mockCreate).not.toHaveBeenCalled()
   })
 })
