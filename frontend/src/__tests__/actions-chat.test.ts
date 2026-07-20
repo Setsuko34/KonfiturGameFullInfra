@@ -6,15 +6,27 @@ vi.mock('@/lib/appwrite/server', () => ({
   serverDatabases: {
     createDocument: vi.fn(),
     listDocuments: vi.fn(),
+    getDocument: vi.fn(),
     updateDocument: vi.fn(),
+  },
+  serverTeams: {
+    listMemberships: vi.fn(),
   },
 }))
 
-import { sendChatMessage, getOlderChatMessages } from '@/lib/actions/chat'
-import { serverDatabases } from '@/lib/appwrite/server'
+const mockAccountGet = vi.fn()
+vi.mock('@/lib/appwrite/session', () => ({
+  createSessionClient: vi.fn(async () => ({ account: { get: mockAccountGet } })),
+}))
+
+import { sendChatMessage, getOlderChatMessages, reportMessage, setJamMessagePinned } from '@/lib/actions/chat'
+import { serverDatabases, serverTeams } from '@/lib/appwrite/server'
 
 const mockCreate = vi.mocked(serverDatabases.createDocument)
 const mockList = vi.mocked(serverDatabases.listDocuments)
+const mockGet = vi.mocked(serverDatabases.getDocument)
+const mockUpdate = vi.mocked(serverDatabases.updateDocument)
+const mockMemberships = vi.mocked(serverTeams.listMemberships)
 
 // n messages minimaux valides pour mapDocToChatMessage, $id uniques, pour tester
 // la pagination au curseur vers le haut (messages plus anciens)
@@ -32,16 +44,13 @@ function chatDocs(n: number, offset = 0) {
   }))
 }
 
-const baseData = {
-  jamId: 'jam-1',
-  channel: 'general' as const,
-  authorId: 'user-1',
-  authorName: 'Alice',
-}
-
 beforeEach(() => {
   mockCreate.mockReset()
   mockList.mockReset()
+  mockGet.mockReset()
+  mockUpdate.mockReset()
+  mockMemberships.mockReset()
+  mockAccountGet.mockReset()
   // Par défaut : succès Appwrite avec un document minimal
   mockCreate.mockResolvedValue({
     $id: 'msg-1',
@@ -60,63 +69,122 @@ beforeEach(() => {
   } as never)
 })
 
-describe('sendChatMessage — validation du contenu', () => {
-  it('refuse un message vide', async () => {
-    const result = await sendChatMessage({ ...baseData, content: '' })
-    expect(result.success).toBe(false)
-    expect(result.error).toMatch(/vide/)
+describe('sendChatMessage', () => {
+  it('utilisateur connecté : crée le message avec l\'identité de la session, role user, contenu échappé', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-1', name: 'Alice' })
+
+    const res = await sendChatMessage('jam-1', 'general', '<b>Salut</b>')
+
+    expect(res.success).toBe(true)
+    expect(mockCreate).toHaveBeenCalledWith(
+      'konfitur-db', 'chat_messages', 'unique()',
+      expect.objectContaining({
+        jam_id: 'jam-1',
+        channel: 'general',
+        author_id: 'user-1',
+        author_name: 'Alice',
+        content: '&lt;b&gt;Salut&lt;/b&gt;',
+        role: 'user',
+        pinned: false,
+      })
+    )
+  })
+
+  it('refuse un message vide après trim, sans écriture', async () => {
+    const res = await sendChatMessage('jam-1', 'general', '   ')
+    expect(res).toEqual({ success: false, error: 'Le message ne peut pas être vide.' })
     expect(mockCreate).not.toHaveBeenCalled()
   })
 
-  it('refuse un message composé uniquement d\'espaces', async () => {
-    const result = await sendChatMessage({ ...baseData, content: '   ' })
-    expect(result.success).toBe(false)
-    expect(result.error).toMatch(/vide/)
+  it('refuse un message dont la longueur échappée dépasse 2048, sans écriture', async () => {
+    const content = '<'.repeat(10) + 'a'.repeat(2030)
+    const res = await sendChatMessage('jam-1', 'general', content)
+    expect(res).toEqual({ success: false, error: 'Le message est trop long.' })
+    expect(mockCreate).not.toHaveBeenCalled()
+  })
+
+  it('sans session : refus avec message générique français, aucune écriture', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+    const res = await sendChatMessage('jam-1', 'general', 'coucou')
+    expect(res).toEqual({ success: false, error: 'Une erreur est survenue. Réessayez.' })
     expect(mockCreate).not.toHaveBeenCalled()
   })
 })
 
-describe('sendChatMessage — sanitisation HTML', () => {
-  it('échappe les chevrons ouvrants < en &lt;', async () => {
-    await sendChatMessage({ ...baseData, content: '<script>alert(1)</script>' })
-    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
-    expect(savedContent).toContain('&lt;script&gt;')
-    expect(savedContent).not.toContain('<script>')
+describe('reportMessage', () => {
+  it('utilisateur connecté : pose reported', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'user-2', name: 'Bob' })
+    mockUpdate.mockResolvedValueOnce({} as never)
+
+    const res = await reportMessage('msg-1')
+
+    expect(res.success).toBe(true)
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'chat_messages', 'msg-1', { reported: true })
   })
 
-  it('échappe uniquement < et >, pas les autres caractères spéciaux', async () => {
-    await sendChatMessage({ ...baseData, content: 'test & "quotes" <tag>' })
-    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
-    expect(savedContent).toBe('test & "quotes" &lt;tag&gt;')
-  })
-})
-
-describe('sendChatMessage — troncature à 2048 caractères', () => {
-  it('tronque les messages de plus de 2048 caractères', async () => {
-    await sendChatMessage({ ...baseData, content: 'a'.repeat(3000) })
-    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
-    expect(savedContent.length).toBe(2048)
-  })
-
-  it('tronque un message de 2049 caractères à 2048', async () => {
-    await sendChatMessage({ ...baseData, content: 'a'.repeat(2049) })
-    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
-    expect(savedContent.length).toBe(2048)
-  })
-
-  it('ne tronque pas les messages de 2048 caractères exactement', async () => {
-    await sendChatMessage({ ...baseData, content: 'a'.repeat(2048) })
-    const savedContent: string = (mockCreate.mock.calls[0][3] as Record<string, unknown>).content as string
-    expect(savedContent.length).toBe(2048)
+  it('sans session : refus, aucune écriture', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+    const res = await reportMessage('msg-1')
+    expect(res.success).toBe(false)
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })
 
-describe('sendChatMessage — gestion erreur Appwrite', () => {
-  it('retourne success:false et le message d\'erreur si Appwrite échoue', async () => {
-    mockCreate.mockRejectedValue(new Error('Permission refusée'))
-    const result = await sendChatMessage({ ...baseData, content: 'Bonjour' })
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('Permission refusée')
+describe('setJamMessagePinned', () => {
+  const msgDoc = { $id: 'msg-1', jam_id: 'jam-1', channel: 'general', content: 'x' }
+  const jamDoc = { $id: 'jam-1', organizer_id: 'orga-1' }
+
+  it('organisateur de la jam : épingle, sans audit admin', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'orga-1', name: 'Orga' })
+    mockGet
+      .mockResolvedValueOnce(msgDoc as never)   // le message
+      .mockResolvedValueOnce(jamDoc as never)   // sa jam
+    mockUpdate.mockResolvedValueOnce({} as never)
+
+    const res = await setJamMessagePinned('msg-1', true)
+
+    expect(res.success).toBe(true)
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'chat_messages', 'msg-1', { pinned: true })
+    expect(mockMemberships).not.toHaveBeenCalled() // court-circuit propriétaire
+  })
+
+  it('admin non-organisateur : désépingle + audit admin_action', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'admin-1', name: 'Admin' })
+    mockGet
+      .mockResolvedValueOnce(msgDoc as never)
+      .mockResolvedValueOnce(jamDoc as never)
+    mockMemberships.mockResolvedValueOnce({ total: 1, memberships: [] } as never)
+    mockUpdate.mockResolvedValueOnce({} as never)
+    mockCreate.mockResolvedValueOnce({} as never) // logAdminAction écrit dans audit_logs
+
+    const res = await setJamMessagePinned('msg-1', false)
+
+    expect(res.success).toBe(true)
+    expect(mockUpdate).toHaveBeenCalledWith('konfitur-db', 'chat_messages', 'msg-1', { pinned: false })
+    expect(mockCreate).toHaveBeenCalledWith(
+      'konfitur-db', 'audit_logs', 'unique()',
+      expect.objectContaining({ type: 'admin_action', user_id: 'admin-1' })
+    )
+  })
+
+  it('simple participant : refus, aucune écriture', async () => {
+    mockAccountGet.mockResolvedValue({ $id: 'quidam', name: 'Quidam' })
+    mockGet
+      .mockResolvedValueOnce(msgDoc as never)
+      .mockResolvedValueOnce(jamDoc as never)
+    mockMemberships.mockResolvedValueOnce({ total: 0, memberships: [] } as never)
+
+    const res = await setJamMessagePinned('msg-1', true)
+
+    expect(res).toEqual({ success: false, error: 'Réservé à l\'organisateur de la jam.' })
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('sans session : refus, aucune écriture', async () => {
+    mockAccountGet.mockRejectedValue(new Error('no session'))
+    const res = await setJamMessagePinned('msg-1', true)
+    expect(res.success).toBe(false)
+    expect(mockUpdate).not.toHaveBeenCalled()
   })
 })
 

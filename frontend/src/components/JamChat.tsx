@@ -7,7 +7,7 @@ import { DATABASE_ID, COLLECTIONS } from '@/lib/appwrite/config'
 import { Query } from 'appwrite'
 import { mapDocToChatMessage } from '@/lib/appwrite/types'
 import { useAuth } from '@/components/providers/AuthProvider'
-import { reportMessage, getOlderChatMessages } from '@/lib/actions/chat'
+import { reportMessage, getOlderChatMessages, sendChatMessage, setJamMessagePinned } from '@/lib/actions/chat'
 import type { ChatMessage, ChatChannel } from '@/types'
 import ChatMessageGroups, { PinnedBanner } from '@/components/chat/ChatMessageGroups'
 import ChatComposer from '@/components/chat/ChatComposer'
@@ -16,6 +16,7 @@ import { useRealtimeChat } from '@/hooks/useRealtimeChat'
 interface JamChatProps {
   jamId: string
   initialMessages?: ChatMessage[]
+  canPin?: boolean
 }
 
 const CHAT_INITIAL_BATCH = 50 // taille de lot délibérée, cohérente avec « charger plus anciens »
@@ -32,12 +33,13 @@ const roleConfig = {
   user: null,
 }
 
-export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
+export default function JamChat({ jamId, initialMessages = [], canPin = false }: JamChatProps) {
   const { user } = useAuth()
   const [activeChannel, setActiveChannel] = useState<ChatChannel>('general')
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages)
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Chargement vers le haut (messages plus anciens)
   const [olderCursor, setOlderCursor] = useState<string | null>(null)
@@ -61,12 +63,14 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
       Query.orderDesc('$createdAt'),
       Query.limit(CHAT_INITIAL_BATCH),
     ]).then(res => {
+      // reset dans le callback async, jamais en synchrone dans l'effet (react-hooks/set-state-in-effect)
+      setError(null)
       const docs = res.documents
       setMessages(docs.map(mapDocToChatMessage).reverse())
       // Lot plein = peut-être d'autres messages plus anciens ; le plus ancien du lot sert d'ancre
       setOlderCursor(docs.length === CHAT_INITIAL_BATCH ? docs[docs.length - 1].$id : null)
       cursorChannelRef.current = activeChannel
-    }).catch(console.error)
+    }).catch(() => setError('Impossible de charger les messages.'))
   }, [jamId, activeChannel])
 
   // Charge le lot de messages plus anciens que `olderCursor` et préserve la position de
@@ -128,19 +132,15 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
   const sendMessage = async () => {
     if (!input.trim() || !user || sending) return
     setSending(true)
+    setError(null)
     try {
-      await databases.createDocument(DATABASE_ID, COLLECTIONS.CHAT_MESSAGES, 'unique()', {
-        jam_id: jamId,
-        channel: activeChannel,
-        author_id: user.$id,
-        author_name: user.name,
-        content: input.trim().slice(0, 2048),
-        role: 'user',
-        pinned: false,
-      })
-      setInput('')
-    } catch (err) {
-      console.error('Erreur envoi message', err)
+      const res = await sendChatMessage(jamId, activeChannel, input)
+      if (!res.success) setError(res.error ?? 'Erreur')
+      else setInput('')
+      // Pas d'ajout optimiste : le message revient par le realtime (dédupliqué par id)
+    } catch {
+      // Réseau coupé : la server action rejette avant de retourner un résultat
+      setError('Une erreur est survenue. Réessayez.')
     } finally {
       setSending(false)
     }
@@ -150,10 +150,28 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
 
   const handleReportMessage = (messageId: string) => {
     startReportTransition(async () => {
-      await reportMessage(messageId)
-      setMessages(prev =>
-        prev.map(m => m.id === messageId ? { ...m, reported: true } : m)
-      )
+      try {
+        const res = await reportMessage(messageId)
+        if (!res.success) return setError(res.error ?? 'Erreur')
+        setMessages(prev =>
+          prev.map(m => m.id === messageId ? { ...m, reported: true } : m)
+        )
+      } catch {
+        setError('Une erreur est survenue. Réessayez.')
+      }
+    })
+  }
+
+  const handleTogglePin = (messageId: string, pinned: boolean) => {
+    startReportTransition(async () => {
+      try {
+        const res = await setJamMessagePinned(messageId, pinned)
+        if (!res.success) return setError(res.error ?? 'Erreur')
+        // Le realtime .update propage aussi (useRealtimeChat) ; mise à jour locale pour la réactivité
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, pinned } : m))
+      } catch {
+        setError('Une erreur est survenue. Réessayez.')
+      }
     })
   }
 
@@ -213,7 +231,7 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
       </div>
 
       {/* Messages épinglés */}
-      <PinnedBanner messages={displayMessages} />
+      <PinnedBanner messages={displayMessages} onUnpin={canPin ? id => handleTogglePin(id, false) : undefined} />
 
       {/* Zone de messages */}
       <div
@@ -240,7 +258,12 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
           </div>
         )}
 
-        <ChatMessageGroups messages={displayMessages} canReport={!!user} onReport={handleReportMessage} />
+        <ChatMessageGroups
+          messages={displayMessages}
+          canReport={!!user}
+          onReport={handleReportMessage}
+          onPin={canPin ? id => handleTogglePin(id, true) : undefined}
+        />
 
         {filteredMessages.length === 0 && (
           <p className="text-center py-8 text-sm" style={{ color: 'var(--muted-foreground)' }}>
@@ -254,6 +277,11 @@ export default function JamChat({ jamId, initialMessages = [] }: JamChatProps) {
         className="p-3 border-t"
         style={{ borderColor: 'var(--border)', flexShrink: 0 }}
       >
+        {error && (
+          <p className="text-sm px-3 py-2 mb-2" style={{ background: 'rgba(239,35,60,.1)', color: 'var(--secondary)' }} role="alert">
+            {error}
+          </p>
+        )}
         {user ? (
           <ChatComposer
             value={input}

@@ -12,6 +12,7 @@ import { getTeamsByJam } from '@/lib/actions/teams'
 import { getProjectsByJam } from '@/lib/actions/projects'
 import { getChatMessages } from '@/lib/actions/chat'
 import { getUserTeams, getCurrentUser } from '@/lib/actions/dashboard'
+import { isAdminUser } from '@/lib/appwrite/guards'
 import { storageFileUrl } from '@/lib/appwrite/file-url'
 import { BUCKETS } from '@/lib/appwrite/config'
 import JamTeamsSection from './JamTeamsSection'
@@ -83,6 +84,11 @@ export default async function JamPage({ params }: Props) {
   ])
 
   if (!jam) notFound()
+
+  // Épinglage du chat : organisateur de la jam, sinon admin (fail-closed)
+  const canPinChat = currentUser
+    ? currentUser.id === jam.organizerId || await isAdminUser(currentUser.id)
+    : false
 
   async function loadMoreAnnouncements(cursor: string): Promise<{ items: Announcement[]; nextCursor: string | null }> {
     'use server'
@@ -432,7 +438,7 @@ export default async function JamPage({ params }: Props) {
               {/* Section Chat */}
               <section id="chat" aria-labelledby="chat-heading">
                 <h2 id="chat-heading" className="text-xl font-bold mb-4">Chat en direct</h2>
-                <JamChat jamId={jam.id} initialMessages={chatMessages} />
+                <JamChat jamId={jam.id} initialMessages={chatMessages} canPin={canPinChat} />
               </section>
             </div>
 

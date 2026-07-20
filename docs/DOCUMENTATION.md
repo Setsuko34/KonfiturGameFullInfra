@@ -660,17 +660,24 @@ admin/layout.tsx → équipe admin → notFound() si non-admin
 Chat de jam (public)                          Tchat d'équipe (privé)
 Client Component JamChat                      Client Component TeamChat
     │                                             │
-    │ databases.createDocument(...)               │ sendTeamChatMessage(...) ← Server Action
-    │ ← SDK Appwrite (browser)                    │   revérifie l'appartenance, échappe le
-    │                                             │   contenu, pose read(user:X) par membre
-    ▼                                             ▼
+    │ sendChatMessage(...) ← Server Action        │ sendTeamChatMessage(...) ← Server Action
+    │                                             │
+    └──────────────────┬──────────────────────────┘
+                       │
+       Les deux chemins sont identiques : identité dérivée de la session
+       serveur (jamais fournie par le client), contenu échappé et longueur
+       validée après échappement (sanitizeChatContent, src/lib/chat-utils.ts).
+       Seul le tchat d'équipe pose en plus une permission read(user:X) par
+       membre courant (row security de team_chat_messages).
+                       │
+                       ▼
 Appwrite (vérifie session + permissions → insère en MariaDB → publie dans Redis)
     │
     ▼
 Appwrite Realtime Worker (lit Redis → notifie les WebSocket subscribers autorisés)
     │
     ▼
-useRealtimeChat → setMessages() → React re-render (dédoublonné par id, pas d'ajout optimiste côté team)
+useRealtimeChat → setMessages() → React re-render (dédoublonné par id, pas d'ajout optimiste)
 ```
 
 ### Créer une guilde et s'inscrire à une jam

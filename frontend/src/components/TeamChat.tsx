@@ -35,10 +35,12 @@ export default function TeamChat({ teamId, currentUserId }: { teamId: string; cu
       Query.orderDesc('$createdAt'),
       Query.limit(CHAT_INITIAL_BATCH),
     ]).then(res => {
+      // reset dans le callback async, jamais en synchrone dans l'effet (react-hooks/set-state-in-effect)
+      setError(null)
       const docs = res.documents
       setMessages(docs.map(mapDocToTeamChatMessage).reverse())
       setOlderCursor(docs.length === CHAT_INITIAL_BATCH ? docs[docs.length - 1].$id : null)
-    }).catch(console.error)
+    }).catch(() => setError('Impossible de charger les messages.'))
   }, [teamId])
 
   const handleLoadOlder = async () => {
@@ -100,6 +102,9 @@ export default function TeamChat({ teamId, currentUserId }: { teamId: string; cu
       if (!res.success) setError(res.error ?? 'Erreur')
       else setInput('')
       // Pas d'ajout optimiste : le message revient par le realtime (dédupliqué par id)
+    } catch {
+      // Réseau coupé : la server action rejette avant de retourner un résultat
+      setError('Une erreur est survenue. Réessayez.')
     } finally {
       setSending(false)
     }
@@ -108,16 +113,26 @@ export default function TeamChat({ teamId, currentUserId }: { teamId: string; cu
   const [, startMsgActionTransition] = useTransition()
   const handleReport = (messageId: string) => {
     startMsgActionTransition(async () => {
-      await reportTeamMessage(messageId)
-      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reported: true } : m))
+      try {
+        const res = await reportTeamMessage(messageId)
+        if (!res.success) return setError(res.error ?? 'Erreur')
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reported: true } : m))
+      } catch {
+        setError('Une erreur est survenue. Réessayez.')
+      }
     })
   }
 
   const handleTogglePin = (messageId: string, pinned: boolean) => {
     startMsgActionTransition(async () => {
-      const res = await setTeamMessagePinned(messageId, pinned)
-      // Le realtime .update propage aussi ; mise à jour locale pour la réactivité
-      if (res.success) setMessages(prev => prev.map(m => m.id === messageId ? { ...m, pinned } : m))
+      try {
+        const res = await setTeamMessagePinned(messageId, pinned)
+        if (!res.success) return setError(res.error ?? 'Erreur')
+        // Le realtime .update propage aussi ; mise à jour locale pour la réactivité
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, pinned } : m))
+      } catch {
+        setError('Une erreur est survenue. Réessayez.')
+      }
     })
   }
 
