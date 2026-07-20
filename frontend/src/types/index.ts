@@ -21,6 +21,8 @@ export interface GameJam {
   organizerId: string
   coverImage?: string
   tags?: string[]
+  featured?: boolean
+  featuredOrder?: number
 }
 
 export interface TeamMember {
@@ -34,12 +36,13 @@ export interface TeamMember {
 
 export interface Team {
   id: string
-  jamId: string
+  jamIds: string[]       // tableau — [] = guilde pure
   name: string
   inviteCode: string
   leaderId: string
+  isSolo: boolean        // inscription solo = team technique de 1
   members: TeamMember[]
-  projectId?: string
+  // projectId supprimé — requête projects par team_id + jam_id
 }
 
 export interface Project {
@@ -53,9 +56,12 @@ export interface Project {
   repoUrl?: string
   submitted: boolean
   submissionDate?: Date
-  votesCount: number
+  likesCount: number
   coverImage?: string
   screenshotIds?: string[]
+  buildFileId?: string
+  reported?: boolean
+  placement?: number
 }
 
 export interface Comment {
@@ -89,6 +95,18 @@ export interface ChatMessage {
   content: string
   role: UserRole
   pinned: boolean
+  reported?: boolean
+  createdAt: Date
+}
+
+export interface TeamChatMessage {
+  id: string
+  teamId: string
+  authorId: string
+  authorName: string
+  content: string
+  pinned: boolean
+  reported?: boolean
   createdAt: Date
 }
 
@@ -108,4 +126,12 @@ export interface SiteStats {
   participants: number
   projectsSubmitted: number
   countriesRepresented: number
+}
+
+export interface UpdateJamData {
+  description?: string
+  rules?: string[]
+  prizes?: string[]
+  maxParticipants?: number
+  tags?: string[]
 }

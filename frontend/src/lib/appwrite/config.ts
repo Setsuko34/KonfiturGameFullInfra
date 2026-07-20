@@ -10,16 +10,26 @@ export const COLLECTIONS = {
   TEAM_MEMBERS: 'team_members',
   PROJECTS: 'projects',
   CHAT_MESSAGES: 'chat_messages',
+  TEAM_CHAT_MESSAGES: 'team_chat_messages',
   ANNOUNCEMENTS: 'announcements',
   COMMENTS: 'comments',
-  VOTES: 'votes',
+  LIKES: 'likes',
+  AUDIT_LOGS: 'audit_logs',
+  BANNED_IPS: 'banned_ips',
 } as const
 
 export const BUCKETS = {
   JAM_COVERS: 'jam-covers',
   PROJECT_ASSETS: 'project-assets',
   AVATARS: 'avatars',
+  PROJECT_BUILDS: 'project-builds',
 } as const
 
 export type CollectionId = typeof COLLECTIONS[keyof typeof COLLECTIONS]
 export type BucketId = typeof BUCKETS[keyof typeof BUCKETS]
+
+export const ADMIN_TEAM_ID = '69bc67f1003d025c931a'
+
+// Nombre max de jams à la une — doit rester aligné entre la garde de toggleJamFeatured
+// (admin.ts) et le Query.limit d'affichage sur la home (home.ts). Un seul 6, deux lecteurs.
+export const MAX_FEATURED_JAMS = 6

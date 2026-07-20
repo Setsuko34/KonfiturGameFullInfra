@@ -1,22 +1,57 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import { Users, Clock, Trophy, MessageSquare, Info, Megaphone } from 'lucide-react'
+import Link from 'next/link'
+import { Users, Clock, Trophy, MessageSquare, Info, Megaphone, ChevronDown } from 'lucide-react'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
-import CountdownTimer from '@/components/CountdownTimer'
 import JamChat from '@/components/JamChat'
-import { mockJams, mockAnnouncements, mockChatMessages } from '@/lib/mockData'
+import LoadMoreList from '@/components/LoadMoreList'
+import { getJamById, getAnnouncementsByJam } from '@/lib/actions/jams'
+import { generateJamJsonLd, serializeJsonLd, truncateDescription } from '@/lib/seo'
+import { getTeamsByJam } from '@/lib/actions/teams'
+import { getProjectsByJam } from '@/lib/actions/projects'
+import { getChatMessages } from '@/lib/actions/chat'
+import { getUserTeams, getCurrentUser } from '@/lib/actions/dashboard'
+import { isAdminUser } from '@/lib/appwrite/guards'
+import { storageFileUrl } from '@/lib/appwrite/file-url'
+import { BUCKETS } from '@/lib/appwrite/config'
+import JamTeamsSection from './JamTeamsSection'
+import JamCountdownClient from './JamCountdownClient'
+import JamAnnouncementsList from './JamAnnouncementsList'
+import type { Announcement } from '@/types'
 
 interface Props {
-  params: { jamId: string }
+  params: Promise<{ jamId: string }>
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const jam = mockJams.find(j => j.id === params.jamId)
-  if (!jam) return { title: 'Jam introuvable' }
+  const { jamId } = await params
+  const jam = await getJamById(jamId)
+  if (!jam) return { title: 'Jam introuvable', robots: { index: false } }
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr'
+  const ogUrl = `/og?type=jam&title=${encodeURIComponent(jam.title)}&theme=${encodeURIComponent(jam.theme)}&status=${jam.status}`
+
   return {
     title: jam.title,
-    description: `${jam.theme} — ${jam.description.slice(0, 160)}`,
+    description: truncateDescription(jam.description),
+    keywords: jam.tags ?? [],
+    openGraph: {
+      title: jam.title,
+      description: truncateDescription(jam.description),
+      type: 'website',
+      url: `${siteUrl}/jam/${jam.id}`,
+      images: [{ url: ogUrl, width: 1200, height: 630, alt: jam.title }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: jam.title,
+      description: truncateDescription(jam.description),
+      images: [ogUrl],
+    },
+    alternates: {
+      canonical: `/jam/${jam.id}`,
+    },
   }
 }
 
@@ -26,13 +61,72 @@ const statusConfig = {
   ended: { label: 'TERMINÉ', color: 'var(--muted-foreground)' },
 }
 
-export default function JamPage({ params }: Props) {
-  const jam = mockJams.find(j => j.id === params.jamId)
+export default async function JamPage({ params }: Props) {
+  const { jamId } = await params
+
+  // Tenter de récupérer l'utilisateur connecté (peut échouer si non connecté)
+  let currentUser: { id: string; name: string } | null = null
+  let userTeamsData: Awaited<ReturnType<typeof getUserTeams>> = []
+  try {
+    const [u, t] = await Promise.all([getCurrentUser(), getUserTeams()])
+    currentUser = { id: u.$id, name: u.name }
+    userTeamsData = t
+  } catch {
+    // Non connecté — currentUser reste null
+  }
+
+  const [jam, { announcements, nextCursor: announcementsNextCursor }, teams, projects, chatMessages] = await Promise.all([
+    getJamById(jamId),
+    getAnnouncementsByJam(jamId),
+    getTeamsByJam(jamId),
+    getProjectsByJam(jamId),
+    getChatMessages(jamId, 'general'),
+  ])
+
   if (!jam) notFound()
 
-  const status = statusConfig[jam.status]
-  const announcements = mockAnnouncements.filter(a => a.jamId === jam.id)
-  const chatMessages = mockChatMessages.filter(m => m.jamId === jam.id)
+  // Épinglage du chat : organisateur de la jam, sinon admin (fail-closed)
+  const canPinChat = currentUser
+    ? currentUser.id === jam.organizerId || await isAdminUser(currentUser.id)
+    : false
+
+  async function loadMoreAnnouncements(cursor: string): Promise<{ items: Announcement[]; nextCursor: string | null }> {
+    'use server'
+    const res = await getAnnouncementsByJam(jamId, cursor)
+    return { items: res.announcements, nextCursor: res.nextCursor }
+  }
+
+  // Team de l'user dans cette jam
+  const userTeamInThisJam = currentUser
+    ? (userTeamsData.find(({ team }) => team.jamIds.includes(jamId))?.team ?? null)
+    : null
+
+  // Teams dont l'user est leader, pas encore inscrites à cette jam
+  const leaderTeamsNotInJam = currentUser
+    ? userTeamsData
+        .filter(({ isLeader, team }) => isLeader && !team.isSolo && !team.jamIds.includes(jamId))
+        .map(({ team }) => ({ id: team.id, name: team.name }))
+    : []
+
+  // Page publique : le code d'invitation ne doit jamais être servi aux visiteurs
+  // (getTeamsByJam renvoie le code brut, contrairement à getTeamById qui le blanchit déjà)
+  const publicTeams = teams.map(t => ({ ...t, inviteCode: '' }))
+
+  const now = new Date()
+  const effectiveStatus: 'upcoming' | 'ongoing' | 'ended' =
+    now >= jam.endDate ? 'ended' : now >= jam.startDate ? 'ongoing' : 'upcoming'
+
+  const status = statusConfig[effectiveStatus]
+
+  // Podium désigné par l'organisateur (rang 1er→3e)
+  const podium = projects
+    .filter(p => (p.placement ?? 0) > 0)
+    .sort((a, b) => (a.placement ?? 0) - (b.placement ?? 0))
+  const teamNames = Object.fromEntries(teams.map(t => [t.id, t.name]))
+
+  // Compteur dérivé des inscrits réels (équipes + solos) : le champ stocké
+  // jam.participants n'est jamais mis à jour par les inscriptions
+  const participantsCount = teams.reduce((sum, t) => sum + t.members.length, 0)
 
   const tabs = [
     { id: 'info', label: 'Informations', icon: Info },
@@ -45,6 +139,13 @@ export default function JamPage({ params }: Props) {
   return (
     <>
       <Header />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          // nosemgrep: typescript.react.security.audit.react-dangerouslysetinnerhtml.react-dangerouslysetinnerhtml -- JSON-LD sérialisé avec échappement de `<` (serializeJsonLd)
+          __html: serializeJsonLd(generateJamJsonLd(jam, process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr')),
+        }}
+      />
       <main id="main-content">
         {/* Hero de la jam */}
         <div
@@ -85,7 +186,7 @@ export default function JamPage({ params }: Props) {
                   <div className="flex items-center gap-2">
                     <Users size={14} style={{ color: 'var(--muted-foreground)' }} aria-hidden="true" />
                     <span className="label-tech" style={{ color: 'var(--muted-foreground)' }}>
-                      {jam.participants.toLocaleString('fr-FR')} participants
+                      {participantsCount.toLocaleString('fr-FR')} participant{participantsCount !== 1 ? 's' : ''}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -98,18 +199,11 @@ export default function JamPage({ params }: Props) {
               </div>
 
               {/* Countdown */}
-              {jam.status !== 'ended' && (
-                <div
-                  className="p-6 border w-full lg:w-auto lg:min-w-[280px]"
-                  style={{ background: 'var(--surface-elevated)', borderColor: 'var(--border)' }}
-                >
-                  <CountdownTimer
-                    targetDate={jam.status === 'ongoing' ? jam.endDate : jam.startDate}
-                    size="md"
-                    label={jam.status === 'ongoing' ? 'TEMPS RESTANT' : 'COMMENCE DANS'}
-                  />
-                </div>
-              )}
+              <JamCountdownClient
+                initialStatus={effectiveStatus}
+                startDate={jam.startDate}
+                endDate={jam.endDate}
+              />
             </div>
           </div>
         </div>
@@ -207,56 +301,144 @@ export default function JamPage({ params }: Props) {
                 </div>
               </section>
 
+              {/* Podium — encart mis en avant dès qu'un rang est attribué */}
+              {podium.length > 0 && (
+                <section
+                  aria-labelledby="podium-heading"
+                  className="p-5 border"
+                  style={{
+                    background: 'var(--card)',
+                    borderColor: 'var(--primary)',
+                    borderLeft: '3px solid var(--primary)',
+                  }}
+                >
+                  <p className="label-tech mb-1" style={{ color: 'var(--primary)' }}>PODIUM</p>
+                  <h2 id="podium-heading" className="text-xl font-bold mb-4">
+                    Palmarès de la jam
+                  </h2>
+                  <ol className="space-y-3">
+                    {podium.map(p => (
+                      <li key={p.id} className="flex items-center gap-3">
+                        <span
+                          className="label-tech w-10 flex-shrink-0"
+                          style={{ color: 'var(--success)' }}
+                        >
+                          ★ {p.placement}{p.placement === 1 ? 'er' : 'e'}
+                        </span>
+                        <Link
+                          href={`/project/${p.id}`}
+                          className="font-semibold text-sm truncate transition-opacity hover:opacity-80"
+                          style={{ color: 'var(--primary)' }}
+                        >
+                          {p.title}
+                        </Link>
+                        {teamNames[p.teamId] && (
+                          <span className="text-xs flex-shrink-0" style={{ color: 'var(--muted-foreground)' }}>
+                            par {teamNames[p.teamId]}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
+
+              {/* Section Équipes */}
+              <JamTeamsSection
+                jamId={jam.id}
+                jamTitle={jam.title}
+                jamStatus={effectiveStatus}
+                jamType={jam.type}
+                startDate={jam.startDate}
+                teams={publicTeams}
+                currentUser={currentUser}
+                userTeamInThisJam={userTeamInThisJam}
+                leaderTeamsNotInJam={leaderTeamsNotInJam}
+              />
+
+              {/* Section Projets */}
+              <section id="projects" aria-labelledby="projects-heading">
+                <details open>
+                  <summary className="flex items-center justify-between gap-2 mb-4 min-h-11 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    <h2 id="projects-heading" className="text-xl font-bold">
+                      Projets soumis ({projects.length})
+                    </h2>
+                    <ChevronDown
+                      size={20}
+                      className="chevron transition-transform duration-200 flex-shrink-0"
+                      style={{ color: 'var(--muted-foreground)' }}
+                      aria-hidden="true"
+                    />
+                  </summary>
+                  {projects.length > 0 ? (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {projects.map(project => (
+                        <Link
+                          key={project.id}
+                          href={`/project/${project.id}`}
+                          className="p-4 border block"
+                          style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                        >
+                          {project.coverImage && (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={storageFileUrl(BUCKETS.PROJECT_ASSETS, project.coverImage)}
+                              alt="" aria-hidden="true"
+                              className="w-full h-28 object-cover border-b mb-3"
+                              style={{ borderColor: 'var(--border)' }} />
+                          )}
+                          <p className="font-semibold mb-1">{project.title}</p>
+                          <p
+                            className="text-sm mb-3 line-clamp-2"
+                            style={{ color: 'var(--muted-foreground)' }}
+                          >
+                            {project.description}
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <span className="label-tech" style={{ color: 'var(--primary)' }}>
+                              {project.likesCount} like{project.likesCount !== 1 ? 's' : ''}
+                            </span>
+                            {project.placement ? (
+                              <span className="label-tech" style={{ color: 'var(--success)' }}>
+                                ★ {project.placement}{project.placement === 1 ? 'er' : 'e'}
+                              </span>
+                            ) : null}
+                          </div>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
+                      Aucun projet soumis pour l&apos;instant.
+                    </p>
+                  )}
+                </details>
+              </section>
+
               {/* Section Annonces */}
               <section id="announcements" aria-labelledby="ann-heading">
-                <h2 id="ann-heading" className="text-xl font-bold mb-4">Annonces</h2>
-                {announcements.length > 0 ? (
-                  <div className="space-y-3">
-                    {announcements.map(ann => (
-                      <article
-                        key={ann.id}
-                        className="p-5 border"
-                        style={{
-                          background: 'var(--card)',
-                          borderColor: ann.important ? 'var(--secondary)' : 'var(--border)',
-                          borderLeft: ann.important ? `3px solid var(--secondary)` : undefined,
-                        }}
-                        aria-label={ann.important ? `Annonce importante : ${ann.title}` : ann.title}
-                      >
-                        {ann.important && (
-                          <p className="label-tech mb-2" style={{ color: 'var(--secondary)' }}>
-                            IMPORTANT
-                          </p>
-                        )}
-                        <h3 className="font-semibold mb-2">{ann.title}</h3>
-                        <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                          {ann.content}
-                        </p>
-                        <time
-                          className="label-tech mt-3 block"
-                          style={{ color: 'var(--muted-foreground)' }}
-                          dateTime={ann.createdAt.toISOString()}
-                        >
-                          {ann.createdAt.toLocaleDateString('fr-FR', {
-                            day: 'numeric',
-                            month: 'long',
-                            year: 'numeric',
-                          })}
-                        </time>
-                      </article>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm" style={{ color: 'var(--muted-foreground)' }}>
-                    Aucune annonce pour l&apos;instant.
-                  </p>
-                )}
+                <details open>
+                  <summary className="flex items-center justify-between gap-2 mb-4 min-h-11 cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                    <h2 id="ann-heading" className="text-xl font-bold">Annonces</h2>
+                    <ChevronDown
+                      size={20}
+                      className="chevron transition-transform duration-200 flex-shrink-0"
+                      style={{ color: 'var(--muted-foreground)' }}
+                      aria-hidden="true"
+                    />
+                  </summary>
+                  <LoadMoreList
+                    initialItems={announcements}
+                    initialCursor={announcementsNextCursor}
+                    loadMore={loadMoreAnnouncements}
+                    List={JamAnnouncementsList}
+                  />
+                </details>
               </section>
 
               {/* Section Chat */}
               <section id="chat" aria-labelledby="chat-heading">
                 <h2 id="chat-heading" className="text-xl font-bold mb-4">Chat en direct</h2>
-                <JamChat jamId={jam.id} initialMessages={chatMessages} />
+                <JamChat jamId={jam.id} initialMessages={chatMessages} canPin={canPinChat} />
               </section>
             </div>
 

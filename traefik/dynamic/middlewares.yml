@@ -11,15 +11,15 @@ http:
         customFrameOptionsValue: "SAMEORIGIN"
         referrerPolicy: "strict-origin-when-cross-origin"
         permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
+        # Domaine de prod en dur : le file provider ne substitue pas les variables
+        # d'env. Sans impact en dev, où aucun router n'applique ce middleware.
         contentSecurityPolicy: >
           default-src 'self';
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
           font-src 'self' https://fonts.gstatic.com;
-          img-src 'self' data: https://images.unsplash.com https://cloud.appwrite.io;
-          connect-src 'self' https://api.localhost wss://api.localhost;
-          # TODO PROD: remplacer api.localhost par le vrai domaine (ex: api.mondomaine.fr)
-          # Traefik file provider ne substitue pas les variables d'env — modification manuelle requise
+          img-src 'self' data: https://images.unsplash.com https://cloud.appwrite.io https://api.konfiturgame.fr;
+          connect-src 'self' https://api.konfiturgame.fr wss://api.konfiturgame.fr;
           frame-ancestors 'none';
 
     rate-limit:
@@ -34,10 +34,19 @@ http:
         burst: 100
         period: 1m
 
+    # Anti brute-force login (issue #67) : limite stricte par IP sur les
+    # surfaces d'authentification. 10 tentatives/min, tolérance rafale 20.
+    auth-rate-limit:
+      rateLimit:
+        average: 10
+        burst: 20
+        period: 1m
+
     compress-response:
       compress: {}
 
+    # Identifiants dans un fichier htpasswd non versionné, monté par le compose.
+    # Générer : htpasswd -nB admin > traefik/dashboard-users
     auth-dashboard:
       basicAuth:
-        users:
-          - "admin:$2y$05$RdUYG6fvB2EI8Oiz9Q4r2.JXOzPhBxz.fFbBSmdNY3F1ImeGyx5Si"
+        usersFile: "/etc/traefik/dashboard-users"

@@ -1,19 +1,26 @@
 import type { Models } from 'appwrite'
-import type { GameJam, Team, TeamMember, Project, ChatMessage, Announcement, Comment } from '@/types'
+import type { GameJam, Team, TeamMember, Project, ChatMessage, Announcement, Comment, TeamChatMessage } from '@/types'
+import { computeJamStatus } from '@/lib/jam-status'
 
 // Mappeurs Appwrite Document → Types applicatifs
 
-export function mapDocToGameJam(doc: Models.Document): GameJam {
+// Depuis appwrite 23 / node-appwrite 22, Models.Document est strict (champs $
+// uniquement) ; les attributs de collection passent par la signature d'index.
+export type AppwriteDoc = Models.Document & Record<string, any>
+
+export function mapDocToGameJam(doc: AppwriteDoc): GameJam {
+  const startDate = new Date(doc.start_date)
+  const endDate = new Date(doc.end_date)
   return {
     id: doc.$id,
     title: doc.title,
     slug: doc.slug,
     theme: doc.theme,
     description: doc.description,
-    status: doc.status,
+    status: computeJamStatus(startDate, endDate),
     type: doc.type,
-    startDate: new Date(doc.start_date),
-    endDate: new Date(doc.end_date),
+    startDate,
+    endDate,
     duration: doc.duration,
     participants: doc.participants ?? 0,
     maxParticipants: doc.max_participants,
@@ -22,23 +29,25 @@ export function mapDocToGameJam(doc: Models.Document): GameJam {
     tags: doc.tags ?? [],
     organizer: doc.organizer ?? '',
     organizerId: doc.organizer_id,
-    coverImage: doc.cover_image_id,
+    coverImage: doc.cover_image_id ?? undefined,
+    featured: doc.featured ?? false,
+    featuredOrder: doc.featured_order,
   }
 }
 
-export function mapDocToTeam(doc: Models.Document): Team {
+export function mapDocToTeam(doc: AppwriteDoc): Team {
   return {
     id: doc.$id,
-    jamId: doc.jam_id,
+    jamIds: doc.jam_ids ?? [],
     name: doc.name,
     inviteCode: doc.invite_code,
     leaderId: doc.leader_id,
+    isSolo: doc.is_solo ?? false,
     members: [],
-    projectId: doc.project_id,
   }
 }
 
-export function mapDocToTeamMember(doc: Models.Document): TeamMember {
+export function mapDocToTeamMember(doc: AppwriteDoc): TeamMember {
   return {
     id: doc.$id,
     userId: doc.user_id,
@@ -49,7 +58,7 @@ export function mapDocToTeamMember(doc: Models.Document): TeamMember {
   }
 }
 
-export function mapDocToProject(doc: Models.Document): Project {
+export function mapDocToProject(doc: AppwriteDoc): Project {
   return {
     id: doc.$id,
     jamId: doc.jam_id,
@@ -61,13 +70,16 @@ export function mapDocToProject(doc: Models.Document): Project {
     repoUrl: doc.repo_url,
     submitted: doc.submitted ?? false,
     submissionDate: doc.submission_date ? new Date(doc.submission_date) : undefined,
-    votesCount: doc.votes_count ?? 0,
-    coverImage: doc.cover_image_id,
+    likesCount: doc.likes_count ?? 0,
+    coverImage: doc.cover_image_id ?? undefined,
     screenshotIds: doc.screenshot_ids ?? [],
+    buildFileId: doc.build_file_id ?? undefined,
+    reported: doc.reported ?? false,
+    placement: doc.placement ?? 0,
   }
 }
 
-export function mapDocToChatMessage(doc: Models.Document): ChatMessage {
+export function mapDocToChatMessage(doc: AppwriteDoc): ChatMessage {
   return {
     id: doc.$id,
     jamId: doc.jam_id,
@@ -77,11 +89,25 @@ export function mapDocToChatMessage(doc: Models.Document): ChatMessage {
     content: doc.content,
     role: doc.role,
     pinned: doc.pinned ?? false,
+    reported: doc.reported ?? false,
     createdAt: new Date(doc.$createdAt),
   }
 }
 
-export function mapDocToAnnouncement(doc: Models.Document): Announcement {
+export function mapDocToTeamChatMessage(doc: AppwriteDoc): TeamChatMessage {
+  return {
+    id: doc.$id,
+    teamId: doc.team_id,
+    authorId: doc.author_id,
+    authorName: doc.author_name,
+    content: doc.content,
+    pinned: doc.pinned ?? false,
+    reported: doc.reported ?? false,
+    createdAt: new Date(doc.$createdAt),
+  }
+}
+
+export function mapDocToAnnouncement(doc: AppwriteDoc): Announcement {
   return {
     id: doc.$id,
     jamId: doc.jam_id,
@@ -93,7 +119,7 @@ export function mapDocToAnnouncement(doc: Models.Document): Announcement {
   }
 }
 
-export function mapDocToComment(doc: Models.Document): Comment {
+export function mapDocToComment(doc: AppwriteDoc): Comment {
   return {
     id: doc.$id,
     projectId: doc.project_id,

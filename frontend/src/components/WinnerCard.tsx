@@ -21,7 +21,7 @@ export default function WinnerCard({ winner }: WinnerCardProps) {
         background: 'var(--card)',
         borderColor: 'var(--border)',
       }}
-      aria-label={`${placement.label} place — ${winner.projectTitle} par ${winner.teamName}`}
+      aria-label={`${placement.label} place, ${winner.projectTitle} par ${winner.teamName}`}
     >
       {/* Badge placement */}
       <div

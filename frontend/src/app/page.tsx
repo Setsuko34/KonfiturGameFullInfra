@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { Metadata } from 'next'
-import { Users, Trophy, Gamepad2, Globe, ArrowRight, Zap } from 'lucide-react'
+import { Users, Trophy, Gamepad2, Globe, ArrowRight, Zap, Heart } from 'lucide-react'
+import { generateOrganizationJsonLd } from '@/lib/seo'
 import Header from '@/components/Header'
 import Footer from '@/components/Footer'
 import JamCard from '@/components/JamCard'
@@ -8,21 +9,36 @@ import MarqueeStats from '@/components/MarqueeStats'
 import WinnerCard from '@/components/WinnerCard'
 import StatBlock from '@/components/StatBlock'
 import CountdownTimer from '@/components/CountdownTimer'
-import { mockJams, mockWinners, mockStats } from '@/lib/mockData'
+import { getHomePageData } from '@/lib/actions/home'
+import { storageFileUrl } from '@/lib/appwrite/file-url'
+import { BUCKETS } from '@/lib/appwrite/config'
 
 export const metadata: Metadata = {
-  title: 'KonfiturGame — Plateforme Game Jam',
+  title: 'KonfiturGame - Plateforme Game Jam',
   description: 'La plateforme française de game jams. Crée, jam, ship.',
+  openGraph: {
+    title: 'KonfiturGame - Plateforme Game Jam',
+    description: 'La plateforme française de game jams. Crée, jam, ship.',
+    images: [{ url: '/og?title=CRÉE.+JAM.+SHIP_', width: 1200, height: 630, alt: 'KonfiturGame' }],
+  },
+  alternates: { canonical: '/' },
 }
 
-export default function HomePage() {
-  const ongoingJam = mockJams.find(j => j.status === 'ongoing')
-  const upcomingJams = mockJams.filter(j => j.status === 'upcoming')
+export default async function HomePage() {
+  const { ongoingJam, upcomingJams, winners, popularProjects, stats } = await getHomePageData()
 
   return (
     <>
       <Header />
-      <main id="main-content" className="grid-overlay noise">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(generateOrganizationJsonLd(
+            process.env.NEXT_PUBLIC_SITE_URL || 'https://konfiturgame.fr'
+          )),
+        }}
+      />
+      <main id="main-content">
         {/* ═══ HERO ═══ */}
         <section
           className="relative px-4 sm:px-6 lg:px-8 pt-20 pb-16 text-center overflow-hidden"
@@ -76,7 +92,7 @@ export default function HomePage() {
         </section>
 
         {/* ═══ MARQUEE ═══ */}
-        <MarqueeStats stats={mockStats} />
+        <MarqueeStats stats={stats} />
 
         {/* ═══ JAM EN COURS (live widget) ═══ */}
         {ongoingJam && (
@@ -204,27 +220,27 @@ export default function HomePage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <StatBlock
                 icon={Gamepad2}
-                value={mockStats.jamsOrganized}
+                value={stats.jamsOrganized}
                 label="JAMS ORGANISÉES"
                 trend="+12%"
               />
               <StatBlock
                 icon={Users}
-                value={mockStats.participants}
+                value={stats.participants}
                 label="PARTICIPANTS"
                 trend="+24%"
                 accentColor="var(--secondary)"
               />
               <StatBlock
                 icon={Trophy}
-                value={mockStats.projectsSubmitted}
+                value={stats.projectsSubmitted}
                 label="PROJETS SOUMIS"
                 trend="+18%"
                 accentColor="var(--success)"
               />
               <StatBlock
                 icon={Globe}
-                value={mockStats.countriesRepresented}
+                value={stats.countriesRepresented}
                 label="PAYS REPRÉSENTÉS"
                 trend="+3"
                 accentColor="var(--primary)"
@@ -232,6 +248,54 @@ export default function HomePage() {
             </div>
           </div>
         </section>
+
+        {/* ═══ PROJETS POPULAIRES ═══ */}
+        {popularProjects.length > 0 && (
+          <section
+            className="px-4 sm:px-6 lg:px-8 py-16 border-b"
+            style={{ borderColor: 'var(--border)' }}
+            aria-labelledby="popular-heading"
+          >
+            <div className="max-w-7xl mx-auto">
+              <p className="label-tech mb-2" style={{ color: 'var(--muted-foreground)' }}>
+                POPULARITÉ
+              </p>
+              <h2 id="popular-heading" className="text-2xl font-bold mb-8">
+                Projets les plus aimés
+              </h2>
+              <ul className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {popularProjects.map(p => (
+                  <li key={p.id}>
+                    <Link
+                      href={`/project/${p.id}`}
+                      className="block p-5 border h-full transition-opacity hover:opacity-80"
+                      style={{ background: 'var(--card)', borderColor: 'var(--border)' }}
+                    >
+                      {p.coverImage && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={storageFileUrl(BUCKETS.PROJECT_ASSETS, p.coverImage)}
+                          alt="" aria-hidden="true"
+                          className="w-full h-28 object-cover border-b mb-3"
+                          style={{ borderColor: 'var(--border)' }} />
+                      )}
+                      <p className="font-semibold mb-2 truncate">{p.title}</p>
+                      <p className="text-sm mb-3" style={{ color: 'var(--muted-foreground)' }}>
+                        {p.technologies.slice(0, 3).join(', ')}
+                      </p>
+                      <span
+                        className="inline-flex items-center gap-1 text-sm font-medium"
+                        style={{ color: 'var(--secondary)' }}
+                      >
+                        <Heart size={14} aria-hidden="true" fill="currentColor" />
+                        {p.likesCount} like{p.likesCount !== 1 ? 's' : ''}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+        )}
 
         {/* ═══ HALL OF FAME ═══ */}
         <section
@@ -247,7 +311,7 @@ export default function HomePage() {
               Gagnants des dernières jams
             </h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {mockWinners.map(winner => (
+              {winners.map(winner => (
                 <WinnerCard key={winner.id} winner={winner} />
               ))}
             </div>

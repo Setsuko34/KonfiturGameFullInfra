@@ -1,11 +1,12 @@
 import Link from 'next/link'
 import { Gamepad2, CheckCircle } from 'lucide-react'
+import FooterCTA from "@/components/client/FooterCTA";
 
 const footerLinks = {
   Plateforme: [
     { label: 'Explorer les jams', href: '/explore' },
     { label: 'Créer une jam', href: '/dashboard' },
-    { label: 'Classements', href: '/explore?tab=rankings' },
+    { label: 'Classements', href: '/#winners-heading' },
   ],
   Communauté: [
     { label: 'Discord', href: '#' },
@@ -15,6 +16,7 @@ const footerLinks = {
   Légal: [
     { label: 'Conditions d\'utilisation', href: '/legal/terms' },
     { label: 'Politique de confidentialité', href: '/legal/privacy' },
+    { label: 'Mentions légales', href: '/legal/mentions-legales' },
     { label: 'Contact', href: 'mailto:contact@konfiturgame.fr' },
   ],
 }
@@ -31,33 +33,7 @@ export default function Footer() {
         borderColor: 'var(--border)',
       }}
     >
-      {/* CTA Footer */}
-      <div
-        className="border-b py-16 px-4 text-center"
-        style={{ borderColor: 'var(--border)' }}
-      >
-        <p className="label-tech mb-4" style={{ color: 'var(--primary)' }}>
-          REJOINS LA COMMUNAUTÉ
-        </p>
-        <h2 className="text-3xl md:text-4xl font-bold mb-4">
-          Prêt à créer quelque chose d&apos;incroyable ?
-        </h2>
-        <p className="mb-8 text-lg max-w-xl mx-auto" style={{ color: 'var(--muted-foreground)' }}>
-          Des centaines de développeurs et créatifs t&apos;attendent.
-          Inscris-toi gratuitement et rejoins la prochaine jam.
-        </p>
-        <Link
-          href="/auth/register"
-          className="inline-block px-8 py-4 font-bold text-lg transition-opacity hover:opacity-90"
-          style={{
-            background: 'var(--primary)',
-            color: 'var(--primary-foreground)',
-          }}
-        >
-          S&apos;inscrire gratuitement
-        </Link>
-      </div>
-
+      <FooterCTA/>
       {/* Liens */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-12">
@@ -67,7 +43,7 @@ export default function Footer() {
               href="/"
               className="flex items-center gap-2 font-bold text-lg mb-3"
               style={{ color: 'var(--foreground)' }}
-              aria-label="KonfiturGame — Accueil"
+              aria-label="KonfiturGame, Accueil"
             >
               <Gamepad2 size={20} style={{ color: 'var(--primary)' }} aria-hidden="true" />
               <span>Konfitur<span style={{ color: 'var(--primary)' }}>Game</span></span>
@@ -96,7 +72,7 @@ export default function Footer() {
               </h3>
               <ul className="space-y-2">
                 {links.map(link => (
-                  <li key={link.href}>
+                  <li key={link.label}>
                     <Link
                       href={link.href}
                       className="text-sm transition-colors hover:underline"

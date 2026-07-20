@@ -13,6 +13,7 @@
   --primary-foreground: #FFFFFF;
   --primary-muted: #2A3A7A;
   --secondary: #EF233C;
+  --error: #FF6B81; /* Texte d'erreur — ratio ≈7:1 sur fond composité (WCAG 1.4.3 AA, issue #50) */
   --secondary-foreground: #FFFFFF;
   --success: #34D399;
   --success-foreground: #0C1018;
@@ -36,6 +37,11 @@
   --sidebar-accent-foreground: #F0EDE8;
   --sidebar-border: #1E2736;
   --sidebar-ring: #4F6AFF;
+  /* Admin panel — couleurs spécifiques au backoffice */
+  --admin-sidebar-bg: #0A0E16;
+  --admin-accent-border: rgba(239, 35, 60, 0.15);
+  --admin-active-bg: rgba(239, 35, 60, 0.12);
+  --admin-badge-border: rgba(239, 35, 60, 0.3);
   --font-weight-medium: 600;
   --font-weight-normal: 400;
 }
@@ -278,6 +284,21 @@ body {
 a,
 button {
   transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
+}
+
+/* ═══ Curseurs (issue #55) — Tailwind v4 preflight met cursor: default ═══ */
+button:not(:disabled),
+[role='button']:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+/* ═══ Sections repliables (details/summary) ═══ */
+details[open] summary .chevron {
+  transform: rotate(180deg);
 }
 
 /* ═══ Utilitaires CSS personnalisés ═══ */

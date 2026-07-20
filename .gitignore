@@ -22,6 +22,11 @@ traefik/acme/*.json
 *.pfx
 
 # ═══════════════════════════════════════════════
+# BACKUPS — données volumineuses, ne pas commiter
+# ═══════════════════════════════════════════════
+backups/
+
+# ═══════════════════════════════════════════════
 # NODE / PNPM
 # ═══════════════════════════════════════════════
 node_modules/
@@ -36,6 +41,31 @@ frontend/out/
 # ═══════════════════════════════════════════════
 dist/
 build/
+*.tsbuildinfo
+
+# ═══════════════════════════════════════════════
+# TESTS E2E PLAYWRIGHT — artefacts générés à chaque run
+# ═══════════════════════════════════════════════
+frontend/test-results/
+frontend/playwright-report/
+
+# ═══════════════════════════════════════════════
+# TESTS UNITAIRES — rapport de couverture Vitest
+# ═══════════════════════════════════════════════
+frontend/coverage/
+
+# ═══════════════════════════════════════════════
+# CLAUDE CODE — config locale (chemins machine-spécifiques)
+# ═══════════════════════════════════════════════
+.claude/settings.local.json
+.claude/*
+.agents
+.mcp.json
+
+# ═══════════════════════════════════════════════
+# CLAUDE — fichiers locaux spécifiques à la machine
+# ═══════════════════════════════════════════════
+.claude/settings.local.json
 
 # ═══════════════════════════════════════════════
 # IDE
@@ -72,3 +102,23 @@ temp/
 # ═══════════════════════════════════════════════
 volumes/
 data/
+
+# ═══════════════════════════════════════════════
+# APPWRITE CLI (cache local — ne jamais commiter)
+# appwrite.json doit être commité (config projet)
+# ═══════════════════════════════════════════════
+.appwrite/
+
+# ═══════════════════════════════════════════════
+# CI — fichiers temporaires générés localement
+# ═══════════════════════════════════════════════
+/tmp/
+.env.ci
+trivy-results.sarif
+trivy-fs-results.sarif
+/docs/superpowers/
+/docs/Doc/
+.obsidian
+
+# Identifiants du dashboard Traefik (htpasswd) — jamais versionnés
+traefik/dashboard-users
