@@ -556,8 +556,7 @@
         {
             "$id": "chat_messages",
             "$permissions": [
-                "read(\"any\")",
-                "create(\"users\")"
+                "read(\"any\")"
             ],
             "databaseId": "konfitur-db",
             "name": "chat_messages",
