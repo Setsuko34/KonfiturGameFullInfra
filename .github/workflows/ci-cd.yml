@@ -36,6 +36,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm type-check
+      # Relit la config de prod, que rien n'exerce en local (le dev contourne
+      # Traefik pour le frontend et n'applique aucun middleware).
+      - name: Cohérence de la config de production
+        working-directory: .
+        run: bash scripts/ci/prod-config-check.sh .
 
   tests:
     name: Tests unitaires

@@ -119,3 +119,6 @@ trivy-fs-results.sarif
 /docs/superpowers/
 /docs/Doc/
 .obsidian
+
+# Identifiants du dashboard Traefik (htpasswd) — jamais versionnés
+traefik/dashboard-users

@@ -33,6 +33,10 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      # Identifiants du dashboard, hors Git (voir .gitignore). Fichier htpasswd
+      # plutôt qu'une variable : le hash bcrypt contient des $ que Docker Compose
+      # interpréterait comme des variables et remplacerait par du vide.
+      - ./traefik/dashboard-users:/etc/traefik/dashboard-users:ro
       - traefik-acme:/etc/traefik/acme
     networks:
       - konfitur-net
@@ -43,7 +47,7 @@ services:
       - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
       - "traefik.http.routers.traefik-dashboard.tls.certresolver=letsencrypt"
       - "traefik.http.routers.traefik-dashboard.service=api@internal"
-      - "traefik.http.routers.traefik-dashboard.middlewares=auth-dashboard,security-headers"
+      - "traefik.http.routers.traefik-dashboard.middlewares=auth-dashboard@file,security-headers@file"
 
   # ════════════════════════════════════════
   # FRONTEND — Next.js
@@ -64,6 +68,9 @@ services:
       - NEXT_PUBLIC_SITE_URL=https://${DOMAIN}
       - APPWRITE_INTERNAL_ENDPOINT=http://appwrite/v1   # Appels Server Actions sans passer par l'URL publique
       - APPWRITE_API_KEY=${APPWRITE_API_KEY}
+      # Secret partagé proxy.ts ↔ /api/log et /api/banned-ips. Sans lui les deux
+      # routes répondent 500 (fail-secure) : plus aucun log d'audit ni ban d'IP actif.
+      - LOG_INTERNAL_SECRET=${LOG_INTERNAL_SECRET}
     networks:
       - konfitur-net
     labels:
@@ -71,13 +78,13 @@ services:
       - "traefik.http.routers.frontend.rule=Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)"
       - "traefik.http.routers.frontend.entrypoints=websecure"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.frontend.middlewares=security-headers,rate-limit,compress-response"
+      - "traefik.http.routers.frontend.middlewares=security-headers@file,rate-limit@file,compress-response@file"
       - "traefik.http.services.frontend.loadbalancer.server.port=3000"
       # Rate limit strict sur les pages d'authentification (issue #67)
       - "traefik.http.routers.frontend-auth.rule=(Host(`${DOMAIN}`) || Host(`www.${DOMAIN}`)) && PathPrefix(`/auth`)"
       - "traefik.http.routers.frontend-auth.entrypoints=websecure"
       - "traefik.http.routers.frontend-auth.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.frontend-auth.middlewares=security-headers,auth-rate-limit,compress-response"
+      - "traefik.http.routers.frontend-auth.middlewares=security-headers@file,auth-rate-limit@file,compress-response@file"
       - "traefik.http.routers.frontend-auth.service=frontend"
     depends_on:
       - appwrite
@@ -147,13 +154,13 @@ services:
       - "traefik.http.routers.appwrite.rule=Host(`api.${DOMAIN}`)"
       - "traefik.http.routers.appwrite.entrypoints=websecure"
       - "traefik.http.routers.appwrite.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.appwrite.middlewares=security-headers,appwrite-rate-limit"
+      - "traefik.http.routers.appwrite.middlewares=security-headers@file,appwrite-rate-limit@file"
       - "traefik.http.services.appwrite.loadbalancer.server.port=80"
       # Rate limit strict sur les créations de session (login email + OAuth callback)
       - "traefik.http.routers.appwrite-auth.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/v1/account/sessions`)"
       - "traefik.http.routers.appwrite-auth.entrypoints=websecure"
       - "traefik.http.routers.appwrite-auth.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.appwrite-auth.middlewares=security-headers,auth-rate-limit"
+      - "traefik.http.routers.appwrite-auth.middlewares=security-headers@file,auth-rate-limit@file"
       - "traefik.http.routers.appwrite-auth.service=appwrite"
     depends_on:
       - mariadb
@@ -174,7 +181,7 @@ services:
       - "traefik.http.routers.appwrite-console.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/console`)"
       - "traefik.http.routers.appwrite-console.entrypoints=websecure"
       - "traefik.http.routers.appwrite-console.tls.certresolver=letsencrypt"
-      - "traefik.http.routers.appwrite-console.middlewares=security-headers"
+      - "traefik.http.routers.appwrite-console.middlewares=security-headers@file"
       - "traefik.http.services.appwrite-console.loadbalancer.server.port=80"
 
   # ════════════════════════════════════════

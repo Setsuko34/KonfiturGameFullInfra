@@ -11,15 +11,15 @@ http:
         customFrameOptionsValue: "SAMEORIGIN"
         referrerPolicy: "strict-origin-when-cross-origin"
         permissionsPolicy: "camera=(), microphone=(), geolocation=(), payment=()"
-        # TODO PROD: remplacer api.localhost par le vrai domaine API (ex: https://api.konfiturgame.fr)
-        # Traefik file provider ne substitue pas les variables d'env — modification manuelle requise
+        # Domaine de prod en dur : le file provider ne substitue pas les variables
+        # d'env. Sans impact en dev, où aucun router n'applique ce middleware.
         contentSecurityPolicy: >
           default-src 'self';
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
           font-src 'self' https://fonts.gstatic.com;
-          img-src 'self' data: https://images.unsplash.com https://cloud.appwrite.io https://api.localhost;
-          connect-src 'self' https://api.localhost wss://api.localhost;
+          img-src 'self' data: https://images.unsplash.com https://cloud.appwrite.io https://api.konfiturgame.fr;
+          connect-src 'self' https://api.konfiturgame.fr wss://api.konfiturgame.fr;
           frame-ancestors 'none';
 
     rate-limit:
@@ -45,7 +45,8 @@ http:
     compress-response:
       compress: {}
 
+    # Identifiants dans un fichier htpasswd non versionné, monté par le compose.
+    # Générer : htpasswd -nB admin > traefik/dashboard-users
     auth-dashboard:
       basicAuth:
-        users:
-          - "admin:$2y$05$RdUYG6fvB2EI8Oiz9Q4r2.JXOzPhBxz.fFbBSmdNY3F1ImeGyx5Si"
+        usersFile: "/etc/traefik/dashboard-users"
