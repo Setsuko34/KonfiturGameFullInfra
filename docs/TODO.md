@@ -7,7 +7,7 @@
 ### Terminées ✅
 
 - [x] Gestion des équipes multi-jam (guildes) — création, invitation, inscription, gestion des rôles, suppression
-- [x] Gestion du profil utilisateur — modifier nom, bio, mot de passe, supprimer le compte, upload avatar
+- [x] Gestion du profil utilisateur — modifier nom, bio, mot de passe, supprimer le compte
 - [x] Export des données personnelles (RGPD art. 20) — bouton « Télécharger mes données (JSON)» dans le profil, agrège profil, équipes, messages, commentaires, likes et projets via la Server Action `exportUserData`
 - [x] Annonces publiables par les organisateurs sur leurs jams uniquement
 - [x] Édition d'une jam en cours (description, règles, prix, tags, max participants)
@@ -30,6 +30,7 @@
 
 ### À faire
 
+- [ ] Upload d'avatar utilisateur — **non implémenté** : seuls le bucket `avatars` et le champ `avatar_url` existent, aucune action ni composant d'upload (le test E2E correspondant est en `skip` permanent). Décider : implémenter, ou assumer hors périmètre MVP et retirer l'étape du scénario 6.1 du cahier de recettes (cf. R-05)
 - [ ] Page publique de profil `/profile/[userId]` — à finaliser côté design
 - [ ] Améliorer le SEO (structured data plus riche, meta descriptions par page)
 - [ ] Redirection / lien vers FRVTubers (origine du projet)

@@ -158,14 +158,30 @@ docker compose logs -f frontend
 curl -I http://localhost:3000
 ```
 
+### Points d'attention hérités du passage à Next 16
+
+- **Convention middleware renommée `middleware.ts` → `proxy.ts`.** Depuis Next 16, le
+  middleware Edge est le fichier `src/proxy.ts` (export `proxy`). **Ne pas** recréer un
+  `src/middleware.ts` : Next détecte alors les deux et **fait échouer le build**
+  (`Both middleware file and proxy file are detected`). Toute la logique (bot-detection,
+  ban IP, protection de routes) vit dans `proxy.ts`.
+- **Cache navigateur des pages prérendues (`Cache-Control`).** Next sert les pages
+  statiques avec `s-maxage=31536000`, une directive destinée à un **CDN**. Sans CDN
+  (ici uniquement Traefik), le navigateur — Safari en particulier — met le HTML en cache
+  par heuristique et, après un redeploy, référence des chunks JS aux hash disparus →
+  **écran blanc / boutons morts**. Le correctif est dans `frontend/next.config.mjs` :
+  `headers()` force `Cache-Control: no-cache` sur les documents (revalidation via ETag),
+  `/_next/*` restant exclu pour garder les chunks immutables. **À conserver** lors des
+  montées de version (issue #65).
+
 ### Mise à jour majeure (16.x → 17.x)
 
 Risque élevé — lire le changelog et le guide de migration Next.js.
 
 Points d'attention spécifiques à ce projet :
 - **App Router** : vérifier les breaking changes sur les Server Components, Server Actions, middlewares
-- **`middleware.ts`** : l'API du middleware Edge peut changer entre versions majeures
-- **`proxy.ts`** : vérifier la compatibilité avec le runtime Edge
+- **`proxy.ts`** : vérifier la compatibilité du middleware Edge (renommé depuis `middleware.ts` en Next 16) avec le nouveau runtime
+- **`next.config.mjs`** : conserver l'override `Cache-Control: no-cache` (voir ci-dessus)
 - **Images** : le comportement du composant `<Image>` peut évoluer
 
 Procédure :
