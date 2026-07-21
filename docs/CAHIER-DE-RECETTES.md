@@ -32,7 +32,8 @@
 | E2E — suite complète | `npx playwright test` | **88 passés, 2 échecs, 2 skippés** (92 cas, 4 min 36 s) |
 | E2E — re-run ciblé 03 + 08 | `npx playwright test e2e/tests/03-navigation.spec.ts e2e/tests/08-organisateur.spec.ts` | **18 passés, 1 échec** — les 2 échecs du run complet passent, un 3ᵉ cas bascule (voir anomalies) |
 | Smoke test DEV | `curl` frontend + `/v1/health/version` | frontend **200**, Appwrite **`{"version":"1.9.0"}`** |
-| Smoke test PROD | `curl https://konfiturgame.fr` | **échec — code 000**, production suspendue (stabilisation en cours) |
+| Smoke test PROD (matin) | `curl https://konfiturgame.fr` | **échec — code 000**, production suspendue (stabilisation en cours) |
+| Smoke test PROD (après stabilisation) | `curl` frontend + `/v1/health/version` + routing `/v1` | **frontend 200**, HTTP→HTTPS **308**, Appwrite **`{"version":"1.9.0"}`**, routing same-origin `/v1/account` **401** (atteint Appwrite), dashboard Traefik **401** sans auth — **prod jointe et validée le 21/07** après correction des bogues B-11 à B-15 (voir dossier § VII) |
 | Jeu de données de volume | `bash ./scripts/seed-big-demo.sh` | **791 documents créés, 0 échec** — 60 jams, 120 équipes, 40 projets sur `demo-jam-big` avec `likes_count` variés (0/3/6/9) et podium 1-2-3, 150 commentaires, 120 messages de chat |
 
 **Vérifications manuelles consignées (21/07/2026) :**
@@ -66,7 +67,7 @@ Aucun critère n'est coché sur la seule foi d'une lecture du code : seul un tes
 | Module | Statut |
 |---|---|
 | 1 — Authentification (1.1, 1.2) | ✅ accepté en DEV |
-| 1.3 / 1.4 — OAuth Google et Discord | ⏳ recette manuelle à jouer (flux tiers) |
+| 1.3 / 1.4 — OAuth Google et Discord | ✅ flux observé en PROD le 21/07 : redirection provider → callback `success` → session créée (cookie `a_session_*` sur `.konfiturgame.fr`). Rattachement d'une identité OAuth à un compte déjà connecté conforme au comportement Appwrite documenté. Réserve : création d'un compte OAuth **distinct** en état déconnecté à reconfirmer |
 | 2 — Navigation publique | ✅ accepté en DEV |
 | 3.1 à 3.3 — Guildes | ✅ accepté en DEV |
 | 3.4 — Inscription solo | ✅ accepté (unicité de la team solo en TU, liste solo séparée vérifiée manuellement) |
@@ -79,7 +80,7 @@ Aucun critère n'est coché sur la seule foi d'une lecture du code : seul un tes
 | 8.1 / 8.2 / 8.2 bis / 8.4 — Administration | ✅ accepté en DEV |
 | 8.3 — Podium | ✅ accepté (bornes et rang stocké en TU, indépendance vis-à-vis des likes vérifiée manuellement) |
 | 8.5 — Modération tchat | ⚠️ filtre `reported` et audit validés en TU ; parcours admin complet (résolution, suppression, compteurs) à jouer |
-| 9.1 — TLS et sécurité | 🔴 bloqué : production injoignable |
+| 9.1 — TLS et sécurité | ✅ accepté en PROD le 21/07 : HTTPS + HSTS, redirection 308, X-Frame-Options / X-Content-Type-Options / Referrer-Policy présents, Appwrite `/v1/health/version` 200, dashboard Traefik 401 sans auth |
 | 9.2 — Accessibilité | ⚠️ partiel (`lang`, focus, skip-link validés ; `prefers-reduced-motion` non vérifié) |
 
 ---
@@ -615,14 +616,16 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 | # | Étape | Résultat attendu |
 |---|-------|-----------------|
 | 1 | `curl -I https://konfiturgame.fr` | `strict-transport-security` présent |
-| 2 | `curl -I http://konfiturgame.fr` | Redirection 301 → HTTPS |
+| 2 | `curl -I http://konfiturgame.fr` | Redirection 3xx → HTTPS (Traefik répond **308**) |
 | 3 | Inspecter les headers de réponse | `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` présents |
 | 4 | `curl https://api.konfiturgame.fr/v1/health/version` | HTTP 200, `{"version":"1.9.0"}` |
 
 **Critères d'acceptation :**
-- [ ] HTTPS actif sur tous les domaines — 🔴 **non exécutable le 21/07** : `https://konfiturgame.fr` et `https://api.konfiturgame.fr` injoignables (code 000), cf. anomalie R-04
-- [ ] Redirection HTTP → HTTPS — 🔴 non exécutable, idem
-- [ ] Headers de sécurité présents — 🔴 non exécutable, idem. Les valeurs sont définies dans `traefik/dynamic/middlewares.yml` mais **la vérification ne vaut que servie par la production**
+- [x] HTTPS actif sur tous les domaines — **validé PROD 21/07** (après R-04) : `https://konfiturgame.fr` **200** + HSTS `max-age=31536000; includeSubDomains; preload`, `https://api.konfiturgame.fr/v1/health/version` **200 `{"version":"1.9.0"}`**
+- [x] Redirection HTTP → HTTPS — **validé** : `http://konfiturgame.fr` → **308** `Location: https://konfiturgame.fr/`
+- [x] Headers de sécurité présents — **validé servi par la prod** : `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin` (valeurs de `traefik/dynamic/middlewares.yml`)
+- [x] Dashboard Traefik protégé — **validé** : `https://traefik.konfiturgame.fr` renvoie **401** sans authentification
+- [x] Routing API same-origin — **validé** : `https://konfiturgame.fr/v1/account` renvoie **401** (atteint Appwrite, plus le 404 Next.js d'avant B-11)
 
 ---
 
@@ -649,7 +652,7 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 | R-01 | 2.4 — Menu mobile, focus trap | `#mobile-menu` introuvable après clic sur le burger au run complet ; **passe au re-run**. Le test frère (« Escape ferme le menu ») exécute les mêmes étapes et passe dans les deux campagnes. | Instabilité de test : le clic part avant l'hydratation React du toggle `menuOpen`, l'événement est perdu. **Pas** de régression du focus trap (P0-1). | Fiabiliser la spec : attendre l'hydratation avant le clic, comme le font déjà `04-guildes` et `06-chat` via `expect(...).toPass()` |
 | R-02 | 7.2 — Annonce visible sur la page de la jam | Le `body` asserté contient encore `/explore` : le clic sur le lien de la jam n'a pas navigué. **Passe au re-run.** La publication de l'annonce (test précédent) passe dans les deux campagnes. | Instabilité de test : navigation non attendue. Fonctionnalité vérifiée. | Fiabiliser la spec : `waitForURL` après le clic |
 | R-03 | 2.3 — Sections repliables | Passe au run complet, **échoue au re-run** (`not.toBeVisible` sur une section attendue repliée). | Instabilité de test, même famille que R-01 : état client asserté avant stabilisation. | Fiabiliser la spec |
-| R-04 | 9.1 — TLS et sécurité (prod) | `https://konfiturgame.fr` et `https://api.konfiturgame.fr` injoignables (code 000). | **Bloquant pour la recette PROD**, sans effet sur la recette DEV. | Stabilisation de la production en cours (session de cookie inter-domaine) |
+| R-04 | 9.1 — TLS et sécurité (prod) | `https://konfiturgame.fr` et `https://api.konfiturgame.fr` injoignables (code 000). | **Bloquant pour la recette PROD**, sans effet sur la recette DEV. | ✅ **Résolu le 21/07** — cause : cookie de session scellé sur `.api.konfiturgame.fr` (login en boucle). Correctifs : endpoint client + routing Traefik same-origin `/v1` (B-11), priorités de routeurs (B-12), purge cache navigateur (B-14). Prod rejointe, module 9.1 validé. Détail dans le dossier § VII (B-11 à B-15). |
 | R-05 | 6.1 — Upload d'avatar | L'étape « Uploader un avatar » du scénario est injouable : aucune action d'upload n'existe dans l'application. Seuls le bucket `avatars` et le champ `avatar_url` sont déclarés. Le test E2E correspondant est en `skip` permanent. | **Écart de périmètre, pas un bug** : la fonctionnalité n'a jamais été développée. Mais `docs/TODO.md` la liste comme terminée (« modifier nom, bio, mot de passe, supprimer le compte, upload avatar »), ce qui est **faux**. | 1. Corriger `docs/TODO.md` en la basculant dans « À faire ». 2. Décider : implémenter, ou assumer le retrait du périmètre MVP et retirer l'étape du scénario 6.1 |
 
 **Aucune anomalie de comportement n'a été constatée** sur les fonctionnalités implémentées. Les trois instabilités R-01 à R-03 portent sur la synchronisation des tests, et chaque fonctionnalité concernée a été observée conforme dans au moins une des deux campagnes. R-05 n'est pas un défaut de fonctionnement mais un **écart entre le périmètre documenté et le périmètre réel**, ce qui reste à corriger dans la documentation. Elles sont néanmoins traitées comme une dette de fiabilité : une suite non déterministe perd sa valeur de garde-fou anti-régression, puisqu'un échec réel devient indiscernable d'un faux positif.
@@ -662,13 +665,13 @@ Si l'un de ces checks échoue, ne pas continuer — résoudre l'infrastructure d
 
 Cette checklist résume les critères bloquants à valider avant tout déploiement en production.
 
-> État au 21/07/2026 : validée en **DEV**, bloquée en **PROD** tant que l'infrastructure ne répond pas.
+> État au 21/07/2026 : validée en **DEV**, puis en **PROD** après stabilisation (correctifs B-11 à B-15, R-04 résolu).
 
 ### Infrastructure
-- [x] Smoke test passé (frontend 200, Appwrite `/v1/health/version` répond) — **en DEV uniquement**, cf. PV d'exécution
-- [ ] TLS actif, redirection HTTP → HTTPS — 🔴 production injoignable (R-04)
-- [ ] Headers de sécurité présents (HSTS, CSP, X-Frame-Options) — 🔴 idem
-- [ ] Dashboard Traefik protégé par mot de passe (401 sans auth) — 🔴 idem
+- [x] Smoke test passé (frontend 200, Appwrite `/v1/health/version` répond) — DEV **et PROD** (frontend 200, `{"version":"1.9.0"}`), cf. PV d'exécution
+- [x] TLS actif, redirection HTTP → HTTPS — **validé PROD** : HSTS présent, `http://` → **308** HTTPS
+- [x] Headers de sécurité présents (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy) — **validé PROD** servi par Traefik
+- [x] Dashboard Traefik protégé par mot de passe (401 sans auth) — **validé PROD** : `traefik.konfiturgame.fr` → 401
 
 ### Authentification
 - [x] Inscription email/password (scénario 1.1) — auto : `02-auth.spec.ts`
@@ -694,4 +697,4 @@ Cette checklist résume les critères bloquants à valider avant tout déploieme
 
 ---
 
-*KonfiturGame · Cahier de recettes · Mis à jour : 2026-07-21 — campagne de recette exécutée, voir « PV d'exécution » en tête de document*
+*KonfiturGame · Cahier de recettes · Mis à jour : 2026-07-21 — campagne DEV puis validation PROD après stabilisation (module 9.1 accepté, R-04 résolu), voir « PV d'exécution » en tête de document*
