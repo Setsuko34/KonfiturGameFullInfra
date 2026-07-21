@@ -18,8 +18,8 @@ http:
           script-src 'self' 'unsafe-inline' 'unsafe-eval';
           style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
           font-src 'self' https://fonts.gstatic.com;
-          img-src 'self' data: https://images.unsplash.com https://cloud.appwrite.io https://api.konfiturgame.fr;
-          connect-src 'self' https://api.konfiturgame.fr wss://api.konfiturgame.fr;
+          img-src 'self' data: https://images.unsplash.com https://cloud.appwrite.io https://konfiturgame.fr;
+          connect-src 'self' https://konfiturgame.fr wss://konfiturgame.fr;
           frame-ancestors 'none';
 
     rate-limit:

@@ -266,10 +266,13 @@ jobs:
             git pull --ff-only origin main
             docker compose -f docker-compose.yml up -d --remove-orphans
       - name: Healthcheck frontend
+        # UA navigateur obligatoire : proxy.ts bloque `curl/` (bot-detection.ts) → 403.
+        # Sans ça le healthcheck se fait jeter par notre propre détection de bots.
         run: |
+          UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
           for i in $(seq 1 10); do
             sleep 10
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://konfiturgame.fr || echo "000")
+            code=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" --max-time 15 https://konfiturgame.fr || echo "000")
             if [ "$code" = "200" ]; then
               echo "Frontend OK (HTTP $code, tentative $i)"
               exit 0
@@ -328,10 +331,13 @@ jobs:
             docker compose -f docker-compose.yml build frontend
             docker compose -f docker-compose.yml up -d frontend
       - name: Healthcheck frontend
+        # UA navigateur obligatoire : proxy.ts bloque `curl/` (bot-detection.ts) → 403.
+        # Sans ça le healthcheck se fait jeter par notre propre détection de bots.
         run: |
+          UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
           for i in $(seq 1 10); do
             sleep 10
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://konfiturgame.fr || echo "000")
+            code=$(curl -s -o /dev/null -w '%{http_code}' -A "$UA" --max-time 15 https://konfiturgame.fr || echo "000")
             if [ "$code" = "200" ]; then
               echo "Frontend OK (HTTP $code, tentative $i)"
               exit 0
