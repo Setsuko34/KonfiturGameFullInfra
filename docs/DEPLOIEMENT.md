@@ -152,8 +152,22 @@ auth-dashboard:
 
 ```yaml
 # CSP — mettre le vrai domaine (Traefik file provider ne substitue pas les vars d'env)
-connect-src 'self' https://api.konfiturgame.fr wss://api.konfiturgame.fr;
+# Architecture same-origin : le frontend appelle l'API Appwrite sous le domaine
+# RACINE (konfiturgame.fr/v1), pas api.konfiturgame.fr. C'est pourquoi connect-src
+# cible konfiturgame.fr et non le sous-domaine api. Voir la note ci-dessous.
+connect-src 'self' https://konfiturgame.fr wss://konfiturgame.fr;
 ```
+
+> **Architecture same-origin de l'API (important).** L'API Appwrite est routée par
+> Traefik à la fois sur `api.konfiturgame.fr` (console, CLI, CI) **et** sur le domaine
+> racine `konfiturgame.fr/v1` (routeurs `appwrite-app` / `appwrite-app-auth` /
+> `appwrite-realtime-app` dans `docker-compose.yml`). Le frontend utilise l'endpoint
+> racine (`NEXT_PUBLIC_APPWRITE_ENDPOINT=https://${DOMAIN}/v1`) pour que le **cookie de
+> session** soit posé sur `.konfiturgame.fr` (first-party) et visible du SSR — sinon il
+> reste scellé sur `.api.konfiturgame.fr` et le login boucle. Deux garde-fous :
+> - `_APP_DOMAIN=${DOMAIN}` (racine) côté Appwrite, pour le domaine du cookie ;
+> - `priority` explicite sur les routeurs `/v1` racine (le catch-all frontend est plus
+>   long en caractères et gagnerait sinon la priorité par défaut de Traefik → 404).
 
 ### 3.7 — Vérifier le lockfile frontend
 
