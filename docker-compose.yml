@@ -59,13 +59,13 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_APPWRITE_ENDPOINT: https://api.${DOMAIN}/v1
+        NEXT_PUBLIC_APPWRITE_ENDPOINT: https://${DOMAIN}/v1
         NEXT_PUBLIC_APPWRITE_PROJECT_ID: ${APPWRITE_PROJECT_ID}
     container_name: konfitur-frontend
     restart: unless-stopped
     environment:
       - NODE_ENV=production
-      - NEXT_PUBLIC_APPWRITE_ENDPOINT=https://api.${DOMAIN}/v1
+      - NEXT_PUBLIC_APPWRITE_ENDPOINT=https://${DOMAIN}/v1
       - NEXT_PUBLIC_APPWRITE_PROJECT_ID=${APPWRITE_PROJECT_ID}
       - NEXT_PUBLIC_SITE_URL=https://${DOMAIN}
       - APPWRITE_INTERNAL_ENDPOINT=http://appwrite/v1   # Appels Server Actions sans passer par l'URL publique
@@ -167,6 +167,23 @@ services:
       - "traefik.http.routers.appwrite-auth.tls.certresolver=letsencrypt"
       - "traefik.http.routers.appwrite-auth.middlewares=security-headers@file,auth-rate-limit@file"
       - "traefik.http.routers.appwrite-auth.service=appwrite"
+      # ── API aussi servie sous le domaine RACINE (konfiturgame.fr/v1) ──
+      # Sans ça le cookie de session reste scellé sur .api.konfiturgame.fr et le
+      # frontend SSR ne le voit pas → boucle de login. En passant par le même
+      # origin que le frontend, le cookie devient first-party à ${DOMAIN}.
+      # api.${DOMAIN} reste actif en parallèle (console, CLI, CI).
+      # Priorité auto : /v1 est plus spécifique que Host(${DOMAIN}) seul → prime
+      # sur le routeur frontend ; /v1/account/sessions prime sur /v1.
+      - "traefik.http.routers.appwrite-app.rule=Host(`${DOMAIN}`) && PathPrefix(`/v1`)"
+      - "traefik.http.routers.appwrite-app.entrypoints=websecure"
+      - "traefik.http.routers.appwrite-app.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.appwrite-app.middlewares=security-headers@file,appwrite-rate-limit@file"
+      - "traefik.http.routers.appwrite-app.service=appwrite"
+      - "traefik.http.routers.appwrite-app-auth.rule=Host(`${DOMAIN}`) && PathPrefix(`/v1/account/sessions`)"
+      - "traefik.http.routers.appwrite-app-auth.entrypoints=websecure"
+      - "traefik.http.routers.appwrite-app-auth.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.appwrite-app-auth.middlewares=security-headers@file,auth-rate-limit@file"
+      - "traefik.http.routers.appwrite-app-auth.service=appwrite"
     depends_on:
       - mariadb
       - redis
@@ -217,6 +234,12 @@ services:
       - "traefik.http.routers.appwrite-realtime.entrypoints=websecure"
       - "traefik.http.routers.appwrite-realtime.tls.certresolver=letsencrypt"
       - "traefik.http.services.appwrite-realtime.loadbalancer.server.port=80"
+      # WebSocket chat sous le domaine racine (cible de wss://${DOMAIN} dans la CSP).
+      # Plus spécifique que le /v1 d'appwrite-app → prime pour le realtime.
+      - "traefik.http.routers.appwrite-realtime-app.rule=Host(`${DOMAIN}`) && PathPrefix(`/v1/realtime`)"
+      - "traefik.http.routers.appwrite-realtime-app.entrypoints=websecure"
+      - "traefik.http.routers.appwrite-realtime-app.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.appwrite-realtime-app.service=appwrite-realtime"
     depends_on:
       - mariadb
       - redis
