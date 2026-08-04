@@ -57,15 +57,11 @@ frontend/coverage/
 # ═══════════════════════════════════════════════
 # CLAUDE CODE — config locale (chemins machine-spécifiques)
 # ═══════════════════════════════════════════════
-.claude/settings.local.json
-.claude/*
+# ** requis : un motif contenant un / est sinon ancré à la racine du dépôt
+**/.claude/
+**/CLAUDE.md
 .agents
 .mcp.json
-
-# ═══════════════════════════════════════════════
-# CLAUDE — fichiers locaux spécifiques à la machine
-# ═══════════════════════════════════════════════
-.claude/settings.local.json
 
 # ═══════════════════════════════════════════════
 # IDE
@@ -122,3 +118,7 @@ trivy-fs-results.sarif
 
 # Identifiants du dashboard Traefik (htpasswd) — jamais versionnés
 traefik/dashboard-users
+
+# Metriques generees au runtime par backup.sh et health-check.sh
+# (le repertoire est versionne pour le montage Docker, pas son contenu)
+monitoring/textfile/*.prom
