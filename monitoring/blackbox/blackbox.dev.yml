@@ -1,0 +1,59 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# blackbox-exporter — modules de DÉVELOPPEMENT
+#
+# Copie de blackbox.yml, à deux différences près :
+#   - `fail_if_not_ssl` est retiré : la stack de dev est en HTTP simple, la
+#     règle de production ferait échouer toutes les sondes
+#   - les modules attendant un 401 de sécurité n'existent pas ici : le
+#     dashboard Traefik est en accès libre en dev (`api.insecure: true`)
+#
+# Le reste est volontairement IDENTIQUE à la production, en particulier le
+# User-Agent : c'est justement en local qu'on veut vérifier que la sonde n'est
+# pas prise pour un bot par `proxy.ts` (l'UA par défaut « Go-http-client » est
+# dans MALICIOUS_BOT_PATTERNS et vaut un 403 + bannissement d'IP).
+# ═══════════════════════════════════════════════════════════════════════════
+
+modules:
+  # ── Pages publiques servies par Next.js ──────────────────────────────────
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      follow_redirects: true
+      preferred_ip_protocol: ip4
+      headers:
+        User-Agent: "KonfiturGame-Monitoring/1.0 (Mozilla/5.0 compatible; blackbox-exporter)"
+
+  # ── API Appwrite : 200 ou 401 selon que la route exige une clé ───────────
+  http_2xx_or_401:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 401]
+      follow_redirects: false
+      preferred_ip_protocol: ip4
+      headers:
+        User-Agent: "KonfiturGame-Monitoring/1.0 (Mozilla/5.0 compatible; blackbox-exporter)"
+
+  # ── Routage same-origin /v1 à travers Traefik ───────────────────────────
+  # En dev, Traefik route sur le Host `localhost` : la sonde interroge le
+  # conteneur `traefik` directement et doit donc forcer l'en-tête Host, sans
+  # quoi aucune règle ne correspond et Traefik répond 404.
+  # C'est la sonde de non-régression de l'anomalie B-11.
+  http_same_origin_v1:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 401]
+      follow_redirects: false
+      preferred_ip_protocol: ip4
+      headers:
+        Host: "localhost"
+        User-Agent: "KonfiturGame-Monitoring/1.0 (Mozilla/5.0 compatible; blackbox-exporter)"

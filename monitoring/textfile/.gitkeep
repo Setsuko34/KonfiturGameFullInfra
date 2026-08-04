@@ -1,0 +1,9 @@
+# Collecteur textfile de node-exporter.
+#
+# Les scripts shell (backup.sh, health-check.sh) déposent ici des fichiers
+# *.prom que node-exporter relit et expose à Prometheus. C'est le pont entre
+# les tâches cron et la supervision : il rend observable ce qui, autrement,
+# ne laisserait qu'une ligne dans un fichier de log que personne ne lit.
+#
+# Le répertoire est versionné (il doit exister pour le montage Docker), son
+# contenu ne l'est pas — voir .gitignore.

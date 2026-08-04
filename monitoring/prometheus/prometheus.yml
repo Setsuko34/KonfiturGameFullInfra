@@ -1,0 +1,123 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Prometheus — configuration de collecte KonfiturGame
+#
+# Trois familles de sondes :
+#   - « boîte blanche » : Traefik, cAdvisor, node-exporter exposent leurs
+#     propres métriques (état interne des composants)
+#   - « boîte noire »   : blackbox-exporter interroge les URL publiques comme
+#     le ferait un visiteur (disponibilité réellement perçue)
+#   - textfile          : métriques poussées par les scripts shell
+#     (backup.sh) et relues par node-exporter
+#
+# Aucune cible n'est joignable depuis Internet : tout transite par
+# monitoring-net, réseau Docker interne non exposé.
+# ═══════════════════════════════════════════════════════════════════════════
+
+global:
+  scrape_interval: 30s        # granularité par défaut
+  scrape_timeout: 10s
+  evaluation_interval: 30s    # fréquence d'évaluation des règles d'alerte
+  external_labels:
+    environment: production
+    project: konfiturgame
+
+# Destination des alertes évaluées ci-dessus. Sans ce bloc, les règles passent
+# en `firing` dans Prometheus et n'arrivent nulle part : Grafana affiche les
+# alertes d'une source externe mais ne les achemine pas vers ses propres
+# politiques de notification.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  # ── Prometheus lui-même : si cette cible tombe, le reste est aveugle ──────
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── Traefik : trafic HTTP, codes retour, latence par router ──────────────
+  # Entrypoint `metrics` (:8082), déclaré dans traefik/traefik.yml et jamais
+  # publié sur l'hôte.
+  - job_name: traefik
+    static_configs:
+      - targets: ["traefik:8082"]
+
+  # ── Hôte : CPU, RAM, disque, charge ─────────────────────────────────────
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # ── Conteneurs : CPU/RAM/IO par service, redémarrages ───────────────────
+  - job_name: cadvisor
+    scrape_interval: 60s      # cAdvisor est coûteux, on l'échantillonne moins
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # ── Sondes HTTP externes (disponibilité perçue par un visiteur) ──────────
+  # Le module http_2xx force un User-Agent de navigateur : l'UA par défaut de
+  # blackbox est « Go-http-client », listé dans MALICIOUS_BOT_PATTERNS
+  # (frontend/src/lib/bot-detection.ts). Sans surcharge, la sonde reçoit un 403
+  # et se fait bannir par notre propre protection anti-bot.
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://konfiturgame.fr              # page d'accueil (SSR)
+          - https://konfiturgame.fr/explore      # listing des jams (requêtes DB)
+        labels:
+          service: frontend
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ── Sonde API Appwrite ──────────────────────────────────────────────────
+  # /v1/health/version répond 200 sans authentification ; /v1/health complet
+  # exige une clé API et renvoie 401 (le module http_2xx_or_401 l'accepte :
+  # un 401 prouve que le service répond).
+  - job_name: blackbox-appwrite
+    metrics_path: /probe
+    params:
+      module: [http_2xx_or_401]
+    static_configs:
+      - targets:
+          - https://api.konfiturgame.fr/v1/health/version
+          - https://konfiturgame.fr/v1/account   # routing same-origin (régression B-11)
+        labels:
+          service: appwrite
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ── Sonde dashboard Traefik : doit rester protégé (401 attendu) ──────────
+  # Sonde de sécurité autant que de disponibilité : un 200 ici signifierait
+  # que l'authentification basique a sauté.
+  - job_name: blackbox-traefik-auth
+    metrics_path: /probe
+    params:
+      module: [http_401_expected]
+    static_configs:
+      - targets:
+          - https://traefik.konfiturgame.fr
+        labels:
+          service: traefik
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
