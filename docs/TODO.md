@@ -34,7 +34,7 @@
 - [ ] Page publique de profil `/profile/[userId]` — à finaliser côté design
 - [ ] Améliorer le SEO (structured data plus riche, meta descriptions par page)
 - [ ] Redirection / lien vers FRVTubers (origine du projet)
-- [ ] Surveillance et alertes production (Uptime Robot, Grafana ou équivalent)
+- [x] Surveillance et alertes production — Prometheus + Grafana + Alertmanager, sondes blackbox / cAdvisor / node-exporter / métriques Traefik, 20 règles d'alerte P0-P3, notifications Discord, `health-check.sh` en cron (voir `docs/SUPERVISION.md`)
 - [ ] Tests de charge
 
 ---
@@ -79,6 +79,12 @@
 - [x] Suite E2E Playwright : 9 specs (smoke, auth, navigation, guildes, projets, chat, profil, organisateur, admin) — 65 tests + 1 skip — voir `docs/DOC_test_E2E.md`
 - [x] Vérification du realtime (Appwrite WebSocket) — `06-chat.spec.ts` : user2 voit le message de user1 sans rechargement
 
+### Supervision (`promtool` — `monitoring/prometheus/alerts.test.yml`)
+
+- [x] 15 scénarios / 19 assertions sur les règles d'alerte, exécutés en CI (job `monitoring`) : non-régression du faux positif cAdvisor sous WSL2, seuils temporels (sauvegarde 25 h, sonde 30 min), certificats TLS encadrés des deux côtés du seuil, protection du dashboard Traefik. Couvre exactement les règles que la stack de dev ne peut pas exercer.
+- [x] Validation syntaxique `promtool check config` (prod + dev) et `amtool check-config` en CI — attrape le fichier de règles refusé au chargement, panne silencieuse par excellence
+- [x] Smoke test de la chaîne réelle — `scripts/ci/monitoring-check.sh` (cibles, sondes, règles chargées, Alertmanager raccordé, collecteur textfile monté)
+
 ### À faire — Tests
 
 - [ ] Améliorer la couverture de `actions-profile.test.ts` (certaines fonctions non exportées)
@@ -96,9 +102,9 @@
 - [ ] Configurer les DNS (A records: konfiturgame.fr, api., traefik.)
 - [ ] Configurer OAuth Google & Discord avec les redirect URIs de production
 - [ ] Sécuriser le pare-feu serveur (ports 80, 443 uniquement)
-- [ ] Automatiser les backups quotidiens (cron)
+- [x] Automatiser les backups quotidiens (cron) — `scripts/crontab.konfiturgame` : sauvegarde à 2 h, archive `.tar.gz`, rotation à 7 archives, métriques publiées vers Prometheus
 - [ ] Configurer la rotation des logs Docker (`daemon.json`)
-- [ ] Mettre en place la surveillance et les alertes
+- [x] Mettre en place la surveillance et les alertes — stack Prometheus/Grafana + `health-check.sh` (relance automatique des conteneurs critiques) — `docs/SUPERVISION.md`
 - [ ] Activer les jobs Semgrep / audit dépendances / lint Docker en mode bloquant (après tri des faux positifs)
 - [x] Activer la Phase 2 CI/CD : déploiement du schéma Appwrite depuis le pipeline (job `deploy-schema` — reste à vérifier les scopes `databases.*` de la clé API CI)
 
@@ -113,6 +119,7 @@
 - [x] CAHIER-DE-RECETTES.md — tests d'acceptation
 - [x] DOC_test_E2E.md — documentation de la suite E2E Playwright
 - [x] CI-CD.md — guide pipeline CI/CD
+- [x] SUPERVISION.md — périmètre supervisé, sondes, seuils d'alerte, modalités de signalement
 - [x] DATABASE.md — schéma ERD et détail des collections
 - [x] BRANCH-PROTECTION.md — rulesets GitHub
 - [x] PRODUCTION.md — fiche réflexe production (pointe vers DEPLOIEMENT.md)
