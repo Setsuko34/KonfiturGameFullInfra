@@ -66,6 +66,27 @@ dossier Bloc 2), `R-xx` pour les constats de campagne de recette.
   (`Go-http-client`, `curl/`) est bloqué par notre propre détection de bots, ce qui
   bannissait l'IP de la sonde et produisait une fausse alerte d'indisponibilité
 
+### Sécurité des dépendances
+
+- **Next.js 16.2.9 → 16.2.12** : corrige quatre avis HIGH et cinq MODERATE. Quatre
+  d'entre eux ne concernaient pas ce déploiement (bypass de middleware exigeant une
+  configuration `i18n` absente, SSRF exclue par `output: 'standalone'`, SSRF via des
+  `rewrites()` inexistants, DoS SVG neutralisé par `dangerouslyAllowSVG` désactivé).
+  Restaient bien applicables le DoS par Server Actions et la divulgation d'endpoints
+  de Server Function
+- **postcss → 8.5.25, sharp → 0.35.3** via `pnpm-workspace.yaml` : monter Next ne les
+  corrigeait pas, la 16.2.12 épinglant toujours `postcss@8.4.31` et `sharp@^0.34.5`
+- **`images.remotePatterns` vidé.** `/_next/image?url=…` est un endpoint public : tout
+  hôte autorisé devient une source d'octets que le serveur récupère puis fait décoder
+  par libvips. `cloud.appwrite.io` y figurait sans être référencé nulle part — quiconque
+  pouvant y déposer un fichier disposait d'un chemin vers les CVE de sharp. Les images
+  utilisateur sont servies en `<img>` nu et ne passent jamais par l'optimiseur
+- **`HEALTHCHECK` sur les deux Dockerfiles** (Trivy DS-0026) et **utilisateur non-root
+  en développement** (DS-0002). La sonde vise un fichier statique dont l'extension est
+  exemptée par les `SKIP_PATTERNS` de `proxy.ts` et porte un User-Agent de navigateur :
+  celui de wget vaut un 403, donc un conteneur sain marqué *unhealthy* puis redémarré
+  en boucle par notre propre supervision
+
 ### Tests et intégration continue
 
 - **Job CI `monitoring`** (bloquant) : `promtool check config` sur les configurations de

@@ -44,10 +44,31 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-USER nextjs
+# UID numérique (hadolint DL3066) : un nom d'utilisateur n'est pas résolvable
+# par l'hôte, notamment quand Kubernetes ou un `docker run --user` compare des
+# identifiants. 1001 = nextjs, créé juste au-dessus.
+USER 1001
 
 EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
+
+# Sonde de conteneur (Trivy DS-0026). Cible un fichier statique de /public :
+# son extension .svg figure dans les SKIP_PATTERNS de proxy.ts, la sonde ne
+# traverse donc ni la détection de bots ni le moindre appel Appwrite — inutile
+# de réveiller la base toutes les 30 s pour savoir si le process répond.
+#
+# L'User-Agent explicite reste indispensable en défense : l'UA par défaut de
+# wget est classé bot malveillant par bot-detection.ts (`/wget\//i`). Un 403
+# marquerait le conteneur unhealthy, et health-check.sh redémarrerait en
+# boucle un frontend parfaitement sain — la supervision devenant la panne.
+#
+# Forme JSON (hadolint DL3025) : pas de `|| exit 1`, wget sort déjà non-nul
+# en cas d'échec et Docker en déduit l'état unhealthy. Chemin absolu, la forme
+# exec ne passant pas par un shell.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD ["/usr/bin/wget", "--quiet", "--spider", "--tries=1", \
+       "--user-agent=Mozilla/5.0 (compatible; KonfiturGame-Healthcheck/1.0)", \
+       "http://127.0.0.1:3000/hautequalite.svg"]
 
 CMD ["node", "server.js"]
