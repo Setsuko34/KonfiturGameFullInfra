@@ -50,3 +50,28 @@ http:
     auth-dashboard:
       basicAuth:
         usersFile: "/etc/traefik/dashboard-users"
+
+    # En-têtes pour Grafana. Middleware distinct de security-headers car la CSP
+    # de l'application n'y convient pas : Grafana charge ses panneaux via des
+    # workers et des blobs, et une CSP `default-src 'self'` seule affiche une
+    # interface vide sans la moindre erreur serveur.
+    # L'authentification est assurée par Grafana lui-même (pas de basicAuth
+    # devant : elle casserait le webhook d'alerte et l'API).
+    grafana-headers:
+      headers:
+        browserXssFilter: true
+        contentTypeNosniff: true
+        stsIncludeSubdomains: true
+        stsPreload: true
+        stsSeconds: 31536000
+        customFrameOptionsValue: "SAMEORIGIN"
+        referrerPolicy: "strict-origin-when-cross-origin"
+        contentSecurityPolicy: >
+          default-src 'self';
+          script-src 'self' 'unsafe-inline' 'unsafe-eval';
+          style-src 'self' 'unsafe-inline';
+          img-src 'self' data: blob:;
+          font-src 'self' data:;
+          connect-src 'self';
+          worker-src 'self' blob:;
+          frame-ancestors 'self';
