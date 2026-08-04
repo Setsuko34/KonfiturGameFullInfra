@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
 # restore.sh — Restauration complète Konfitur Game depuis un backup
-# Usage : ./scripts/restore.sh <dossier-de-backup>
-# Exemple : ./scripts/restore.sh ./backups/2025-06-01_14-30
+# Usage : ./scripts/restore.sh <archive-ou-dossier-de-backup>
+# Exemple : ./scripts/restore.sh ./backups/2026-08-01_02-00.tar.gz
 #
 # Modes de restauration :
 #   Mode STANDARD  — MariaDB + volumes (rapide, même serveur)
@@ -18,15 +18,37 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 if [[ -z "${1:-}" ]]; then
-  echo "Usage : $0 <dossier-de-backup>"
-  echo "Exemple : $0 ./backups/2025-06-01_14-30"
+  echo "Usage : $0 <archive-ou-dossier-de-backup>"
+  echo "Exemple : $0 ./backups/2026-08-01_02-00.tar.gz"
   exit 1
 fi
 
-BACKUP_DIR="$(realpath "$1")"
+if [[ ! -e "$1" ]]; then
+  echo "❌ Introuvable : $1"
+  exit 1
+fi
+SOURCE="$(realpath "$1")"
 
-if [[ ! -d "$BACKUP_DIR" ]]; then
-  echo "❌ Dossier introuvable : $BACKUP_DIR"
+# backup.sh produit une archive .tar.gz ; les sauvegardes antérieures à cette
+# rotation sont des dossiers, et un dossier reste utile pour inspecter un
+# backup à la main avant de le rejouer. Les deux formes sont donc acceptées.
+# Une archive est extraite dans un temporaire, effacé à la sortie quel que
+# soit le mode de restauration choisi ou l'endroit où le script s'arrête.
+if [[ -d "$SOURCE" ]]; then
+  BACKUP_DIR="$SOURCE"
+elif [[ -f "$SOURCE" && "$SOURCE" == *.tar.gz ]]; then
+  EXTRACT_TMP="$(mktemp -d)"
+  trap 'rm -rf "$EXTRACT_TMP"' EXIT
+  echo "📦 Extraction de $(basename "$SOURCE")..."
+  tar -xzf "$SOURCE" -C "$EXTRACT_TMP"
+  # L'archive contient un unique dossier horodaté (cf. backup.sh § 6)
+  BACKUP_DIR="$(find "$EXTRACT_TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+  if [[ -z "$BACKUP_DIR" ]]; then
+    echo "❌ Archive vide ou structure inattendue : $SOURCE"
+    exit 1
+  fi
+else
+  echo "❌ Format non reconnu (.tar.gz ou dossier attendu) : $SOURCE"
   exit 1
 fi
 
@@ -69,7 +91,7 @@ HAS_FUNCTIONS=false
 [[ -f "$BACKUP_DIR/appwrite-functions.json" ]] && HAS_FUNCTIONS=true
 
 echo ""
-echo "♻️  Restauration depuis : $BACKUP_DIR"
+echo "♻️  Restauration depuis : $SOURCE"
 echo ""
 echo "Contenu détecté :"
 $HAS_MARIADB   && echo "   ✅ mariadb.sql" || echo "   ❌ mariadb.sql (absent)"
@@ -648,7 +670,9 @@ case "$RESTORE_MODE" in
     else
       echo ""
       echo "💡 Lance 'docker compose up -d' puis relance :"
-      echo "   $0 $BACKUP_DIR  (mode 3) pour restaurer les teams"
+      # $SOURCE et non $BACKUP_DIR : ce dernier pointe vers un temporaire
+      # déjà effacé quand l'utilisateur relancera la commande.
+      echo "   $0 $SOURCE  (mode 3) pour restaurer les teams"
     fi
     ;;
 
