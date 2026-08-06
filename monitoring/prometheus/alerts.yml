@@ -1,0 +1,312 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Règles d'alerte KonfiturGame
+#
+# La sévérité reprend l'échelle déjà utilisée par le projet pour les anomalies
+# (cf. docs/CAHIER-DE-RECETTES.md et le plan de correction des bogues) :
+#   P0 — critique : service indisponible, perte de données possible
+#   P1 — majeur   : fonctionnalité dégradée, expérience utilisateur atteinte
+#   P2 — modéré   : ressource sous tension, échéance à traiter
+#   P3 — mineur   : information, à consulter lors de la revue hebdomadaire
+#
+# `for:` est la durée pendant laquelle la condition doit rester vraie avant que
+# l'alerte parte. Elle évite qu'un pic d'une seule mesure réveille l'astreinte :
+# un redéploiement provoque normalement quelques secondes d'indisponibilité.
+# ═══════════════════════════════════════════════════════════════════════════
+
+groups:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Disponibilité — ce que perçoit un visiteur
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: disponibilite
+    rules:
+      - alert: SiteIndisponible
+        expr: probe_success{service="frontend"} == 0
+        for: 2m
+        labels:
+          severity: P0
+        annotations:
+          summary: "Site injoignable — {{ $labels.instance }}"
+          description: >
+            La sonde externe échoue depuis 2 minutes sur {{ $labels.instance }}.
+            Vérifier `docker compose ps`, puis les logs de traefik et frontend.
+            Symptôme identique à l'anomalie R-04 (campagne du 21/07/2026).
+
+      - alert: ApiAppwriteIndisponible
+        expr: probe_success{service="appwrite"} == 0
+        for: 2m
+        labels:
+          severity: P0
+        annotations:
+          summary: "API Appwrite injoignable — {{ $labels.instance }}"
+          description: >
+            Plus aucune écriture ni authentification n'est possible.
+            Vérifier appwrite, mariadb et redis.
+
+      - alert: DashboardTraefikNonProtege
+        expr: probe_success{service="traefik"} == 0
+        for: 5m
+        labels:
+          severity: P0
+        annotations:
+          summary: "Le dashboard Traefik ne renvoie plus 401"
+          description: >
+            La sonde attend un 401. Toute autre réponse signifie que
+            l'authentification basique est tombée : le dashboard, qui expose la
+            topologie complète du routage, est potentiellement public.
+
+      - alert: LatenceElevee
+        expr: probe_duration_seconds{service="frontend"} > 3
+        for: 10m
+        labels:
+          severity: P1
+        annotations:
+          summary: "Temps de réponse > 3 s sur {{ $labels.instance }}"
+          description: >
+            Dégradation perceptible. Corréler avec la charge CPU de l'hôte et
+            les métriques du conteneur frontend.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Erreurs applicatives — vues depuis le reverse proxy
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: erreurs
+    rules:
+      - alert: TauxErreurs5xx
+        expr: >
+          sum(rate(traefik_service_requests_total{code=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(traefik_service_requests_total[5m])), 0.001)
+          > 0.05
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: "Plus de 5 % des requêtes en erreur serveur"
+          description: >
+            Le taux de 5xx dépasse 5 % sur 5 minutes. Consulter l'accessLog
+            Traefik (déjà filtré sur 400-599) : `docker compose logs traefik`.
+
+      - alert: PicErreurs4xx
+        expr: >
+          sum(rate(traefik_service_requests_total{code=~"4.."}[5m])) > 5
+        for: 10m
+        labels:
+          severity: P3
+        annotations:
+          summary: "Volume inhabituel de réponses 4xx"
+          description: >
+            Souvent un scan automatisé. Vérifier les IP bannies dans
+            /admin/logs et les entrées `bot` de la collection audit_logs.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Certificats TLS — renouvelés automatiquement par Let's Encrypt
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: tls
+    rules:
+      - alert: CertificatTlsBientotExpire
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 14
+        for: 1h
+        labels:
+          severity: P2
+        annotations:
+          summary: "Certificat TLS de {{ $labels.instance }} expire dans moins de 14 jours"
+          description: >
+            Let's Encrypt renouvelle à 30 jours de l'échéance. Passer sous
+            14 jours signifie que le renouvellement ACME échoue : vérifier
+            l'accessibilité du challenge HTTP sur le port 80 et les logs Traefik.
+
+      - alert: CertificatTlsExpireImminent
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 3
+        for: 10m
+        labels:
+          severity: P0
+        annotations:
+          summary: "Certificat TLS de {{ $labels.instance }} expire dans moins de 3 jours"
+          description: "À l'expiration, tous les navigateurs bloqueront l'accès au site."
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Ressources de l'hôte
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: ressources
+    rules:
+      - alert: EspaceDisqueFaible
+        expr: >
+          node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+          / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}
+          < 0.15
+        for: 15m
+        labels:
+          severity: P2
+        annotations:
+          summary: "Moins de 15 % d'espace disque libre"
+          description: >
+            Les images Docker, les logs et les sauvegardes sont les postes
+            habituels. `docker system prune` et rotation du dossier backups/.
+            À 0 %, MariaDB s'arrête d'écrire.
+
+      - alert: EspaceDisqueCritique
+        expr: >
+          node_filesystem_avail_bytes{mountpoint="/",fstype!="tmpfs"}
+          / node_filesystem_size_bytes{mountpoint="/",fstype!="tmpfs"}
+          < 0.05
+        for: 5m
+        labels:
+          severity: P0
+        annotations:
+          summary: "Moins de 5 % d'espace disque libre"
+          description: "Risque d'arrêt de MariaDB et de corruption des écritures en cours."
+
+      - alert: MemoireSaturee
+        expr: >
+          (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+        for: 15m
+        labels:
+          severity: P2
+        annotations:
+          summary: "Mémoire de l'hôte au-dessus de 90 %"
+          description: >
+            Risque de kill OOM. Les conteneurs Appwrite (workers, executor)
+            sont les plus gourmands.
+
+      - alert: ChargeCpuSoutenue
+        expr: >
+          100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 85
+        for: 20m
+        labels:
+          severity: P2
+        annotations:
+          summary: "CPU au-dessus de 85 % depuis 20 minutes"
+          description: "Vérifier les conteneurs les plus consommateurs via cAdvisor."
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Conteneurs
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: conteneurs
+    rules:
+      # Le garde `and on() count(...) > 0` n'est pas une précaution théorique.
+      # Sans lui, l'alerte se déclenche dès que cAdvisor n'expose pas le label
+      # `name` — ce qui est le cas sur Docker Desktop/WSL2, où il ne remonte
+      # que des cgroups (`/`, `/docker`) sans métadonnée de conteneur.
+      # `absent()` est alors vrai en permanence et l'alerte crie au loup alors
+      # que tous les services tournent. Le garde exige qu'au moins un conteneur
+      # konfitur soit effectivement vu avant de conclure qu'il en manque un :
+      # absence de métadonnée ≠ absence de conteneur.
+      - alert: ConteneurAbsent
+        expr: >
+          (
+            absent(container_last_seen{name="konfitur-appwrite"})
+            or absent(container_last_seen{name="konfitur-frontend"})
+            or absent(container_last_seen{name="konfitur-mariadb"})
+            or absent(container_last_seen{name="konfitur-redis"})
+            or absent(container_last_seen{name="konfitur-traefik"})
+          )
+          and on() (count(container_last_seen{name=~"konfitur-.*"}) > 0)
+        for: 3m
+        labels:
+          severity: P0
+        annotations:
+          summary: "Un conteneur critique a disparu de la supervision"
+          description: >
+            Conteneur arrêté ou supprimé. `restart: unless-stopped` aurait dû
+            le relancer : une absence persistante signale un échec de démarrage
+            répété (`docker compose logs --tail=100`).
+
+      - alert: ConteneurRedemarrageEnBoucle
+        expr: >
+          increase(container_start_time_seconds{name=~"konfitur-.*"}[15m]) > 0
+          and
+          changes(container_start_time_seconds{name=~"konfitur-.*"}[1h]) > 3
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: "{{ $labels.name }} redémarre en boucle"
+          description: >
+            Plus de 3 redémarrages en une heure. Typiquement une variable
+            d'environnement manquante ou une dépendance indisponible.
+
+      - alert: CollecteMetriquesInterrompue
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: P1
+        annotations:
+          summary: "Cible de collecte injoignable — {{ $labels.job }}"
+          description: >
+            Prometheus n'arrive plus à scraper {{ $labels.job }}. Angle mort
+            de supervision : traiter avant les alertes qu'il porte.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Sonde de dernier recours — métriques poussées par scripts/health-check.sh
+  #
+  # Ces deux règles ne dépendent ni de cAdvisor ni de ses métadonnées : elles
+  # constituent le filet quand la détection par conteneur est aveugle. Elles
+  # surveillent aussi la sonde elle-même — une supervision dont le plancher
+  # s'est arrêté sans prévenir ne vaut pas mieux que pas de supervision.
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: sondes
+    rules:
+      - alert: HealthCheckAnomalie
+        expr: konfitur_healthcheck_failures > 0
+        for: 10m
+        labels:
+          severity: P1
+        annotations:
+          summary: "health-check.sh signale une anomalie non résolue"
+          description: >
+            Un conteneur critique n'a pas pu être relancé, ou une surface HTTP
+            ne répond plus. Le détail est dans
+            /var/log/konfiturgame-health.log.
+
+      - alert: HealthCheckArrete
+        expr: >
+          time() - konfitur_healthcheck_last_run_timestamp_seconds > 1800
+          or absent(konfitur_healthcheck_last_run_timestamp_seconds)
+        for: 15m
+        labels:
+          severity: P1
+        annotations:
+          summary: "La sonde health-check ne tourne plus"
+          description: >
+            Aucune exécution depuis plus de 30 minutes alors que la tâche cron
+            est cadencée à 5 minutes. Vérifier /etc/cron.d/konfiturgame et
+            `systemctl status cron` : la remédiation automatique des conteneurs
+            n'est plus assurée.
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Sauvegardes — métrique poussée par scripts/backup.sh (textfile collector)
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: sauvegardes
+    rules:
+      - alert: SauvegardeManquante
+        expr: >
+          time() - konfitur_backup_last_success_timestamp_seconds > 90000
+        for: 30m
+        labels:
+          severity: P1
+        annotations:
+          summary: "Aucune sauvegarde réussie depuis plus de 25 heures"
+          description: >
+            La tâche cron quotidienne (2 h) n'a pas abouti. Vérifier
+            /var/log/konfiturgame-backup.log et l'espace disque disponible.
+
+      - alert: SauvegardeJamaisExecutee
+        expr: absent(konfitur_backup_last_success_timestamp_seconds)
+        for: 1h
+        labels:
+          severity: P1
+        annotations:
+          summary: "Aucune métrique de sauvegarde publiée"
+          description: >
+            backup.sh n'a jamais écrit dans le collecteur textfile, ou le
+            montage /var/lib/node_exporter/textfile_collector est absent.
+
+      - alert: SauvegardePartielle
+        expr: konfitur_backup_last_exit_code != 0
+        for: 10m
+        labels:
+          severity: P2
+        annotations:
+          summary: "Dernière sauvegarde terminée en échec partiel"
+          description: >
+            backup.sh sort en code 1 quand l'export API Appwrite est
+            incomplet ; le dump MariaDB et les volumes restent exploitables.

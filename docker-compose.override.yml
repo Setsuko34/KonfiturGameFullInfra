@@ -144,8 +144,92 @@ services:
   mariadb:
     ports:
       - "3306:3306"
+
+  # ════════════════════════════════════════════════════════
+  # SUPERVISION — rejouée intégralement en local
+  #
+  # La stack tourne en dev comme en prod, avec une seule différence : les
+  # sondes visent les conteneurs locaux au lieu de konfiturgame.fr. Laisser
+  # les cibles de production reviendrait à marteler le site public depuis le
+  # poste de développement et à remonter de fausses alertes.
+  #
+  # Tout le reste est identique — mêmes règles d'alerte, mêmes seuils, mêmes
+  # tableaux de bord, même User-Agent de sonde. C'est la condition pour qu'un
+  # test local prouve quelque chose sur la production.
+  #
+  # Accès en dev :
+  #   Grafana     → http://localhost:3001   (admin / admin)
+  #   Prometheus  → http://localhost:9090   (onglet Status → Targets)
+  #   blackbox    → http://localhost:9115
+  # ════════════════════════════════════════════════════════
+  prometheus:
+    command:
+      - --config.file=/etc/prometheus/prometheus.dev.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=3d    # inutile de garder 30 j en local
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"   # consultation directe des cibles et des règles
+    networks:
+      - monitoring-net
+
+  grafana:
+    environment:
+      # Identifiants triviaux assumés : l'instance n'est jamais exposée hors
+      # de la machine de développement.
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SERVER_ROOT_URL=http://localhost:3001
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    ports:
+      - "3001:3000"
+    labels:
+      - "traefik.enable=false"   # pas de TLS ni de sous-domaine en dev
+    networks:
+      - monitoring-net
+
+  alertmanager:
+    ports:
+      - "9093:9093"   # consultation des alertes reçues et des silences
+    networks:
+      - monitoring-net
+
+  blackbox-exporter:
+    command:
+      - --config.file=/etc/blackbox/blackbox.dev.yml
+    ports:
+      - "9115:9115"
+    # konfitur-net en plus : sans lui, la sonde ne peut résoudre ni
+    # `frontend`, ni `appwrite`, ni `traefik`, et toutes les cibles sont down.
+    networks:
+      - monitoring-net
+      - konfitur-net
+
+  # node-exporter et cAdvisor mesurent la VM Docker Desktop et non l'hôte
+  # Windows. Les valeurs absolues n'ont donc pas de sens en dev ; ce qui est
+  # vérifié ici, c'est que la collecte et les règles fonctionnent.
+  node-exporter:
+    # Montage de / sans `rslave` : la propagation exige que / soit `shared` ou
+    # `slave` côté démon, or il est `private` dans la VM de Docker Desktop et le
+    # conteneur refuse alors de démarrer. Elle ne sert qu'à voir les systèmes de
+    # fichiers montés à chaud après le démarrage — sans objet en dev. La prod
+    # (Debian systemd, / en `shared`) garde `rslave` via docker-compose.yml.
+    volumes:
+      - /:/host:ro
+      - ./monitoring/textfile:/var/lib/node_exporter/textfile_collector:ro
+    networks:
+      - monitoring-net
+
+  cadvisor:
+    networks:
+      - monitoring-net
+
 # Référence les réseaux définis dans docker-compose.yml pour que
 # Docker Compose les reconnaisse comme appartenant au même projet
 networks:
   konfitur-net:
   appwrite-net:
+  monitoring-net:

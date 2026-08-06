@@ -1,0 +1,39 @@
+# Source de données provisionnée au démarrage : Grafana est reconstructible à
+# l'identique depuis le dépôt, aucun réglage n'est fait à la main dans l'UI.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    # uid FIXE et obligatoire : les panneaux du tableau de bord versionné
+    # référencent la source par cet identifiant. Sans lui, Grafana en génère un
+    # aléatoire à chaque provisionnement initial, la référence ne résout plus
+    # et tous les panneaux affichent « No data » — alors que Prometheus
+    # collecte normalement. Doit rester aligné avec
+    # monitoring/grafana/dashboards/*.json.
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: 30s        # doit refléter le scrape_interval de Prometheus
+      httpMethod: POST
+      # Rattache Prometheus à son Alertmanager : Grafana affiche alors, sous
+      # Alerting, les alertes réellement acheminées et permet de poser des
+      # silences — sans quoi l'interface montre des règles qui se déclenchent
+      # sans dire si quelqu'un a été prévenu.
+      manageAlerts: true
+      alertmanagerUid: alertmanager
+
+  # Alertmanager déclaré en source de données : Grafana reste le point d'entrée
+  # unique de l'exploitation, même si la notification ne passe plus par lui.
+  - name: Alertmanager
+    uid: alertmanager
+    type: alertmanager
+    access: proxy
+    url: http://alertmanager:9093
+    editable: false
+    jsonData:
+      implementation: prometheus
+      handleGrafanaManagedAlerts: false

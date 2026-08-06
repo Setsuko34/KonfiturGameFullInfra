@@ -1,0 +1,118 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Prometheus — configuration de DÉVELOPPEMENT
+#
+# Objectif : rejouer en local toute la chaîne de supervision (collecte →
+# évaluation des règles → notification) avant de la déployer en production.
+#
+# Différences avec prometheus.yml, et uniquement celles-là :
+#   - les sondes visent la stack LOCALE (conteneurs), jamais konfiturgame.fr.
+#     Laisser les cibles de production reviendrait à marteler le site public
+#     depuis le poste de développement et à remonter de fausses alertes.
+#   - la sonde du dashboard Traefik est absente : en dev le dashboard est en
+#     accès libre (`api.insecure: true`), le 401 attendu en production n'a pas
+#     de sens ici.
+#
+# Le fichier de règles est LE MÊME qu'en production : les seuils et les
+# sévérités ne doivent pas diverger entre les deux environnements, sans quoi
+# le test local ne prouverait rien.
+# ═══════════════════════════════════════════════════════════════════════════
+
+global:
+  scrape_interval: 15s        # plus court qu'en prod : retour plus rapide en test
+  scrape_timeout: 10s
+  evaluation_interval: 15s
+  external_labels:
+    environment: development
+    project: konfiturgame
+
+# Destination des alertes évaluées ci-dessus. Sans ce bloc, les règles passent
+# en `firing` dans Prometheus et n'arrivent nulle part : Grafana affiche les
+# alertes d'une source externe mais ne les achemine pas vers ses propres
+# politiques de notification.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── Traefik : nécessite l'entrypoint `metrics` de traefik.dev.yml ───────
+  - job_name: traefik
+    static_configs:
+      - targets: ["traefik:8082"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  - job_name: cadvisor
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # ── Frontend : accès direct au conteneur ────────────────────────────────
+  # En dev, `frontend` porte traefik.enable=false et est servi sur le port
+  # 3000. La sonde traverse quand même proxy.ts : c'est ce qui permet de
+  # vérifier localement que le User-Agent de la sonde n'est pas bloqué par la
+  # détection de bots.
+  - job_name: blackbox-http
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - http://frontend:3000
+          - http://frontend:3000/explore
+        labels:
+          service: frontend
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ── API Appwrite : accès direct au conteneur ────────────────────────────
+  - job_name: blackbox-appwrite
+    metrics_path: /probe
+    params:
+      module: [http_2xx_or_401]
+    static_configs:
+      - targets:
+          - http://appwrite/v1/health/version
+        labels:
+          service: appwrite
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # ── Routage same-origin /v1 via Traefik (non-régression B-11) ───────────
+  # Le module force l'en-tête Host: localhost, sans lequel aucune règle de
+  # routage ne correspond.
+  - job_name: blackbox-same-origin
+    metrics_path: /probe
+    params:
+      module: [http_same_origin_v1]
+    static_configs:
+      - targets:
+          - http://traefik:80/v1/account
+        labels:
+          service: appwrite
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

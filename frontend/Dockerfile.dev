@@ -4,6 +4,12 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=development
 
+# Corepack télécharge pnpm dans son cache, par défaut sous le HOME de
+# l'utilisateur courant. Sans emplacement partagé, l'installation faite ici en
+# root serait invisible à l'utilisateur `node` du runtime, qui retéléchargerait
+# pnpm à chaque démarrage — ou échouerait sans réseau.
+ENV COREPACK_HOME=/usr/local/corepack
+
 RUN corepack enable pnpm
 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
@@ -11,6 +17,27 @@ RUN pnpm install
 
 COPY . .
 
+# Trivy DS-0002 — ne pas tourner en root, même en développement.
+#
+# `.next` doit exister ET appartenir à `node` AVANT que Compose ne pose son
+# volume anonyme dessus : un volume anonyme hérite des droits du répertoire
+# trouvé dans l'image, et un répertoire absent produit un volume appartenant à
+# root, que `pnpm dev` ne pourrait pas écrire.
+RUN mkdir -p /app/.next \
+    && chown -R node:node /app /usr/local/corepack
+
+# UID numérique (hadolint DL3066) — 1000 = `node`, fourni par l'image de base.
+USER 1000
+
 EXPOSE 3000
+
+# Voir le Dockerfile de production pour le détail : cible statique exemptée de
+# la détection de bots par les SKIP_PATTERNS de proxy.ts, et User-Agent
+# explicite parce que celui de wget vaudrait un 403.
+# `start-period` plus long qu'en prod : le premier rendu compile à la volée.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+  CMD ["/usr/bin/wget", "--quiet", "--spider", "--tries=1", \
+       "--user-agent=Mozilla/5.0 (compatible; KonfiturGame-Healthcheck/1.0)", \
+       "http://127.0.0.1:3000/hautequalite.svg"]
 
 CMD ["pnpm", "dev"]

@@ -15,6 +15,11 @@ entryPoints:
     http:
       tls:
         certResolver: letsencrypt
+  # Entrypoint dédié aux métriques Prometheus. Le port n'est PAS publié dans
+  # docker-compose.yml : il n'est joignable que depuis monitoring-net. Exposer
+  # ces métriques révélerait la topologie complète du routage.
+  metrics:
+    address: ":8082"
 
 certificatesResolvers:
   letsencrypt:
@@ -40,3 +45,13 @@ accessLog:
   filters:
     statusCodes:
       - "400-599"
+
+# Métriques exposées à Prometheus sur l'entrypoint `metrics`.
+# addRoutersLabels distingue le trafic du frontend, de l'API et des surfaces
+# d'authentification au sein des mêmes séries temporelles.
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true

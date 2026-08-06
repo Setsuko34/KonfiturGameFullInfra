@@ -1,6 +1,18 @@
 # Config pnpm (pnpm >= 10 lit overrides/allowBuilds ici, plus dans package.json)
 overrides:
-  "postcss@<8.5.10": ">=8.5.10"
+  # Ces trois paquets sont des dépendances TRANSITIVES de next, qui les épingle
+  # à des versions vulnérables (postcss 8.4.31, sharp ^0.34.5). Monter next ne
+  # les corrige donc pas : l'override est le seul levier.
+  #
+  # postcss — GHSA-r28c-9q8g-f849 puis GHSA-fxqj-rqcc-2cmp (correctif
+  # incomplet du premier) : traversée de chemin via `sourceMappingURL`. Non
+  # exploitable ici (PostCSS ne voit que notre propre CSS, au build), mais
+  # rien ne garantit que ça reste vrai.
+  "postcss@<8.5.23": ">=8.5.23"
+  # sharp — GHSA-f88m-g3jw-g9cj : vulnérabilités héritées de libvips.
+  # 0.35.x embarque libvips 8.18.3. `^0.34.5` déclaré par next n'accepte pas
+  # 0.35, d'où la borne explicite.
+  "sharp@<0.35.0": ">=0.35.0"
   "brace-expansion@<1.1.15": 1.1.15
 
 # pnpm >= 10 bloque les scripts postinstall par défaut — allowlist explicite,

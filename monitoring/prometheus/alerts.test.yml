@@ -1,0 +1,337 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Tests unitaires des règles d'alerte — `promtool test rules`
+#
+# Pourquoi ce fichier existe : la stack de développement ne peut pas exercer
+# une bonne partie de alerts.yml.
+#   - les règles TLS supposent un certificat, or le dev est en HTTP simple ;
+#   - DashboardTraefikNonProtege attend un 401, or le dashboard est en accès
+#     libre en dev (`api.insecure: true`) ;
+#   - les règles temporelles ont des `for:` de 30 minutes à 1 heure et des
+#     seuils à 25 heures : les valider « en vrai » demanderait de laisser
+#     tourner la stack une journée.
+#
+# promtool évalue ces règles sur une horloge VIRTUELLE : un seuil à 25 h
+# s'évalue en millisecondes. C'est le seul endroit où ces règles-là peuvent
+# être vérifiées, en CI comme en local.
+#
+# Exécution (image identique à celle de la production) :
+#   docker run --rm --entrypoint promtool \
+#     -v "$PWD/monitoring/prometheus:/t" prom/prometheus:v3.1.0 \
+#     test rules /t/alerts.test.yml
+#
+# NOTE — promtool compare les alertes attendues sur la TOTALITÉ de leurs
+# labels ET de leurs annotations : il n'existe pas de correspondance
+# partielle. Reformuler une description dans alerts.yml casse donc le test
+# correspondant, et c'est voulu — la description est le mode d'emploi que lit
+# l'astreinte à 3 h du matin, elle mérite d'être versionnée sciemment. Effet
+# de bord utile : une variable de gabarit mal orthographiée
+# (`{{ $labels.instnace }}`) rend une chaîne vide et fait rougir le test.
+# Les descriptions écrites en YAML plié (`>`) se terminent par un `\n`, d'où
+# les chaînes entre guillemets doubles ci-dessous.
+# ═══════════════════════════════════════════════════════════════════════════
+
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # ─────────────────────────────────────────────────────────────────────────
+  # ConteneurAbsent — non-régression du faux positif cAdvisor
+  #
+  # Le garde `and on() count(...) > 0` a été ajouté après un faux positif
+  # permanent sous Docker Desktop/WSL2 (cf. commentaire dans alerts.yml).
+  # Ces trois cas figent le raisonnement : absence de métadonnée ≠ absence
+  # de conteneur.
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: ConteneurAbsent — cAdvisor sans label `name` (cas WSL2)
+    interval: 1m
+    input_series:
+      # cAdvisor ne remonte que des cgroups bruts, sans métadonnée Docker.
+      # `absent()` est vrai pour les cinq conteneurs, mais aucun conteneur
+      # konfitur n'est visible : conclure qu'il en manque un serait faux.
+      - series: 'container_last_seen{id="/"}'
+        values: '1+0x10'
+      - series: 'container_last_seen{id="/docker"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: ConteneurAbsent
+        exp_alerts: []
+
+  - name: ConteneurAbsent — les cinq conteneurs critiques sont présents
+    interval: 1m
+    input_series:
+      - series: 'container_last_seen{name="konfitur-appwrite"}'
+        values: '1+0x10'
+      - series: 'container_last_seen{name="konfitur-frontend"}'
+        values: '1+0x10'
+      - series: 'container_last_seen{name="konfitur-mariadb"}'
+        values: '1+0x10'
+      - series: 'container_last_seen{name="konfitur-redis"}'
+        values: '1+0x10'
+      - series: 'container_last_seen{name="konfitur-traefik"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: ConteneurAbsent
+        exp_alerts: []
+
+  - name: ConteneurAbsent — mariadb a disparu, les autres répondent
+    interval: 1m
+    input_series:
+      # Le garde est satisfait (4 conteneurs vus) : l'absence de mariadb est
+      # cette fois une vraie disparition et doit remonter.
+      - series: 'container_last_seen{name="konfitur-appwrite"}'
+        values: '1+0x10'
+      - series: 'container_last_seen{name="konfitur-frontend"}'
+        values: '1+0x10'
+      - series: 'container_last_seen{name="konfitur-redis"}'
+        values: '1+0x10'
+      - series: 'container_last_seen{name="konfitur-traefik"}'
+        values: '1+0x10'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: ConteneurAbsent
+        exp_alerts:
+          - exp_labels:
+              severity: P0
+              name: konfitur-mariadb
+            exp_annotations:
+              summary: "Un conteneur critique a disparu de la supervision"
+              description: "Conteneur arrêté ou supprimé. `restart: unless-stopped` aurait dû le relancer : une absence persistante signale un échec de démarrage répété (`docker compose logs --tail=100`).\n"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # TauxErreurs5xx — seuil et silence à trafic nul
+  #
+  # La nuit, le trafic tombe à zéro et le quotient devient une division 0/0.
+  # Le premier cas vérifie le silence dans ce régime, le second qu'un vrai
+  # taux d'erreur passe toujours.
+  #
+  # À noter : le `clamp_min(..., 0.001)` du dénominateur n'est PAS éprouvé
+  # ici, et ne peut pas l'être. Sur une fenêtre `[5m]`, un compteur qui bouge
+  # d'une seule unité produit déjà un taux d'environ 0,0033 — le plancher de
+  # 0,001 n'est donc jamais atteignable : le taux vaut soit exactement zéro,
+  # soit davantage que le plancher. À zéro, PromQL évalue 0/0 en NaN, et une
+  # comparaison avec NaN écarte le point : la règle reste muette avec ou sans
+  # le garde. Il est inoffensif, mais c'est une ceinture sur une bretelle —
+  # ne pas s'y fier comme à une protection testée.
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: TauxErreurs5xx — trafic nul, aucune alerte
+    interval: 1m
+    input_series:
+      - series: 'traefik_service_requests_total{code="200", service="frontend@docker"}'
+        values: '1000+0x20'
+      - series: 'traefik_service_requests_total{code="500", service="frontend@docker"}'
+        values: '3+0x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TauxErreurs5xx
+        exp_alerts: []
+
+  - name: TauxErreurs5xx — 10 % des requêtes en erreur serveur
+    interval: 1m
+    input_series:
+      # 9 requêtes servies et 1 erreur par minute → 10 %, soit le double du
+      # seuil. Les `sum()` sans `by` effacent tous les labels : l'alerte ne
+      # porte que sa sévérité.
+      - series: 'traefik_service_requests_total{code="200", service="frontend@docker"}'
+        values: '0+9x20'
+      - series: 'traefik_service_requests_total{code="500", service="frontend@docker"}'
+        values: '0+1x20'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: TauxErreurs5xx
+        exp_alerts:
+          - exp_labels:
+              severity: P1
+            exp_annotations:
+              summary: "Plus de 5 % des requêtes en erreur serveur"
+              description: "Le taux de 5xx dépasse 5 % sur 5 minutes. Consulter l'accessLog Traefik (déjà filtré sur 400-599) : `docker compose logs traefik`.\n"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Sauvegardes — seuil à 25 h, impossible à éprouver autrement
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: Sauvegarde — fraîche à 2 h, manquante à 26 h
+    interval: 5m
+    input_series:
+      # Horodatage figé à 0 : l'âge de la sauvegarde est donc exactement
+      # l'heure d'évaluation. 320 points de 5 min couvrent plus de 26 h.
+      - series: 'konfitur_backup_last_success_timestamp_seconds'
+        values: '0+0x320'
+    alert_rule_test:
+      # 2 h après la sauvegarde : rien, c'est le régime nominal.
+      - eval_time: 2h
+        alertname: SauvegardeManquante
+        exp_alerts: []
+      # 26 h : le seuil (25 h) est franchi depuis une heure, donc au-delà du
+      # `for: 30m`.
+      - eval_time: 26h
+        alertname: SauvegardeManquante
+        exp_alerts:
+          - exp_labels:
+              severity: P1
+            exp_annotations:
+              summary: "Aucune sauvegarde réussie depuis plus de 25 heures"
+              description: "La tâche cron quotidienne (2 h) n'a pas abouti. Vérifier /var/log/konfiturgame-backup.log et l'espace disque disponible.\n"
+
+  - name: Sauvegarde — métrique jamais publiée
+    interval: 1m
+    input_series:
+      # Série sans rapport : il en faut au moins une pour que le test soit
+      # valide, et son existence prouve que Prometheus collecte bien —
+      # l'alerte porte donc sur l'absence de la métrique, pas sur une panne
+      # de collecte.
+      - series: 'up{job="node"}'
+        values: '1+0x120'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: SauvegardeJamaisExecutee
+        exp_alerts:
+          - exp_labels:
+              severity: P1
+            exp_annotations:
+              summary: "Aucune métrique de sauvegarde publiée"
+              description: "backup.sh n'a jamais écrit dans le collecteur textfile, ou le montage /var/lib/node_exporter/textfile_collector est absent.\n"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Sonde health-check — la branche `or absent()`
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: HealthCheckArrete — sonde muette depuis le départ
+    interval: 1m
+    input_series:
+      - series: 'up{job="node"}'
+        values: '1+0x40'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: HealthCheckArrete
+        exp_alerts:
+          - exp_labels:
+              severity: P1
+            exp_annotations:
+              summary: "La sonde health-check ne tourne plus"
+              description: "Aucune exécution depuis plus de 30 minutes alors que la tâche cron est cadencée à 5 minutes. Vérifier /etc/cron.d/konfiturgame et `systemctl status cron` : la remédiation automatique des conteneurs n'est plus assurée.\n"
+
+  - name: HealthCheckArrete — sonde qui tourne toutes les 5 minutes
+    interval: 5m
+    input_series:
+      # L'horodatage suit l'horloge (+300 s tous les 5 min) : c'est le
+      # comportement d'un cron sain, l'écart `time() - métrique` reste nul.
+      - series: 'konfitur_healthcheck_last_run_timestamp_seconds'
+        values: '0+300x40'
+    alert_rule_test:
+      - eval_time: 90m
+        alertname: HealthCheckArrete
+        exp_alerts: []
+
+  - name: HealthCheckArrete — sonde figée, de part et d'autre du seuil
+    interval: 1m
+    input_series:
+      # Horodatage figé à 0 : l'âge de la dernière exécution vaut l'heure
+      # d'évaluation. Encadrer le seuil des deux côtés est ce qui le fige :
+      # un test qui ne vérifie que le déclenchement laisse passer un seuil
+      # relâché (30 min → 5 h) sans broncher.
+      - series: 'konfitur_healthcheck_last_run_timestamp_seconds'
+        values: '0+0x60'
+    alert_rule_test:
+      # 20 min sans passage : deux cycles cron manqués, tolérable.
+      - eval_time: 20m
+        alertname: HealthCheckArrete
+        exp_alerts: []
+      # 50 min : seuil franchi depuis 20 min, donc au-delà du `for: 15m`.
+      - eval_time: 50m
+        alertname: HealthCheckArrete
+        exp_alerts:
+          - exp_labels:
+              severity: P1
+            exp_annotations:
+              summary: "La sonde health-check ne tourne plus"
+              description: "Aucune exécution depuis plus de 30 minutes alors que la tâche cron est cadencée à 5 minutes. Vérifier /etc/cron.d/konfiturgame et `systemctl status cron` : la remédiation automatique des conteneurs n'est plus assurée.\n"
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Certificats TLS — inéprouvables en dev (HTTP simple)
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: TLS — certificat renouvelé, à 60 jours de l'échéance
+    interval: 5m
+    input_series:
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://konfiturgame.fr", service="frontend"}'
+        values: '5184000+0x40'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CertificatTlsBientotExpire
+        exp_alerts: []
+      - eval_time: 2h
+        alertname: CertificatTlsExpireImminent
+        exp_alerts: []
+
+  - name: TLS — 20 jours restants, le renouvellement ACME n'a pas encore eu lieu
+    interval: 5m
+    input_series:
+      # 20 jours = 1728000 s. Cas frontière indispensable : Let's Encrypt
+      # renouvelle à 30 jours, donc un certificat à 20 jours est déjà en
+      # retard — mais pas encore inquiétant. Sans ce point au-dessus du seuil,
+      # relâcher le 14 à 30 passerait inaperçu et l'alerte deviendrait un
+      # bruit permanent, puisque tout certificat vit sous les 30 jours entre
+      # deux renouvellements.
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://konfiturgame.fr", service="frontend"}'
+        values: '1728000+0x40'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CertificatTlsBientotExpire
+        exp_alerts: []
+
+  - name: TLS — renouvellement ACME en panne, 10 jours restants
+    interval: 5m
+    input_series:
+      # 10 jours = 864000 s. Sous les 14 jours du P2, au-dessus des 3 jours
+      # du P0 : la première alerte doit partir seule, sinon l'échelle de
+      # sévérité ne veut plus rien dire.
+      - series: 'probe_ssl_earliest_cert_expiry{instance="https://konfiturgame.fr", service="frontend"}'
+        values: '864000+0x40'
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: CertificatTlsBientotExpire
+        exp_alerts:
+          - exp_labels:
+              severity: P2
+              instance: https://konfiturgame.fr
+              service: frontend
+            exp_annotations:
+              summary: "Certificat TLS de https://konfiturgame.fr expire dans moins de 14 jours"
+              description: "Let's Encrypt renouvelle à 30 jours de l'échéance. Passer sous 14 jours signifie que le renouvellement ACME échoue : vérifier l'accessibilité du challenge HTTP sur le port 80 et les logs Traefik.\n"
+      - eval_time: 2h
+        alertname: CertificatTlsExpireImminent
+        exp_alerts: []
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Dashboard Traefik — sonde de sécurité, inéprouvable en dev
+  #
+  # `api.insecure: true` en dev : le 401 attendu en production n'existe pas
+  # localement, et prometheus.dev.yml ne déclare donc pas cette sonde.
+  # ─────────────────────────────────────────────────────────────────────────
+  - name: DashboardTraefikNonProtege — le 401 a disparu
+    interval: 1m
+    input_series:
+      - series: 'probe_success{service="traefik", instance="https://traefik.konfiturgame.fr"}'
+        values: '0+0x20'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: DashboardTraefikNonProtege
+        exp_alerts:
+          - exp_labels:
+              severity: P0
+              service: traefik
+              instance: https://traefik.konfiturgame.fr
+            exp_annotations:
+              summary: "Le dashboard Traefik ne renvoie plus 401"
+              description: "La sonde attend un 401. Toute autre réponse signifie que l'authentification basique est tombée : le dashboard, qui expose la topologie complète du routage, est potentiellement public.\n"
+
+  - name: DashboardTraefikNonProtege — l'authentification basique tient
+    interval: 1m
+    input_series:
+      - series: 'probe_success{service="traefik", instance="https://traefik.konfiturgame.fr"}'
+        values: '1+0x20'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: DashboardTraefikNonProtege
+        exp_alerts: []
