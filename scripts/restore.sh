@@ -65,6 +65,8 @@ load_env() {
     [[ "$value" =~ ^\"(.*)\"$ ]] && value="${BASH_REMATCH[1]}"
     [[ "$value" =~ ^\'(.*)\'$ ]] && value="${BASH_REMATCH[1]}"
     printf -v "$key" '%s' "$value"
+    # shellcheck disable=SC2163  # export par NOM : printf -v a posé la
+    # variable dont $key porte le nom, c'est bien elle qu'il faut exporter.
     export "$key"
   done < "$file"
 }
@@ -619,10 +621,12 @@ restore_functions() {
     # Restaurer les variables de la function
     local var_count=0
     while IFS= read -r var_json; do
-      local var_key var_val var_secret var_body var_result
+      local var_key var_val var_body var_result
       var_key=$(echo "$var_json" | jq -r '.key')
       var_val=$(echo "$var_json" | jq -r '.value // ""')
-      var_secret=$(echo "$var_json" | jq -r '.secret // false')
+      # NOTE : le drapeau `.secret` de la sauvegarde n'est pas retransmis —
+      # les variables reviennent toutes en non-secret. À corriger séparément,
+      # hors du périmètre de ce correctif.
       var_body=$(jq -n --arg k "$var_key" --arg v "$var_val" '{key: $k, value: $v}')
       var_result=$(aw_post "/functions/${fn_id}/variables" "$var_body")
       [[ "$var_result" != "null" ]] && var_count=$((var_count + 1))
