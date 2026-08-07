@@ -387,37 +387,92 @@ docker compose -f docker-compose.yml up -d traefik
 
 ```bash
 ./scripts/backup.sh
-# → ./backups/YYYY-MM-DD_HH-MM/
-# Contient : mariadb.sql, volumes Appwrite (uploads, config, functions, certificates), MANIFEST.txt
+# → ./backups/YYYY-MM-DD_HH-MM.tar.gz
 ```
+
+Le dossier de travail est archivé puis supprimé : **seule l'archive subsiste**, et
+elle est autoportante. Elle contient le dump SQL complet, les cinq volumes
+Appwrite, la configuration du projet hors secrets, les exports API (schéma,
+teams, documents, buckets, functions), un `MANIFEST.txt` et un `SHA256SUMS`.
+
+Code de sortie `1` si l'export API est partiel — le dump MariaDB et les volumes
+restent exploitables dans ce cas. Cet export exige `jq` (voir
+[§2 Prérequis](#2-prérequis-serveur)) : sans lui, chaque sauvegarde sort en `1`
+et déclenche l'alerte `SauvegardePartielle`.
 
 ### Automatique (cron)
 
+Les tâches planifiées sont **versionnées** dans `scripts/crontab.konfiturgame`,
+qui fait foi. Ne pas les recopier ailleurs, et surtout ne pas utiliser
+`crontab -e` : deux définitions concurrentes donnent deux sauvegardes
+quotidiennes.
+
+| Cadence | Tâche |
+|---|---|
+| `*/5 * * * *` | `health-check.sh` — sonde et relance des conteneurs tombés |
+| `0 2 * * *` | `backup.sh` — sauvegarde complète |
+| `0 5 * * 1` | `docker system prune -f` — purge des images intermédiaires |
+| `0 6 1 * *` | troncature des journaux `konfiturgame-*.log` de plus de 50 Mo |
+
+**La rotation vit dans `backup.sh`, pas dans le cron.** Le script conserve 7
+archives (le jour même plus les 6 précédents) et purge le reste lui-même. Ajouter
+une tâche `find -mtime` en parallèle créerait un second endroit décidant de la
+rétention — les deux finiraient par diverger.
+
+**Le déploiement du crontab est automatique.** Le job `deploy-infra` copie
+`scripts/crontab.konfiturgame` vers `/etc/cron.d/konfiturgame` à chaque
+déploiement infra, si le fichier a changé. Modifier une cadence se fait donc
+dans le dépôt, pas sur le serveur.
+
+Cela suppose une délégation `sudo` minimale pour le compte de déploiement, à
+poser **une seule fois par serveur** : voir l'en-tête de
+`scripts/sudoers.d/konfitur-deploy-cron`, qui porte la procédure et la règle de
+référence. Sans elle, `deploy-infra` déploie la stack normalement puis échoue à
+la dernière étape avec un message qui pointe vers ce fichier.
+
+Vérifier que tout est en place :
+
 ```bash
-crontab -e
-# Backup quotidien à 3h
-0 3 * * * /opt/konfiturgame/scripts/backup.sh >> /var/log/konfiturgame-backup.log 2>&1
-# Purge des backups > 30 jours
-0 4 * * * find /opt/konfiturgame/backups -maxdepth 1 -type d -mtime +30 -exec rm -rf {} \;
+ls -l /etc/cron.d/konfiturgame       # -rw-r--r-- root root, date du déploiement
+sudo tail /var/log/konfiturgame-health.log   # une ligne toutes les 5 min
 ```
 
-### Transférer
+> cron **ignore silencieusement** tout fichier de `/etc/cron.d/` accessible en
+> écriture au groupe — sans message, sans erreur, sans trace. D'où le mode `644`
+> imposé par `install` dans le déploiement, et la vérification ci-dessus.
+
+La supervision surveille ces tâches : `SauvegardeManquante` (P1, plus de 25 h
+sans sauvegarde aboutie), `SauvegardeJamaisExecutee` (P1), `SauvegardePartielle`
+(P2) et `HealthCheckArrete`. Voir `SUPERVISION.md`.
+
+### Transférer hors du serveur
 
 ```bash
-tar -czf konfitur-backup-$(date +%Y%m%d).tar.gz ./backups/YYYY-MM-DD_HH-MM/
-rsync -avz konfitur-backup-20260628.tar.gz user@nas:/backups/
+rsync -avz ./backups/2026-08-06_02-00.tar.gz user@nas:/backups/
 ```
+
+L'archive est déjà compressée et autoportante : rien à empaqueter au préalable.
+
+> ⚠️ **Aucune copie hors-site n'est automatisée à ce jour.** Les 7 archives vivent
+> sur le disque de la machine qu'elles sont censées protéger : la perte du VPS
+> emporte la production **et** les sauvegardes. Les alertes détectent une
+> sauvegarde absente, pas un disque perdu. Le transfert ci-dessus reste donc une
+> opération manuelle à faire régulièrement, tant que l'expédition automatique
+> n'est pas en place.
 
 ---
 
 ## 9. Restauration
 
 ```bash
-./scripts/restore.sh ./backups/2025-06-01_14-30
+./scripts/restore.sh ./backups/2026-08-06_02-00.tar.gz
 # → confirmation requise (choisir mode 1 : MariaDB + volumes)
 docker compose -f docker-compose.yml up -d
 curl https://api.konfiturgame.fr/v1/health/version
 ```
+
+Le script accepte l'archive `.tar.gz` directement ; un dossier déjà extrait
+reste accepté.
 
 Ce que fait le script :
 1. Démarre MariaDB + Redis uniquement

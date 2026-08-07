@@ -41,6 +41,8 @@ load_env() {
     [[ "$value" =~ ^\"(.*)\"$ ]] && value="${BASH_REMATCH[1]}"
     [[ "$value" =~ ^\'(.*)\'$ ]] && value="${BASH_REMATCH[1]}"
     printf -v "$key" '%s' "$value"
+#     shellcheck disable=SC2163  # export par NOM : printf -v a posé la
+#     variable dont $key porte le nom, c'est bien elle qu'il faut exporter.
     export "$key"
   done < "$file"
 }

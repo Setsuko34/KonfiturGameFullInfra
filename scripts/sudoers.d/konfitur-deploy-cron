@@ -1,0 +1,62 @@
+# =============================================================================
+# Délégation sudo minimale pour le déploiement des tâches planifiées
+#
+# Le job `deploy-infra` (.github/workflows/ci-cd.yml) copie
+# scripts/crontab.konfiturgame vers /etc/cron.d/konfiturgame à chaque
+# déploiement infra. Cette copie exige root ; la règle ci-dessous est le strict
+# nécessaire pour la faire sans mot de passe.
+#
+# Ce fichier n'est appliqué par rien : il est la RÉFÉRENCE de ce qui doit
+# exister sur le serveur, au même titre que scripts/crontab.konfiturgame.
+# Il sert à reconstruire un serveur, à rendre l'élévation de privilège
+# relisible en revue, et à garder sous les yeux le couplage exact avec la ligne
+# de commande du workflow.
+#
+# ── Installation (une seule fois par serveur) ────────────────────────────────
+# L'amorçage est forcément manuel : le fichier n'arrive sur le serveur que par
+# le `git pull` de deploy-infra, qui est l'étape 1 du job dont l'étape 5 a
+# besoin de cette règle. Accorder un privilège ne peut pas se faire avec le
+# privilège qu'on est en train d'accorder.
+#
+# Depuis un compte disposant de sudo, en UNE SEULE LIGNE (pas de heredoc : un
+# copier-coller indenté empêche bash de reconnaître le mot de fin et bloque la
+# saisie sans rien écrire) :
+#
+#   echo 'deploy ALL=(root) NOPASSWD: /usr/bin/cmp -s /opt/KonfiturGameFullInfra/scripts/crontab.konfiturgame /etc/cron.d/konfiturgame, /usr/bin/install -o root -g root -m 644 /opt/KonfiturGameFullInfra/scripts/crontab.konfiturgame /etc/cron.d/konfiturgame' | sudo tee /etc/sudoers.d/konfitur-deploy-cron
+#   sudo chown root:root /etc/sudoers.d/konfitur-deploy-cron
+#   sudo chmod 440 /etc/sudoers.d/konfitur-deploy-cron
+#   sudo visudo -c        # DOIT afficher "parsed OK"
+#
+# Vérification, depuis le compte réel de la CI :
+#   sudo -u deploy sudo -n -l     # doit lister les deux commandes en NOPASSWD
+#
+# ── Deux pièges ──────────────────────────────────────────────────────────────
+# Mode 440 impératif : sudo refuse de lire un fichier de /etc/sudoers.d
+# accessible en écriture au groupe, et refuse alors TOUTE élévation — y compris
+# celle qui permettrait de corriger l'erreur. Garder une seconde session
+# ouverte jusqu'au "parsed OK".
+#
+# Nom sans point ni tilde : sudo applique la convention run-parts et ignorerait
+# silencieusement `konfitur-deploy-cron.conf`.
+#
+# ── Sur l'étendue du privilège ───────────────────────────────────────────────
+# La règle autorise à écrire un fichier cron exécuté en root, dont le contenu
+# vient du dépôt : quiconque peut pousser sur `main` peut donc faire exécuter
+# du code en root sur le serveur. Ce n'est pas une aggravation — le compte de
+# déploiement appartient déjà au groupe `docker`, ce qui équivaut à root (un
+# conteneur privilégié monte /etc). La protection réelle est ailleurs : le
+# ruleset GitHub sur `main`, qui interdit le commit direct et exige les
+# contrôles bloquants de la CI.
+#
+# ── Adapter à un autre serveur ───────────────────────────────────────────────
+# Remplacer `deploy` par la valeur du secret VPS_USER et le chemin par celle de
+# VPS_APP_DIR. Les règles sudoers filtrent sur la ligne de commande EXACTE :
+# ajouter un drapeau à `install` dans ci-cd.yml sans le répercuter ici fait
+# échouer le déploiement, sans autre symptôme qu'une demande de mot de passe.
+# Vérifier aussi que cmp et install sont bien dans /usr/bin (`command -v`).
+#
+# La ligne ci-dessous est reproduite telle quelle sur le serveur — la garder
+# identique au caractère près, c'est tout l'intérêt du fichier.
+# =============================================================================
+
+deploy ALL=(root) NOPASSWD: /usr/bin/cmp -s /opt/KonfiturGameFullInfra/scripts/crontab.konfiturgame /etc/cron.d/konfiturgame, /usr/bin/install -o root -g root -m 644 /opt/KonfiturGameFullInfra/scripts/crontab.konfiturgame /etc/cron.d/konfiturgame

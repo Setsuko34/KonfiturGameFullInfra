@@ -69,7 +69,7 @@ for svc in "${CRITICAL_SERVICES[@]}"; do
   status="$(docker inspect -f '{{.State.Status}}' "$svc" 2>/dev/null || echo "absent")"
   if [ "$status" != "running" ]; then
     log "P0 — $svc est '$status' : tentative de relance"
-    # shellcheck disable=SC2086 — COMPOSE_FILES porte plusieurs arguments
+    # shellcheck disable=SC2086  # COMPOSE_FILES porte plusieurs arguments
     if docker compose $COMPOSE_FILES up -d "${svc#konfitur-}" >>"$LOG_FILE" 2>&1; then
       RESTARTS=$((RESTARTS + 1))
       sleep 5
