@@ -307,7 +307,17 @@ bash scripts/ci/monitoring-check.sh
 ```
 
 Le script s'adresse aussi à une instance distante : `monitoring-check.sh
-http://prometheus.interne:9090`.
+http://prometheus.interne:9090`. C'est sous cette forme que `deploy-infra`
+l'exécute sur le VPS, contre l'IP du conteneur Prometheus.
+
+**La sonde health-check sert de témoin du montage textfile.** Elle écrit dans
+le même dossier que `backup.sh` et tourne toutes les 5 minutes : sa métrique
+présente prouve que node-exporter relit bien le dossier. L'absence de celle de
+la sauvegarde ne peut alors signifier qu'une chose — aucune sauvegarde n'a
+encore réussi — et vaut `⚠️` et non `❌`. Sans ce témoin, les deux absences
+sont traitées comme un montage rompu, et le script sort en `1`. C'est ce qui
+évite qu'un premier déploiement reste rouge pendant 24 h sur un état normal,
+sans pour autant masquer une vraie panne de collecte.
 
 **Exercer une alerte pour de vrai.** Le meilleur test de la chaîne complète
 consiste à provoquer une panne :
@@ -477,11 +487,12 @@ consulter l'issue `security-report`.
 | Toutes les sondes blackbox à 0, site accessible au navigateur | UA de la sonde bloqué par la détection de bots | Vérifier l'en-tête `User-Agent` dans `monitoring/blackbox/blackbox.yml`, puis débannir l'IP dans `/admin/logs` |
 | Cible `traefik` en `down` dans Prometheus | Entrypoint `metrics` absent ou Traefik hors de `monitoring-net` | Vérifier `traefik/traefik.yml` (`metrics:` + entrypoint `:8082`) et le bloc `networks:` du service traefik |
 | Grafana affiche une page blanche | CSP trop stricte | Le routeur doit utiliser `grafana-headers@file`, pas `security-headers@file` |
-| Aucune métrique `konfitur_backup_*` | `backup.sh` n'a jamais tourné, ou montage textfile absent | `ls monitoring/textfile/` puis lancer `./scripts/backup.sh` à la main |
+| Aucune métrique `konfitur_backup_*`, mais `konfitur_healthcheck_*` présente | Aucune sauvegarde n'a encore réussi — le montage textfile, lui, est prouvé par la métrique de la sonde, qui écrit dans le même dossier. État normal le jour du premier déploiement : la tâche de 2 h n'est pas passée | `./scripts/backup.sh` à la main, ou attendre la nuit. `monitoring-check.sh` n'en fait qu'un `⚠️` |
+| Aucune métrique `konfitur_*` du tout | Montage textfile rompu | `ls monitoring/textfile/` et le `volumes:` de node-exporter. `monitoring-check.sh` sort en `1` |
 | Alertes non reçues sur Discord | Webhook vide ou révoqué | `docker compose logs alertmanager \| grep -i notify` — l'URL est masquée dans les logs, une erreur `unsupported protocol scheme ""` signifie que `DISCORD_ALERT_WEBHOOK` est vide |
 | Alertes `firing` mais aucune notification | Prometheus n'a pas d'Alertmanager | `curl -s localhost:9090/api/v1/alertmanagers` — `activeAlertmanagers` doit être non vide. Les politiques de notification **Grafana** ne routent pas les règles évaluées par Prometheus |
 | `health-check.sh` relance en boucle un conteneur | Échec de démarrage répété, pas un crash ponctuel | `docker compose logs --tail=100 <service>` — souvent une variable d'environnement manquante |
 
 ---
 
-*KonfiturGame · Supervision et alertes · Mis à jour : 2026-08-01*
+*KonfiturGame · Supervision et alertes · Mis à jour : 2026-08-08*
