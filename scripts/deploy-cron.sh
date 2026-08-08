@@ -31,14 +31,18 @@ APP_DIR="${1:?usage: deploy-cron.sh <APP_DIR>}"
 CRON_SRC="$APP_DIR/scripts/crontab.konfiturgame"
 CRON_DST=/etc/cron.d/konfiturgame
 
+# ── 1. Installation du crontab ──────────────────────────────────────────────
 # `cmp -s` est muet même quand la destination n'existe pas encore (code 2) :
 # le premier déploiement passe par la branche d'installation sans bruit.
+#
+# Pas de `systemctl restart cron` : cron relit /etc/cron.d à chaque minute dès
+# que la mtime change. Le redémarrage que suggère l'en-tête de
+# crontab.konfiturgame est superflu, et exigerait une seconde règle sudoers.
 if sudo -n cmp -s "$CRON_SRC" "$CRON_DST"; then
   echo "✅ Crontab déjà à jour"
-  exit 0
-fi
-
-if ! sudo -n install -o root -g root -m 644 "$CRON_SRC" "$CRON_DST"; then
+elif sudo -n install -o root -g root -m 644 "$CRON_SRC" "$CRON_DST"; then
+  echo "✅ Crontab installé dans $CRON_DST"
+else
   echo "❌ Installation du crontab refusée : sudo a rejeté la commande." >&2
   echo "   /etc/sudoers.d/konfitur-deploy-cron est absent, mal formé," >&2
   echo "   ou ne correspond plus à la ligne de commande ci-dessus." >&2
@@ -48,4 +52,36 @@ if ! sudo -n install -o root -g root -m 644 "$CRON_SRC" "$CRON_DST"; then
   exit 1
 fi
 
-echo "✅ Crontab installé dans $CRON_DST"
+# ── 2. Amorçage de la sonde de santé ────────────────────────────────────────
+# Au tout premier déploiement, monitoring/textfile/ ne contient que .gitkeep :
+# les .prom sont gitignorés, donc rien n'arrive par le `git pull`. La métrique
+# de la sonde n'existera qu'au prochain top de 5 minutes — après quoi le smoke
+# test de supervision, qui ne réessaie que 2 minutes, a déjà échoué.
+#
+# Une seule exécution ici suffit à amorcer la série ; les déploiements suivants
+# trouvent le fichier et ne font rien. On ne fait PAS la même chose pour
+# backup.sh : une sauvegarde complète à chaque premier déploiement est un coût
+# qu'on ne veut pas dans le chemin critique, et son absence est traitée comme
+# telle par monitoring-check.sh.
+HEALTH_METRIC="$APP_DIR/monitoring/textfile/health_check.prom"
+if [ ! -f "$HEALTH_METRIC" ]; then
+  echo "ℹ️  Aucune métrique de sonde : amorçage de health-check.sh"
+
+  # Journal détourné vers /tmp : le fichier de cron (/var/log/konfiturgame-
+  # health.log) appartient à root, et ce script tourne sous le compte de
+  # déploiement. Sans ce détournement, chaque écriture échouerait bruyamment
+  # sans que le déploiement en pâtisse — du bruit qui apprend à ignorer le
+  # journal. Les exécutions cron suivantes reprennent le chemin normal.
+  #
+  # Le code de sortie est relevé mais non fatal : health-check.sh renvoie 1
+  # quand une anomalie SUBSISTE après tentative de remédiation. C'est l'affaire
+  # des healthchecks du job, qui interrogent les surfaces publiques ; ici on ne
+  # veut qu'amorcer la métrique.
+  if HEALTHCHECK_LOG=/tmp/konfiturgame-health-bootstrap.log \
+       bash "$APP_DIR/scripts/health-check.sh"; then
+    echo "✅ Sonde amorcée — la métrique sera collectée sous 30 s"
+  else
+    echo "⚠️  health-check.sh signale des anomalies subsistantes (code $?)"
+    echo "   Métrique tout de même publiée ; voir /tmp/konfiturgame-health-bootstrap.log"
+  fi
+fi

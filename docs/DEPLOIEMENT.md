@@ -419,10 +419,25 @@ archives (le jour même plus les 6 précédents) et purge le reste lui-même. Aj
 une tâche `find -mtime` en parallèle créerait un second endroit décidant de la
 rétention — les deux finiraient par diverger.
 
-**Le déploiement du crontab est automatique.** Le job `deploy-infra` copie
-`scripts/crontab.konfiturgame` vers `/etc/cron.d/konfiturgame` à chaque
-déploiement infra, si le fichier a changé. Modifier une cadence se fait donc
-dans le dépôt, pas sur le serveur.
+**Le déploiement du crontab est automatique.** Le job `deploy-infra` appelle
+`scripts/deploy-cron.sh`, qui copie `scripts/crontab.konfiturgame` vers
+`/etc/cron.d/konfiturgame` si le fichier a changé. Modifier une cadence se fait
+donc dans le dépôt, pas sur le serveur.
+
+Pas de `systemctl restart cron` : cron relit `/etc/cron.d` à chaque minute dès
+que la mtime change. L'en-tête de `crontab.konfiturgame` le suggère par excès
+de prudence — le déploiement s'en passe, et cela épargne une seconde règle
+`sudo`.
+
+**Amorçage de la sonde au premier déploiement.** Les `.prom` du collecteur
+textfile sont gitignorés : sur un serveur neuf, `monitoring/textfile/` ne
+contient que `.gitkeep` et la métrique de la sonde n'existera qu'au prochain
+top de 5 minutes — après quoi le smoke test de supervision, qui ne réessaie que
+2 minutes, a déjà échoué. `deploy-cron.sh` lance donc `health-check.sh` une
+fois si `health_check.prom` est absent. Les déploiements suivants trouvent le
+fichier et ne font rien. La sauvegarde, elle, n'est **pas** amorcée : une
+archive complète dans le chemin critique d'un déploiement est un coût qu'on ne
+veut pas (voir `SUPERVISION.md` § dépannage).
 
 Cela suppose une délégation `sudo` minimale pour le compte de déploiement, à
 poser **une seule fois par serveur** : voir l'en-tête de
@@ -657,4 +672,4 @@ SITE                   → https://konfiturgame.fr
 
 ---
 
-*KonfiturGame · Next.js 16.2.9 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-14*
+*KonfiturGame · Next.js 16.2.9 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-08-08*
