@@ -544,12 +544,8 @@ services:
   # ════════════════════════════════════════
   # PROMETHEUS — Collecte et évaluation des alertes
   # Aucun port publié : la seule surface d'accès est Grafana.
-  #
-  # La configuration arrive par volume (./monitoring/prometheus), pas par
-  # l'image : `up -d` ne recrée donc pas ce conteneur quand seul un fichier de
-  # règles change, et l'ancienne configuration reste chargée en mémoire. C'est
-  # deploy-infra qui envoie le SIGHUP de relecture après le pull — corriger un
-  # seuil dans alerts.yml sans passer par ce job ne change rien en production.
+  # Configuration montée en volume, donc jamais rechargée par `up -d` : c'est
+  # deploy-infra qui envoie le SIGHUP de relecture (voir ci-cd.yml).
   # ════════════════════════════════════════
   prometheus:
     image: prom/prometheus:v3.1.0

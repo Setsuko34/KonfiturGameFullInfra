@@ -100,11 +100,17 @@ Status checks requis : `Lint + type-check`, `Tests unitaires`, `Scan secrets (gi
 
 Tous les jobs de déploiement attendent les 4 contrôles bloquants. La détection des changements est assurée par `Détection des changements` (dorny/paths-filter v3).
 
-**`Déploiement infra (compose / traefik)`** — déclenché si `docker-compose.yml` ou `traefik/**` est modifié.
+**`Déploiement infra (compose / traefik / supervision)`** — déclenché si `docker-compose.yml`, `traefik/**`, `monitoring/**` ou `scripts/**` est modifié. Les deux derniers chemins ne sont pas décoratifs : règles d'alerte et scripts d'exploitation vivent dans le dépôt sans être embarqués dans aucune image, ils n'atteignent donc la production que par ce job.
 - SSH via appleboy/ssh-action v1.2.0, `script_stop: true`.
 - `VPS_APP_DIR` transmis comme variable d'environnement `APP_DIR` via `envs: APP_DIR`.
-- Séquence : `git pull --ff-only origin main` → `docker compose -f docker-compose.yml up -d --remove-orphans`.
-- Healthchecks (10 × 10 s) : frontend (`https://konfiturgame.fr`, HTTP 200) et Appwrite (`https://api.konfiturgame.fr/v1/health`, 200 ou 401).
+- Séquence : `git pull --ff-only origin main` → `docker compose … up -d --remove-orphans` → `docker compose … kill -s HUP prometheus alertmanager` → `bash scripts/deploy-cron.sh "$APP_DIR"`.
+- Le `kill -s HUP` n'est pas un redémarrage : les configurations de supervision sont montées en volume, donc `up -d` ne recrée pas ces conteneurs quand seul un fichier de règles change et l'ancienne configuration reste en mémoire. SIGHUP force la relecture sans trou dans la collecte ni perte des silences en cours.
+- Healthchecks (10 × 10 s) : frontend (`https://konfiturgame.fr`, HTTP 200) et Appwrite (`https://api.konfiturgame.fr/v1/health`, 200 ou 401), puis Grafana.
+- Smoke test de supervision (5 × 30 s) : `scripts/ci/monitoring-check.sh` exécuté **sur le VPS**, contre l'IP du conteneur Prometheus — son API n'est publiée ni sur Internet ni sur l'hôte.
+
+> ⚠️ **`script_stop: true` n'est pas un `set -e`.** drone-ssh découpe le script en **lignes** et insère après chacune un test du code retour. Ce test atterrit donc *à l'intérieur* des structures multi-lignes : placé en tête d'une branche `else` d'un `if ! cmd`, il lit le code de la condition — que le `!` a mis à 1 quand elle est vraie — et coupe le job **sans un mot**. Symptôme : sortie 1, journal muet.
+>
+> Règle : **une commande par ligne dans le YAML, tout contrôle de flux dans un script versionné**, appelé sur une seule ligne. C'est la raison d'être de `scripts/deploy-cron.sh`.
 
 **`Déploiement frontend`** — déclenché si `frontend/**` est modifié.
 - Attend aussi `Déploiement infra` (`success` ou `skipped`).
@@ -188,4 +194,4 @@ Les jobs Semgrep / audit dépendances / Docker sont non bloquants (`continue-on-
 
 ---
 
-*KonfiturGame · Pipeline CI/CD · Mis à jour : 2026-07-14*
+*KonfiturGame · Pipeline CI/CD · Mis à jour : 2026-08-08*

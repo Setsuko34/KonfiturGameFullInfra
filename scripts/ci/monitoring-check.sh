@@ -105,12 +105,31 @@ fi
 # manuelle. Faire échouer là-dessus rendrait le script inutilisable en dev,
 # et un script de vérification qu'on prend l'habitude d'ignorer ne vérifie
 # plus rien. La fraîcheur, elle, est la responsabilité de HealthCheckArrete.
+#
+# La sonde health-check sert de TÉMOIN du montage : cadencée à 5 minutes, elle
+# écrit dans le même dossier que backup.sh. Sa métrique présente prouve donc
+# que node-exporter relit bien ce dossier, et l'absence de celle de la
+# sauvegarde ne peut alors signifier qu'une chose : aucune sauvegarde n'a
+# encore réussi. C'est l'état normal le jour du premier déploiement, où la
+# tâche de 2 h n'est pas encore passée — pas une panne de la supervision.
+# Échouer là-dessus condamnerait tout premier déploiement à rester rouge
+# pendant 24 h, alors que SauvegardeJamaisExecutee le dit déjà, en P1, à qui de
+# droit. L'ordre de la liste compte : le témoin doit être évalué en premier.
+HEALTH_SEEN=0
 for metric in konfitur_healthcheck_last_run_timestamp_seconds \
               konfitur_backup_last_success_timestamp_seconds; do
   VALUE=$(api "/api/v1/query?query=$metric" | jq -r '.data.result[0].value[1] // empty' 2>/dev/null)
   if [ -z "$VALUE" ]; then
-    fail "Métrique $metric absente : montage textfile_collector rompu, ou script jamais exécuté"
+    if [ "$metric" = konfitur_backup_last_success_timestamp_seconds ] \
+       && [ "$HEALTH_SEEN" -eq 1 ]; then
+      warn "$metric absente : aucune sauvegarde n'a encore réussi (tâche de 2 h jamais passée ?) — le montage textfile, lui, est prouvé par la métrique de la sonde"
+    else
+      fail "Métrique $metric absente : montage textfile_collector rompu, ou script jamais exécuté"
+    fi
   else
+    if [ "$metric" = konfitur_healthcheck_last_run_timestamp_seconds ]; then
+      HEALTH_SEEN=1
+    fi
     AGE_H=$(( ( $(date +%s) - ${VALUE%%.*} ) / 3600 ))
     if [ "$AGE_H" -gt 24 ]; then
       warn "$metric présente mais figée depuis ${AGE_H} h (normal hors production : pas de cron)"
