@@ -1,0 +1,73 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# blackbox-exporter — sondes « boîte noire »
+#
+# Chaque module interroge une URL comme le ferait un visiteur et produit
+# `probe_success` (0/1), `probe_duration_seconds` et, en HTTPS,
+# `probe_ssl_earliest_cert_expiry` (date d'expiration du certificat).
+#
+# User-Agent : OBLIGATOIRE sur tous les modules. L'UA par défaut du binaire est
+# « Go-http-client/1.1 », que `frontend/src/lib/bot-detection.ts` classe comme
+# bot malveillant (/go-http-client/i). Sans cette surcharge, `proxy.ts` répond
+# 403 et bannit l'IP de la sonde : la supervision se saborde elle-même et
+# déclenche une fausse alerte d'indisponibilité. Même contrainte que le
+# healthcheck de la CI (.github/workflows/ci-cd.yml).
+# ═══════════════════════════════════════════════════════════════════════════
+
+modules:
+  # ── Pages publiques : seul un 200 est acceptable ─────────────────────────
+  http_2xx:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200]
+      follow_redirects: true
+      preferred_ip_protocol: ip4
+      fail_if_ssl: false
+      fail_if_not_ssl: true      # une réponse en clair = redirection TLS cassée
+      headers:
+        User-Agent: "KonfiturGame-Monitoring/1.0 (Mozilla/5.0 compatible; blackbox-exporter)"
+
+  # ── API Appwrite : 200 ou 401 selon que la route exige une clé ───────────
+  # Un 401 prouve que le service répond et applique son contrôle d'accès.
+  http_2xx_or_401:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [200, 401]
+      follow_redirects: false
+      preferred_ip_protocol: ip4
+      fail_if_not_ssl: true
+      headers:
+        User-Agent: "KonfiturGame-Monitoring/1.0 (Mozilla/5.0 compatible; blackbox-exporter)"
+
+  # ── Surfaces qui DOIVENT rester protégées ───────────────────────────────
+  # Sonde de non-régression de sécurité : `probe_success` passe à 0 si le
+  # dashboard Traefik répond autre chose que 401 (authentification tombée).
+  http_401_expected:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+      valid_status_codes: [401]
+      follow_redirects: false
+      preferred_ip_protocol: ip4
+      fail_if_not_ssl: true
+      headers:
+        User-Agent: "KonfiturGame-Monitoring/1.0 (Mozilla/5.0 compatible; blackbox-exporter)"
+
+  # ── Redirection HTTP → HTTPS (attendu : 308 par Traefik) ────────────────
+  http_redirect_tls:
+    prober: http
+    timeout: 10s
+    http:
+      method: GET
+      valid_status_codes: [301, 308]
+      follow_redirects: false
+      preferred_ip_protocol: ip4
+      headers:
+        User-Agent: "KonfiturGame-Monitoring/1.0 (Mozilla/5.0 compatible; blackbox-exporter)"

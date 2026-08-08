@@ -9,6 +9,11 @@ api:
 entryPoints:
   web:
     address: ":80"    # Pas de redirection HTTPS en dev
+  # Même entrypoint de métriques qu'en production. Sans lui, la cible `traefik`
+  # de Prometheus serait toujours down en local et la supervision ne pourrait
+  # pas être validée avant la mise en production.
+  metrics:
+    address: ":8082"
 
 providers:
   docker:
@@ -22,3 +27,12 @@ log:
   level: DEBUG        # Verbose en dev pour diagnostiquer facilement
 
 accessLog: {}         # Log tous les accès en dev
+
+# Identique à la production : c'est ce qui permet de vérifier en local que les
+# requêtes sont bien comptées par code et par routeur avant de déployer.
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true

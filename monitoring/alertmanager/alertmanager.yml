@@ -1,0 +1,76 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Alertmanager — routage et notification des alertes
+#
+# Pourquoi ce composant existe : les règles vivent dans Prometheus
+# (monitoring/prometheus/alerts.yml) et c'est Prometheus qui les évalue.
+# Grafana sait les AFFICHER — elles y apparaissent en « data source-managed »
+# — mais ses politiques de notification ne routent que les alertes qu'il
+# évalue lui-même. Sans Alertmanager, une alerte peut donc passer en `firing`
+# dans Prometheus et dans Grafana sans que personne ne soit prévenu.
+# C'est exactement le défaut constaté lors de la validation du 2026-08-01.
+#
+# Le webhook Discord n'est PAS écrit ici : Alertmanager n'interpole aucune
+# variable d'environnement dans sa configuration. Il est déposé au démarrage
+# dans un fichier lu via `webhook_url_file` (voir docker-compose.yml), ce qui
+# garde .env comme source unique du secret et évite de le versionner.
+# ═══════════════════════════════════════════════════════════════════════════
+
+route:
+  receiver: discord-alertes
+  # Regroupe les alertes liées : une coupure réseau déclenche simultanément
+  # SiteIndisponible et ApiAppwriteIndisponible, autant n'envoyer qu'un message.
+  group_by: [alertname, severity]
+  group_wait: 45s
+  group_interval: 5m
+  repeat_interval: 4h
+
+  routes:
+    # P0 — critique : notifié presque immédiatement, rappelé toutes les
+    # 30 minutes tant que l'incident dure.
+    - matchers:
+        - severity = "P0"
+      receiver: discord-alertes
+      group_wait: 10s
+      repeat_interval: 30m
+
+    # P1 — majeur : traitement visé dans l'heure, rappel toutes les 4 h.
+    - matchers:
+        - severity = "P1"
+      receiver: discord-alertes
+      repeat_interval: 4h
+
+    # P2 / P3 — un rappel par jour suffit, ces alertes se traitent en revue.
+    - matchers:
+        - severity =~ "P2|P3"
+      receiver: discord-alertes
+      repeat_interval: 24h
+
+# Taire les alertes de conséquence quand la cause est déjà notifiée : si le
+# site entier est injoignable, inutile d'alerter en plus sur sa latence.
+inhibit_rules:
+  - source_matchers:
+      - alertname = "SiteIndisponible"
+    target_matchers:
+      - alertname = "LatenceElevee"
+    equal: [instance]
+
+  # Une cible de collecte muette rend ses propres alertes ininterprétables.
+  - source_matchers:
+      - alertname = "CollecteMetriquesInterrompue"
+    target_matchers:
+      - severity =~ "P2|P3"
+    equal: [job]
+
+receivers:
+  - name: discord-alertes
+    discord_configs:
+      # Fichier écrit au démarrage du conteneur depuis DISCORD_ALERT_WEBHOOK.
+      - webhook_url_file: /tmp/secrets/discord_webhook
+        send_resolved: true      # notifier aussi le retour à la normale
+        title: '[{{ .CommonLabels.severity }}] {{ .CommonLabels.alertname }}'
+        message: |
+          {{ range .Alerts }}**{{ .Annotations.summary }}**
+          {{ .Annotations.description }}
+          {{ if .Labels.instance }}Cible : {{ .Labels.instance }}
+          {{ end }}Depuis : {{ .StartsAt.Format "02/01/2006 15:04" }}
+          {{ end }}

@@ -8,6 +8,10 @@ networks:
   runtimes:
     driver: bridge
 
+  monitoring-net:
+    name: monitoring-net
+    driver: bridge
+
 volumes:
   appwrite-uploads:
   appwrite-config:
@@ -17,6 +21,9 @@ volumes:
   traefik-acme:
   redis-data:
   mariadb-data:
+  prometheus-data:
+  grafana-data:
+  alertmanager-data:
 
 services:
   # ════════════════════════════════════════
@@ -43,6 +50,9 @@ services:
     networks:
       - konfitur-net
       - appwrite-net
+      # Prometheus scrape l'entrypoint `metrics` (:8082) par le réseau interne.
+      # Ce port n'est jamais publié sur l'hôte : aucune métrique n'est exposée à Internet.
+      - monitoring-net
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.${DOMAIN}`)"
@@ -131,6 +141,10 @@ services:
       - _APP_DB_PASS=${MARIADB_PASSWORD}
       - _APP_REDIS_HOST=redis
       - _APP_REDIS_PORT=6379
+      # Collecte des statistiques d'usage. Sans cette variable, les workers
+      # stats-usage / stats-resources tournent à vide et la console n'affiche
+      # aucune métrique (requêtes, stockage, exécutions).
+      - _APP_USAGE_STATS=enabled
       - _APP_STORAGE_LIMIT=160000000      # 160 Mo max par fichier (bucket builds à 150 Mo)
       - _APP_STORAGE_ANTIVIRUS=enabled
       - _APP_STORAGE_ANTIVIRUS_HOST=clamav
@@ -437,4 +451,252 @@ services:
     networks:
       - appwrite-net
       - runtimes
+
+  # ════════════════════════════════════════
+  # APPWRITE WORKER — Stats usage
+  # Consomme la queue Redis des compteurs d'usage (requêtes, exécutions,
+  # stockage) et les agrège en base. Sans lui, la console Appwrite affiche
+  # des métriques vides : les événements s'empilent dans Redis sans jamais
+  # être écrits.
+  # ════════════════════════════════════════
+  appwrite-worker-stats-usage:
+    image: appwrite/appwrite:1.9.0
+    container_name: konfitur-appwrite-worker-stats-usage
+    restart: unless-stopped
+    entrypoint: worker-stats-usage
+    environment:
+      - _APP_ENV=production
+      - _APP_USAGE_STATS=enabled
+      - _APP_USAGE_AGGREGATION_INTERVAL=30
+      - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
+      - _APP_DB_ADAPTER=mariadb
+      - _APP_DB_HOST=mariadb
+      - _APP_DB_PORT=3306
+      - _APP_DB_SCHEMA=appwrite
+      - _APP_DB_USER=appwrite
+      - _APP_DB_PASS=${MARIADB_PASSWORD}
+      - _APP_REDIS_HOST=redis
+      - _APP_REDIS_PORT=6379
+    networks:
+      - appwrite-net
+    depends_on:
+      - mariadb
+      - redis
+
+  # ════════════════════════════════════════
+  # APPWRITE WORKER — Stats resources
+  # Agrège l'inventaire des ressources du projet (nombre de documents,
+  # buckets, utilisateurs, fonctions).
+  # ════════════════════════════════════════
+  appwrite-worker-stats-resources:
+    image: appwrite/appwrite:1.9.0
+    container_name: konfitur-appwrite-worker-stats-resources
+    restart: unless-stopped
+    entrypoint: worker-stats-resources
+    environment:
+      - _APP_ENV=production
+      - _APP_USAGE_STATS=enabled
+      - _APP_USAGE_AGGREGATION_INTERVAL=30
+      - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
+      - _APP_DB_ADAPTER=mariadb
+      - _APP_DB_HOST=mariadb
+      - _APP_DB_PORT=3306
+      - _APP_DB_SCHEMA=appwrite
+      - _APP_DB_USER=appwrite
+      - _APP_DB_PASS=${MARIADB_PASSWORD}
+      - _APP_REDIS_HOST=redis
+      - _APP_REDIS_PORT=6379
+    networks:
+      - appwrite-net
+    depends_on:
+      - mariadb
+      - redis
+
+  # ════════════════════════════════════════
+  # APPWRITE TASK — Stats resources (ordonnanceur)
+  # Déclenche périodiquement le worker ci-dessus. C'est la tâche, pas le
+  # worker, qui porte la cadence : sans elle le worker attend indéfiniment.
+  # ════════════════════════════════════════
+  appwrite-task-stats-resources:
+    image: appwrite/appwrite:1.9.0
+    container_name: konfitur-appwrite-task-stats-resources
+    restart: unless-stopped
+    entrypoint: stats-resources
+    environment:
+      - _APP_ENV=production
+      - _APP_USAGE_STATS=enabled
+      - _APP_STATS_RESOURCES_INTERVAL=3600   # inventaire toutes les heures
+      - _APP_OPENSSL_KEY_V1=${APPWRITE_OPENSSL_KEY}
+      - _APP_DB_ADAPTER=mariadb
+      - _APP_DB_HOST=mariadb
+      - _APP_DB_PORT=3306
+      - _APP_DB_SCHEMA=appwrite
+      - _APP_DB_USER=appwrite
+      - _APP_DB_PASS=${MARIADB_PASSWORD}
+      - _APP_REDIS_HOST=redis
+      - _APP_REDIS_PORT=6379
+    networks:
+      - appwrite-net
+    depends_on:
+      - mariadb
+      - redis
+
+  # ════════════════════════════════════════
+  # PROMETHEUS — Collecte et évaluation des alertes
+  # Aucun port publié : la seule surface d'accès est Grafana.
+  # ════════════════════════════════════════
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    container_name: konfitur-prometheus
+    restart: unless-stopped
+    user: "nobody"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 30 jours : couvre l'analyse d'un incident et la revue mensuelle, sans
+      # laisser la base grossir indéfiniment sur un disque de 100 Go.
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=4GB
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus-data:/prometheus
+    networks:
+      - monitoring-net
+    depends_on:
+      - node-exporter
+      - cadvisor
+      - blackbox-exporter
+      - alertmanager
+
+  # ════════════════════════════════════════
+  # ALERTMANAGER — Routage et notification des alertes
+  # Prometheus évalue les règles, Alertmanager décide qui prévenir, quand et
+  # à quelle cadence. Sans lui, une alerte passe en `firing` sans que
+  # personne ne soit notifié : Grafana n'achemine que les alertes qu'il
+  # évalue lui-même, pas celles d'un Prometheus externe.
+  # ════════════════════════════════════════
+  alertmanager:
+    image: prom/alertmanager:v0.28.1
+    container_name: konfitur-alertmanager
+    restart: unless-stopped
+    # Alertmanager n'interpole aucune variable d'environnement dans sa
+    # configuration. Le webhook est donc déposé au démarrage dans un fichier
+    # que la config lit via `webhook_url_file` : le secret reste dans .env,
+    # source unique, et n'est jamais versionné. umask 077 pour que le fichier
+    # ne soit lisible que par le processus.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        umask 077
+        mkdir -p /tmp/secrets
+        printf '%s' "$${DISCORD_ALERT_WEBHOOK}" > /tmp/secrets/discord_webhook
+        exec /bin/alertmanager \
+          --config.file=/etc/alertmanager/alertmanager.yml \
+          --storage.path=/alertmanager
+    environment:
+      - DISCORD_ALERT_WEBHOOK=${DISCORD_ALERT_WEBHOOK}
+    volumes:
+      - ./monitoring/alertmanager:/etc/alertmanager:ro
+      - alertmanager-data:/alertmanager
+    networks:
+      - monitoring-net
+
+  # ════════════════════════════════════════
+  # GRAFANA — Visualisation
+  # Seul composant de la supervision exposé, derrière TLS et son propre
+  # écran de connexion. La notification est portée par Alertmanager.
+  # ════════════════════════════════════════
+  grafana:
+    image: grafana/grafana:11.5.1
+    container_name: konfitur-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+      # Inscription libre désactivée et mode anonyme coupé : les tableaux de
+      # bord révèlent la topologie et les volumes d'usage de la plateforme.
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_SERVER_ROOT_URL=https://grafana.${DOMAIN}
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - konfitur-net      # pour être exposé par Traefik
+      - monitoring-net    # pour interroger Prometheus
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
+      - "traefik.http.routers.grafana.entrypoints=websecure"
+      - "traefik.http.routers.grafana.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.grafana.middlewares=grafana-headers@file,rate-limit@file"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+    depends_on:
+      - prometheus
+
+  # ════════════════════════════════════════
+  # NODE EXPORTER — Métriques de l'hôte (CPU, RAM, disque)
+  # Monte la racine en lecture seule pour mesurer le disque réel de l'hôte
+  # et non celui, virtuel, du conteneur.
+  # ════════════════════════════════════════
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: konfitur-node-exporter
+    restart: unless-stopped
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      # Collecteur de fichiers : scripts/backup.sh y dépose ses métriques.
+      # C'est le pont entre les tâches shell et la supervision.
+      - --collector.textfile.directory=/var/lib/node_exporter/textfile_collector
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+      - ./monitoring/textfile:/var/lib/node_exporter/textfile_collector:ro
+    networks:
+      - monitoring-net
+
+  # ════════════════════════════════════════
+  # CADVISOR — Métriques par conteneur
+  # Attribue une consommation à un service précis, là où node-exporter ne
+  # donne que le total de la machine.
+  # ════════════════════════════════════════
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: konfitur-cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks:
+      - monitoring-net
+
+  # ════════════════════════════════════════
+  # BLACKBOX EXPORTER — Sondes HTTP externes
+  # Interroge les URL publiques depuis l'extérieur de l'application : mesure
+  # la disponibilité telle qu'un visiteur la perçoit, TLS et routage Traefik
+  # compris, là où les autres sondes ne voient que l'intérieur.
+  # ════════════════════════════════════════
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: konfitur-blackbox-exporter
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/blackbox/blackbox.yml
+    volumes:
+      - ./monitoring/blackbox:/etc/blackbox:ro
+    networks:
+      - monitoring-net
 

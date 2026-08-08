@@ -89,6 +89,7 @@ Couverture actuelle : 354 tests unitaires répartis sur 26 fichiers.
 | [`docs/DOCUMENTATION.md`](docs/DOCUMENTATION.md) | Guide complet : architecture, structure du code, DB, design system |
 | [`docs/DATABASE.md`](docs/DATABASE.md) | Schéma ERD de la base de données (Mermaid) |
 | [`docs/PRODUCTION.md`](docs/PRODUCTION.md) | Guide de déploiement en production |
+| [`docs/SUPERVISION.md`](docs/SUPERVISION.md) | Supervision et alertes : sondes, seuils, notifications |
 | [`docs/TODO.md`](docs/TODO.md) | Roadmap et fonctionnalités à implémenter |
 | [`CLAUDE.md`](CLAUDE.md) | Instructions pour l'assistant IA Claude |
 

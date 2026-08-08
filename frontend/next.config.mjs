@@ -16,21 +16,22 @@ const nextConfig = {
       },
     ]
   },
+  // Aucun hôte distant autorisé — et c'est une décision de sécurité, pas un
+  // oubli. `/_next/image?url=…` est un endpoint PUBLIC : tout hôte listé ici
+  // devient une source d'octets que notre serveur va chercher lui-même puis
+  // faire décoder par sharp/libvips, avec les CVE que ça traîne
+  // (GHSA-f88m-g3jw-g9cj). `cloud.appwrite.io` y figurait alors qu'il n'est
+  // référencé nulle part dans src/ : n'importe qui pouvant déposer un fichier
+  // sur Appwrite Cloud disposait d'un chemin vers libvips côté serveur.
+  //
+  // Les images utilisateur sont servies en <img> nu depuis notre Appwrite
+  // auto-hébergé et ne passent donc jamais par l'optimiseur ; le seul
+  // next/image sur du contenu non local est l'aperçu de cover, en objectURL
+  // + `unoptimized`, qui reste côté navigateur.
+  //
+  // Ajouter un hôte ici, c'est accepter de décoder ses octets sur le serveur.
   images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'cloud.appwrite.io',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.localhost',
-      },
-    ],
+    remotePatterns: [],
   },
 }
 

@@ -1,0 +1,16 @@
+# Charge les tableaux de bord versionnés dans monitoring/grafana/dashboards/.
+# `allowUiUpdates: false` : toute modification passe par un commit, jamais par
+# l'interface — même logique que appwrite.json pour le schéma Appwrite.
+apiVersion: 1
+
+providers:
+  - name: konfiturgame
+    orgId: 1
+    folder: KonfiturGame
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 60
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

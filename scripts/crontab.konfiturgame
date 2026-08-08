@@ -1,0 +1,40 @@
+# =============================================================================
+# Tâches planifiées KonfiturGame — serveur de production
+#
+# Installation :
+#   sudo cp scripts/crontab.konfiturgame /etc/cron.d/konfiturgame
+#   sudo chown root:root /etc/cron.d/konfiturgame
+#   sudo chmod 644 /etc/cron.d/konfiturgame        # cron IGNORE un fichier
+#                                                  # writable par le groupe
+#   sudo systemctl restart cron
+#
+# Vérification :
+#   grep CRON /var/log/syslog | tail -20
+#
+# Un fichier /etc/cron.d/ (et non un crontab utilisateur) : il est versionné
+# dans le dépôt, donc reproductible sur un nouveau serveur, et il porte
+# explicitement l'utilisateur d'exécution.
+# =============================================================================
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+APP_DIR=/opt/KonfiturGameFullInfra
+
+# ── Sonde de santé et remédiation — toutes les 5 minutes ────────────────────
+# Fenêtre d'indisponibilité maximale avant relance automatique : 5 minutes.
+# Plus court userait le disque en écritures de log pour un gain marginal.
+*/5 * * * * root $APP_DIR/scripts/health-check.sh >/dev/null 2>&1
+
+# ── Sauvegarde complète — tous les jours à 2 h 00 ───────────────────────────
+# Le script archive lui-même son résultat en .tar.gz et purge les archives de
+# plus de 7 jours : pas de tâche de rotation séparée ici. Deux endroits qui
+# décident de la rétention finissent toujours par diverger.
+0 2 * * * root $APP_DIR/scripts/backup.sh >> /var/log/konfiturgame-backup.log 2>&1
+
+# ── Nettoyage Docker — lundi 5 h 00 ─────────────────────────────────────────
+# Les images intermédiaires des rebuilds du frontend s'accumulent à chaque
+# déploiement. `-f` sans `--volumes` : jamais toucher aux volumes de données.
+0 5 * * 1 root docker system prune -f >> /var/log/konfiturgame-maintenance.log 2>&1
+
+# ── Rotation des journaux de supervision — 1er du mois ──────────────────────
+0 6 1 * * root find /var/log -maxdepth 1 -name 'konfiturgame-*.log' -size +50M -exec truncate -s 0 {} \;

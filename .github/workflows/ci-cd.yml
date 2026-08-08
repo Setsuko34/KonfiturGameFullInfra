@@ -42,6 +42,29 @@ jobs:
         working-directory: .
         run: bash scripts/ci/prod-config-check.sh .
 
+      # backup.sh et health-check.sh tournent en root, par cron, sans personne
+      # devant l'écran ; restore.sh ne s'exécute qu'un jour de crise, quand il
+      # est trop tard pour le déboguer. Une expansion non quotée qui casse sur
+      # un chemin à espaces ne se découvrirait que dans le journal.
+      #
+      # Périmètre volontairement restreint aux scripts d'exploitation et de CI.
+      # Les scripts de développement (seed-*, clean-*, update-schema-*) sont
+      # hors liste : deux d'entre eux ont des fins de ligne CRLF héritées du FS
+      # Windows, soit 470 SC1017 qui noieraient tout le reste. Contrepartie
+      # assumée : un nouveau script d'exploitation doit être ajouté ici à la
+      # main. Élargir le périmètre suppose d'abord un passage dos2unix et un
+      # .gitattributes.
+      - name: Shellcheck des scripts d'exploitation
+        working-directory: .
+        run: |
+          docker run --rm -v "$PWD:/mnt" -w /mnt \
+            koalaman/shellcheck-alpine:v0.10.0 \
+            shellcheck --severity=warning \
+              scripts/backup.sh \
+              scripts/health-check.sh \
+              scripts/restore.sh \
+              scripts/ci/*.sh
+
   tests:
     name: Tests unitaires
     runs-on: ubuntu-latest
@@ -91,6 +114,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: bash scripts/ci/rgpd-check.sh
+
+  monitoring:
+    name: Config supervision (promtool / amtool)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      # Les versions sont LUES dans docker-compose.yml plutôt qu'écrites ici :
+      # valider les règles avec un promtool d'une autre version que le
+      # Prometheus qui tourne en production ne prouve rien, et deux versions
+      # épinglées à deux endroits finissent toujours par diverger.
+      - name: Versions alignées sur la production
+        id: versions
+        run: |
+          PROM=$(sed -n 's|.*image: \(prom/prometheus:v[0-9.]*\).*|\1|p' docker-compose.yml | head -1)
+          AM=$(sed -n 's|.*image: \(prom/alertmanager:v[0-9.]*\).*|\1|p' docker-compose.yml | head -1)
+          [ -n "$PROM" ] && [ -n "$AM" ] || { echo "Images introuvables dans docker-compose.yml"; exit 1; }
+          echo "prometheus=$PROM" >> "$GITHUB_OUTPUT"
+          echo "alertmanager=$AM" >> "$GITHUB_OUTPUT"
+          echo "Prometheus : $PROM — Alertmanager : $AM"
+
+      # Le montage sur /etc/prometheus n'est pas cosmétique : `rule_files:`
+      # référence un chemin absolu (/etc/prometheus/alerts.yml), tel qu'il
+      # existe dans le conteneur. Sans ce montage, promtool ne trouve pas le
+      # fichier de règles et valide une configuration amputée.
+      - name: Syntaxe des configurations Prometheus (prod + dev)
+        run: |
+          for cfg in prometheus.yml prometheus.dev.yml; do
+            docker run --rm --entrypoint promtool \
+              -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" \
+              "${{ steps.versions.outputs.prometheus }}" \
+              check config "/etc/prometheus/$cfg"
+          done
+
+      # Une erreur de syntaxe dans alerts.yml n'empêche pas Prometheus de
+      # démarrer : il collecte normalement et n'évalue plus rien. La
+      # supervision échoue alors en silence et en vert. C'est le seul endroit
+      # où ce mode de panne est attrapé avant la production.
+      - name: Tests unitaires des règles d'alerte
+        run: |
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/monitoring/prometheus:/etc/prometheus:ro" \
+            "${{ steps.versions.outputs.prometheus }}" \
+            test rules /etc/prometheus/alerts.test.yml
+
+      - name: Syntaxe de la configuration Alertmanager
+        run: |
+          docker run --rm --entrypoint amtool \
+            -v "$PWD/monitoring/alertmanager:/etc/alertmanager:ro" \
+            "${{ steps.versions.outputs.alertmanager }}" \
+            check-config /etc/alertmanager/alertmanager.yml
 
   sast:
     name: Semgrep OWASP (non bloquant)
@@ -237,15 +312,30 @@ jobs:
             infra:
               - 'docker-compose.yml'
               - 'traefik/**'
+              # Sans cette entrée, corriger un seuil dans alerts.yml et
+              # pousser sur main ne changeait rien sur le VPS : le fichier
+              # arrivait par `git pull` au déploiement suivant, déclenché par
+              # tout autre chose. Une règle d'alerte corrigée qui n'atteint
+              # pas la production est une correction imaginaire.
+              - 'monitoring/**'
+              # Même raisonnement pour les scripts : ils vivent dans le dépôt
+              # mais ne sont embarqués dans aucune image. C'est aussi ce
+              # filtre qui porte l'installation du crontab — sans lui, une
+              # cadence corrigée dans crontab.konfiturgame resterait lettre
+              # morte sur le serveur.
+              - 'scripts/**'
 
   # Note : si infra ET frontend changent dans le même push, ce job recrée le
   # frontend avec l'image existante (nouvelle config compose), puis
   # deploy-frontend reconstruit l'image — bref délai où l'ancienne image
   # tourne avec la nouvelle config. Acceptable : c'est l'image qui tournait déjà.
   deploy-infra:
-    name: Déploiement infra (compose / traefik)
+    name: Déploiement infra (compose / traefik / supervision)
     runs-on: ubuntu-latest
-    needs: [changes, quality, tests, secrets, rgpd]
+    # `monitoring` n'est exigé que par ce job, seul à expédier monitoring/ :
+    # une coquille dans alerts.yml ne doit pas bloquer un déploiement de
+    # frontend, qui n'y touche pas.
+    needs: [changes, quality, tests, secrets, rgpd, monitoring]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.infra == 'true'
     timeout-minutes: 20
     steps:
@@ -265,6 +355,34 @@ jobs:
             cd "$APP_DIR"
             git pull --ff-only origin main
             docker compose -f docker-compose.yml up -d --remove-orphans
+            # Les configurations de supervision sont montées en volume, pas
+            # embarquées dans l'image : `up -d` ne recrée donc pas ces
+            # conteneurs quand seul un fichier change, et l'ancienne
+            # configuration reste chargée en mémoire. SIGHUP force la relecture
+            # sans redémarrage — pas de trou dans la collecte, pas de perte des
+            # silences en cours côté Alertmanager.
+            docker compose -f docker-compose.yml kill -s HUP prometheus alertmanager
+
+            # ── Tâches planifiées ────────────────────────────────────────
+            # Le crontab est versionné, mais cron ne lit que /etc/cron.d :
+            # tant que personne ne l'y copie, une cadence corrigée dans le
+            # dépôt ne change rien sur le serveur.
+            CRON_SRC="$APP_DIR/scripts/crontab.konfiturgame"
+            if ! sudo -n cmp -s "$CRON_SRC" /etc/cron.d/konfiturgame; then
+              sudo -n install -o root -g root -m 644 \
+                "$CRON_SRC" /etc/cron.d/konfiturgame || {
+                  echo "❌ Installation du crontab refusée : sudo a rejeté la commande."
+                  echo "   /etc/sudoers.d/konfitur-deploy-cron est absent, mal formé,"
+                  echo "   ou ne correspond plus à la ligne de commande ci-dessus."
+                  echo "   Procédure et règle de référence :"
+                  echo "   scripts/sudoers.d/konfitur-deploy-cron (en-tête du fichier)."
+                  echo "   Diagnostic sur le serveur : sudo -u deploy sudo -n -l"
+                  exit 1
+                }
+              echo "✅ Crontab installé dans /etc/cron.d/konfiturgame"
+            else
+              echo "✅ Crontab déjà à jour"
+            fi
       - name: Healthcheck frontend
         # UA navigateur obligatoire : proxy.ts bloque `curl/` (bot-detection.ts) → 403.
         # Sans ça le healthcheck se fait jeter par notre propre détection de bots.
@@ -296,6 +414,67 @@ jobs:
           done
           echo "Appwrite KO après 10 tentatives"
           exit 1
+
+      # Grafana est la seule surface publique de la supervision. Pas de `-k` : c'est précisément la
+      # validation du certificat qu'on veut exercer, le challenge ACME étant
+      # en httpChallenge et donc tributaire du DNS.
+      # 302 attendu (redirection vers /login), 200 accepté.
+      - name: Healthcheck Grafana
+        run: |
+          for i in $(seq 1 10); do
+            sleep 10
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://grafana.konfiturgame.fr || echo "000")
+            case "$code" in
+              200|302)
+                echo "Grafana OK (HTTP $code, tentative $i)"
+                exit 0
+                ;;
+            esac
+            echo "Tentative $i/10 : HTTP $code"
+          done
+          echo "Grafana KO après 10 tentatives — DNS grafana.konfiturgame.fr ou certificat ACME"
+          exit 1
+
+      # Les healthchecks ci-dessus prouvent que les surfaces publiques
+      # répondent ; celui-ci prouve que la supervision fonctionne. Ce sont
+      # deux choses différentes : Prometheus démarre et sert son interface
+      # même quand alerts.yml est refusé au chargement il n'évalue
+      # simplement plus rien. Panne en vert, le pire des modes.
+      #
+      # monitoring-check.sh interroge l'API de Prometheus, qui n'est publiée
+      # ni sur Internet ni sur l'hôte : il tourne donc SUR le VPS, contre
+      # l'IP du conteneur sur monitoring-net. Il exige curl et jq, déjà
+      # requis par backup.sh pour l'export API Appwrite.
+      #
+      # Réessais : scrape_interval est à 30 s (60 s pour cAdvisor), une
+      # cible fraîchement démarrée n'a pas encore de point de mesure.
+      - name: Smoke test de la supervision
+        env:
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          envs: APP_DIR
+          command_timeout: 5m
+          script: |
+            set -e
+            cd "$APP_DIR"
+            PROM_IP=$(docker inspect \
+              -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' \
+              konfitur-prometheus)
+            [ -n "$PROM_IP" ] || { echo "❌ konfitur-prometheus introuvable"; exit 1; }
+            for i in 1 2 3 4 5; do
+              if bash scripts/ci/monitoring-check.sh "http://${PROM_IP}:9090"; then
+                exit 0
+              fi
+              echo "── Tentative $i/5 en échec, nouvel essai dans 30 s"
+              sleep 30
+            done
+            echo "❌ Chaîne de supervision non fiable après 5 tentatives"
+            exit 1
 
   deploy-frontend:
     name: Déploiement frontend

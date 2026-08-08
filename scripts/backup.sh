@@ -2,9 +2,13 @@
 # =============================================================================
 # backup.sh — Sauvegarde complète Konfitur Game
 # Usage : ./scripts/backup.sh [dossier-de-sortie]
-# Par défaut, crée ./backups/YYYY-MM-DD_HH-MM/
+# Par défaut, produit ./backups/YYYY-MM-DD_HH-MM.tar.gz
 #
-# Contenu du backup :
+# Le dossier de travail est archivé puis supprimé : seule l'archive subsiste.
+# Rotation à 7 archives (le jour même + les 6 précédents), voir § 6.
+# restore.sh accepte directement cette archive.
+#
+# Contenu de l'archive :
 #   mariadb.sql                — dump SQL complet (schéma + données internes Appwrite)
 #   appwrite-*.tar.gz          — volumes Docker (uploads, config, functions, builds, certificates)
 #   project-config.tar.gz      — fichiers du projet hors secrets
@@ -37,6 +41,8 @@ load_env() {
     [[ "$value" =~ ^\"(.*)\"$ ]] && value="${BASH_REMATCH[1]}"
     [[ "$value" =~ ^\'(.*)\'$ ]] && value="${BASH_REMATCH[1]}"
     printf -v "$key" '%s' "$value"
+#     shellcheck disable=SC2163  # export par NOM : printf -v a posé la
+#     variable dont $key porte le nom, c'est bien elle qu'il faut exporter.
     export "$key"
   done < "$file"
 }
@@ -403,16 +409,78 @@ Fichiers :
 $(ls -lh "$BACKUP_DIR")
 EOF
 
+# =============================================================================
+# 6. Archivage et rotation
+# =============================================================================
+# Le dossier de travail est remplacé par une archive unique : c'est elle que
+# restore.sh consomme désormais.
+#
+# tar/gzip plutôt que zip : présents sur toute installation Debian minimale,
+# là où `zip` est un paquet à installer — le cron de 2 h échouerait chaque
+# nuit sur un serveur fraîchement provisionné. Le gain de place est le même,
+# le contenu étant déjà majoritairement des .tar.gz.
+BACKUPS_ROOT="$(dirname "$BACKUP_DIR")"
+ARCHIVE="${BACKUP_DIR}.tar.gz"
+
+echo ""
+echo "🗜️  Archivage → $(basename "$ARCHIVE")"
+tar -czf "$ARCHIVE" -C "$BACKUPS_ROOT" "$(basename "$BACKUP_DIR")"
+rm -rf "$BACKUP_DIR"
+echo "   ✅ $(du -sh "$ARCHIVE" | cut -f1)"
+
+# Rotation à 7 archives : le jour même plus les 6 précédents (-mtime +6 =
+# strictement plus de 6×24 h d'âge). Sans purge, backups/ finit par saturer le
+# disque et déclencher EspaceDisqueCritique — la sauvegarde devenant la cause
+# de la panne qu'elle est censée couvrir.
+# La purge vit ici et non dans le cron : deux endroits qui décident de la
+# rétention finissent toujours par diverger.
+PURGED=$(find "$BACKUPS_ROOT" -maxdepth 1 -name '*.tar.gz' -mtime +6 -print -delete 2>/dev/null | wc -l)
+if [[ "$PURGED" -gt 0 ]]; then
+  echo "   🧹 $PURGED archive(s) de plus de 7 jours supprimée(s)"
+fi
+
+# =============================================================================
+# 7. Publication des métriques pour la supervision
+# =============================================================================
+# node-exporter relit ce répertoire en continu et expose ces valeurs à
+# Prometheus : c'est ce qui alimente les alertes SauvegardeManquante et
+# SauvegardePartielle. Sans cette écriture, une sauvegarde qui cesse
+# silencieusement de tourner ne se découvre que le jour où on en a besoin.
+# Écriture atomique — node-exporter interpréterait un fichier tronqué comme
+# une erreur de collecte.
+TEXTFILE_DIR="$PROJECT_DIR/monitoring/textfile"
+if mkdir -p "$TEXTFILE_DIR" 2>/dev/null; then
+  # Taille de l'archive, seul objet qui subsiste sur le disque.
+  BACKUP_SIZE_BYTES=$(du -sb "$ARCHIVE" 2>/dev/null | cut -f1 || echo 0)
+  if $API_EXPORT_OK; then EXIT_CODE=0; else EXIT_CODE=1; fi
+  TMP_METRICS="$(mktemp "$TEXTFILE_DIR/.backup.XXXXXX")"
+  {
+    echo "# HELP konfitur_backup_last_success_timestamp_seconds Date de la dernière sauvegarde aboutie."
+    echo "# TYPE konfitur_backup_last_success_timestamp_seconds gauge"
+    echo "konfitur_backup_last_success_timestamp_seconds $(date +%s)"
+    echo "# HELP konfitur_backup_last_exit_code Code de sortie (0 = complet, 1 = export API partiel)."
+    echo "# TYPE konfitur_backup_last_exit_code gauge"
+    echo "konfitur_backup_last_exit_code $EXIT_CODE"
+    echo "# HELP konfitur_backup_size_bytes Taille de la dernière archive de sauvegarde."
+    echo "# TYPE konfitur_backup_size_bytes gauge"
+    echo "konfitur_backup_size_bytes ${BACKUP_SIZE_BYTES:-0}"
+  } >"$TMP_METRICS"
+  chmod 644 "$TMP_METRICS"
+  mv "$TMP_METRICS" "$TEXTFILE_DIR/backup.prom"
+fi
+
 echo ""
 echo "────────────────────────────────────────"
 if $API_EXPORT_OK; then
-  echo "✅ Backup terminé : $BACKUP_DIR"
+  echo "✅ Backup terminé : $ARCHIVE"
 else
-  echo "⚠️  Backup terminé avec un export API INCOMPLET : $BACKUP_DIR"
+  echo "⚠️  Backup terminé avec un export API INCOMPLET : $ARCHIVE"
 fi
 echo ""
-echo "Pour transférer sur un autre PC :"
-echo "  tar -czf konfitur-backup-${BACKUP_DATE}.tar.gz -C \"$(dirname "$BACKUP_DIR")\" \"$BACKUP_DATE\""
-echo "  # puis copier l'archive via USB, rsync, scp, etc."
+echo "Restauration :"
+echo "  bash ./scripts/restore.sh \"$ARCHIVE\""
+echo ""
+echo "Transfert vers un autre poste : copier l'archive telle quelle"
+echo "(USB, rsync, scp…) — elle est autoportante."
 
 $API_EXPORT_OK || exit 1
