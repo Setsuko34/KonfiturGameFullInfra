@@ -61,6 +61,7 @@ jobs:
             koalaman/shellcheck-alpine:v0.10.0 \
             shellcheck --severity=warning \
               scripts/backup.sh \
+              scripts/deploy-cron.sh \
               scripts/health-check.sh \
               scripts/restore.sh \
               scripts/ci/*.sh
@@ -367,22 +368,8 @@ jobs:
             # Le crontab est versionné, mais cron ne lit que /etc/cron.d :
             # tant que personne ne l'y copie, une cadence corrigée dans le
             # dépôt ne change rien sur le serveur.
-            CRON_SRC="$APP_DIR/scripts/crontab.konfiturgame"
-            if ! sudo -n cmp -s "$CRON_SRC" /etc/cron.d/konfiturgame; then
-              sudo -n install -o root -g root -m 644 \
-                "$CRON_SRC" /etc/cron.d/konfiturgame || {
-                  echo "❌ Installation du crontab refusée : sudo a rejeté la commande."
-                  echo "   /etc/sudoers.d/konfitur-deploy-cron est absent, mal formé,"
-                  echo "   ou ne correspond plus à la ligne de commande ci-dessus."
-                  echo "   Procédure et règle de référence :"
-                  echo "   scripts/sudoers.d/konfitur-deploy-cron (en-tête du fichier)."
-                  echo "   Diagnostic sur le serveur : sudo -u deploy sudo -n -l"
-                  exit 1
-                }
-              echo "✅ Crontab installé dans /etc/cron.d/konfiturgame"
-            else
-              echo "✅ Crontab déjà à jour"
-            fi
+            # Tout contrôle de flux appartient à un script, pas à ce YAML.
+            bash scripts/deploy-cron.sh "$APP_DIR"
       - name: Healthcheck frontend
         # UA navigateur obligatoire : proxy.ts bloque `curl/` (bot-detection.ts) → 403.
         # Sans ça le healthcheck se fait jeter par notre propre détection de bots.
