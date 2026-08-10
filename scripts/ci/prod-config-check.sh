@@ -2,7 +2,7 @@
 # Cohérence de la configuration de PRODUCTION — job bloquant en CI.
 #
 # La stack de prod n'est jamais exercée en local (le dev contourne Traefik pour
-# le frontend, et aucun router dev n'applique les middlewares). Ces trois
+# le frontend, et aucun router dev n'applique les middlewares). Ces
 # vérifications remplacent cette absence de test : elles relisent la config de
 # prod à chaque PR plutôt que de la découvrir cassée le jour du déploiement.
 #
@@ -23,10 +23,6 @@ for f in "$COMPOSE" "$MIDDLEWARES" "$ENV_EXAMPLE"; do
 done
 
 # tr -d '\r' : le repo vit sur un FS Windows — neutralise d'éventuels CRLF
-# 1. Chaque middleware référencé dans une étiquette existe et porte son suffixe.
-#    Traefik n'ignore pas un middleware introuvable : il désactive le router
-#    entier, donc 404 sur tout le site. Le suffixe @file est obligatoire car
-#    les routers sont déclarés côté docker et les middlewares côté fichier.
 DECLARED=$(tr -d '\r' < "$MIDDLEWARES" | grep -E '^    [a-z][a-z0-9-]*:$' | tr -d ' :')
 REFS=$(grep -oE '\.middlewares=[a-zA-Z0-9,@_-]+' "$COMPOSE" | sed 's/\.middlewares=//' | tr ',' '\n' | tr -d '\r' | sort -u)
 
@@ -52,9 +48,6 @@ done <<< "$REFS"
 [ "$MW_ERRORS" -eq 0 ] && ok "Middlewares Traefik : toutes les références résolvent"
 
 # 2. La CSP de prod ne doit pas pointer vers une adresse locale.
-#    Le file provider ne substitue pas les variables d'env : le domaine est en
-#    dur, et une valeur de dev oubliée ici bloque tous les appels Appwrite et le
-#    WebSocket du chat côté navigateur, sans erreur serveur visible.
 CSP=$(sed -n '/contentSecurityPolicy/,/frame-ancestors/p' "$MIDDLEWARES")
 if printf '%s' "$CSP" | grep -qE 'localhost|127\.0\.0\.1'; then
   fail "La CSP de traefik/dynamic/middlewares.yml référence une adresse locale (localhost / 127.0.0.1)"
@@ -63,9 +56,7 @@ else
 fi
 
 # 3. Toute variable consommée par le compose de prod est documentée dans
-#    .env.example. Attrape la variable ajoutée côté dev et oubliée côté prod,
-#    ou l'inverse : une variable vide donne un conteneur qui démarre puis
-#    échoue silencieusement à l'usage.
+#    .env.example.
 VARS=$(grep -oE '\$\{[A-Z_][A-Z0-9_]*' "$COMPOSE" | sed 's/\${//' | tr -d '\r' | sort -u)
 VAR_ERRORS=0
 while IFS= read -r var; do
@@ -76,6 +67,40 @@ while IFS= read -r var; do
   fi
 done <<< "$VARS"
 [ "$VAR_ERRORS" -eq 0 ] && ok "Variables d'environnement : toutes documentées dans .env.example"
+
+# 4. Les scripts invoqués par le crontab de production portent le bit
+#    d'exécution DANS L'INDEX GIT.
+CRONTAB="$ROOT/scripts/crontab.konfiturgame"
+if [ -f "$CRONTAB" ]; then
+  if ! git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    fail "Modes des tâches cron non vérifiables : '$ROOT' n'est pas un dépôt git lisible (droits d'accès ? mauvais répertoire ?)"
+  else
+    CRON_ERRORS=0
+    CRON_SCRIPTS=$(tr -d '\r' < "$CRONTAB" | grep -vE '^[[:space:]]*#' \
+      | grep -oE '\$APP_DIR/[^[:space:]]+\.sh' | sed 's|\$APP_DIR/||' | sort -u)
+    # Une extraction vide traverserait la boucle sans rien vérifier et
+    # afficherait quand même son ✅ : le contrôle se désactiverait tout seul le
+    # jour où le crontab change de forme. C'est la panne qu'il est censé
+    # prévenir — un vert qui répond à une autre question que celle posée.
+    if [ -z "$CRON_SCRIPTS" ]; then
+      fail "Aucun script extrait de $CRONTAB : le contrôle des modes ne vérifie plus rien. Adapter l'extraction à la syntaxe actuelle du crontab."
+      CRON_ERRORS=$((CRON_ERRORS + 1))
+    fi
+    while IFS= read -r rel; do
+      [ -z "$rel" ] && continue
+      mode_line=$(git -C "$ROOT" ls-files -s -- "$rel")
+      mode=${mode_line%% *}
+      if [ -z "$mode" ]; then
+        fail "Le crontab invoque '$rel', absent de l'index git : le serveur ne le recevra jamais"
+        CRON_ERRORS=$((CRON_ERRORS + 1))
+      elif [ "$mode" != "100755" ]; then
+        fail "Le crontab invoque '$rel' directement alors qu'il est en $mode dans l'index git : cron échouera en « Permission denied », en silence. Corriger avec : git update-index --chmod=+x $rel"
+        CRON_ERRORS=$((CRON_ERRORS + 1))
+      fi
+    done <<< "$CRON_SCRIPTS"
+    [ "$CRON_ERRORS" -eq 0 ] && ok "Tâches cron : scripts invoqués exécutables dans l'index git"
+  fi
+fi
 
 STATIC="$ROOT/traefik/traefik.yml"
 if [ -f "$STATIC" ]; then

@@ -52,7 +52,31 @@ else
   exit 1
 fi
 
-# ── 2. Amorçage de la sonde de santé ────────────────────────────────────────
+# ── 2. Le démon qui lit ce fichier tourne-t-il ? ────────────────────────────
+# Déposer un fichier dans /etc/cron.d ne prouve rien. Les images Debian cloud
+# minimales n'embarquent pas toujours le paquet cron, et un service arrêté ne
+# se signale à personne : le fichier reste là, parfaitement installé, et rien
+# ne s'exécute jamais.
+#
+# C'est toute la panne du 2026-08-10. /etc/cron.d/konfiturgame était présent,
+# root:root 644, identique au dépôt au bit près — et zéro ligne CRON dans
+# syslog depuis deux jours, le démon étant `inactive`. Chaque déploiement
+# annonçait « Crontab déjà à jour », ce qui était vrai et sans le moindre
+# rapport avec la question de savoir si les tâches tournaient.
+#
+# Fatal plutôt qu'avertissement : sans cron, il n'y a ni sonde de dernier
+# recours ni sauvegarde quotidienne. Un déploiement vert affirmerait le
+# contraire, et c'est précisément ce silence qui a coûté deux jours.
+if ! systemctl is-active --quiet cron; then
+  echo "❌ Le démon cron n'est pas actif : /etc/cron.d/konfiturgame ne sera jamais lu." >&2
+  echo "   Ni la sonde de santé (5 min) ni la sauvegarde (2 h) ne tournent." >&2
+  echo "   Sur le serveur : sudo systemctl enable --now cron" >&2
+  echo "   Si l'unité n'existe pas : sudo apt-get install -y cron" >&2
+  exit 1
+fi
+echo "✅ Démon cron actif"
+
+# ── 3. Amorçage de la sonde de santé ────────────────────────────────────────
 # Au tout premier déploiement, monitoring/textfile/ ne contient que .gitkeep :
 # les .prom sont gitignorés, donc rien n'arrive par le `git pull`. La métrique
 # de la sonde n'existera qu'au prochain top de 5 minutes — après quoi le smoke
