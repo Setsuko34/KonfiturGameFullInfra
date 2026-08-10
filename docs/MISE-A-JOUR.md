@@ -135,7 +135,7 @@ Les overrides actuels sont dans `frontend/package.json` → section `pnpm.overri
 
 ## 3. Mise à jour Next.js
 
-**Version actuelle :** 16.2.9
+**Version actuelle :** 16.2.12
 
 ### Mise à jour mineure ou patch (16.x.y → 16.x.z)
 
@@ -682,7 +682,7 @@ docker compose -f docker-compose.yml up -d --build frontend
 
 | Composant | Version actuelle | Fichier de référence |
 |-----------|-----------------|---------------------|
-| Next.js | 16.2.9 | `frontend/package.json` |
+| Next.js | 16.2.12 | `frontend/package.json` |
 | SDK `appwrite` (npm) | 23.0.0 | `frontend/package.json` |
 | SDK `node-appwrite` (npm) | 22.1.3 | `frontend/package.json` |
 | Playwright (`@playwright/test`) | 1.50.x | `frontend/package.json` |

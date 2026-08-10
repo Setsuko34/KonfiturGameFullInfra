@@ -23,7 +23,7 @@ Le projet est développé dans le cadre d'une formation en développement d'appl
 
 | Couche | Technologie |
 |--------|------------|
-| Frontend | Next.js 16.2.9 (App Router), React 19, TypeScript strict |
+| Frontend | Next.js 16.2.12 (App Router), React 19, TypeScript strict |
 | Styles | Tailwind CSS v4, design system dark tricolore (CSS variables) |
 | Backend | Appwrite 1.9.0 self-hosted (Auth, Database, Realtime, Storage) |
 | Base de données | MariaDB 10.11 (via Appwrite) |
