@@ -27,6 +27,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
+    # Nom distinct : sans lui, un build de développement (Dockerfile.dev,
+    # hot-reload, NODE_ENV=development) écraserait konfitur-frontend:latest
+    # sur la machine du développeur et pourrait se faire prendre pour une
+    # image de production.
+    image: konfitur-frontend-dev:latest
     volumes:
       - ./frontend:/app
       - /app/node_modules

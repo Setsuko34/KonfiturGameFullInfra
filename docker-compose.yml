@@ -71,6 +71,13 @@ services:
       args:
         NEXT_PUBLIC_APPWRITE_ENDPOINT: https://${DOMAIN}/v1
         NEXT_PUBLIC_APPWRITE_PROJECT_ID: ${APPWRITE_PROJECT_ID}
+    # Image nommée et versionnée : c'est le point de retour du frontend.
+    # `up -d` avec un tag déjà présent localement ne reconstruit PAS — un
+    # rollback est une bascule de variable dans .env, pas un rebuild de
+    # plusieurs minutes en pleine panne. Le tag est écrit par
+    # scripts/deploy-frontend.sh ; `latest` n'est que le filet du tout premier
+    # démarrage, avant qu'un déploiement n'ait posé un SHA.
+    image: konfitur-frontend:${FRONTEND_TAG:-latest}
     container_name: konfitur-frontend
     restart: unless-stopped
     environment:
