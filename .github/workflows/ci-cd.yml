@@ -62,6 +62,7 @@ jobs:
             shellcheck --severity=warning \
               scripts/backup.sh \
               scripts/deploy-cron.sh \
+              scripts/deploy-frontend.sh \
               scripts/health-check.sh \
               scripts/restore.sh \
               scripts/ci/*.sh
@@ -490,12 +491,14 @@ jobs:
           script_stop: true
           envs: APP_DIR
           command_timeout: 25m
+          # Une commande par ligne, zéro contrôle de flux : drone-ssh insère un
+          # test du code retour après CHAQUE ligne. Toute la logique vit dans
+          # scripts/deploy-frontend.sh (cf. son en-tête).
           script: |
             set -e
             cd "$APP_DIR"
             git pull --ff-only origin main
-            docker compose -f docker-compose.yml build frontend
-            docker compose -f docker-compose.yml up -d frontend
+            bash scripts/deploy-frontend.sh "$APP_DIR" build
       - name: Healthcheck frontend
         # UA navigateur obligatoire : proxy.ts bloque `curl/` (bot-detection.ts) → 403.
         # Sans ça le healthcheck se fait jeter par notre propre détection de bots.
@@ -512,6 +515,23 @@ jobs:
           done
           echo "Frontend KO après 10 tentatives"
           exit 1
+
+      # Ne s'exécute que si le healthcheck ci-dessus a réussi : `stable` ne doit
+      # désigner qu'une image dont on a la preuve qu'elle a servi un 200 depuis
+      # l'extérieur. Si la CI meurt ici, `stable` reste sur l'image précédente —
+      # le comportement dégradé est le comportement sûr.
+      - name: Promotion de l'image en 'stable'
+        env:
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          envs: APP_DIR
+          script: |
+            bash "$APP_DIR/scripts/deploy-frontend.sh" "$APP_DIR" promote
 
   deploy-functions:
     name: Déploiement Appwrite functions
