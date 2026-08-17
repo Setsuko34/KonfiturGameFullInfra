@@ -349,13 +349,21 @@ curl -Ls -o /dev/null -w '%{url_effective}' \
 ### Frontend
 
 ```bash
-cd /opt/konfiturgame
+cd /opt/KonfiturGameFullInfra
 git pull
-docker compose -f docker-compose.yml build frontend
-docker compose -f docker-compose.yml up -d frontend
+bash scripts/deploy-frontend.sh "$PWD" build
 ```
 
 Le CI/CD effectue cette étape automatiquement sur push vers `main` si `frontend/**` est modifié.
+
+> ⚠️ **Ne pas remplacer par `docker compose -f docker-compose.yml build frontend`.** Le nom
+> de l'image est `konfitur-frontend:${FRONTEND_TAG:-latest}` : un `build` nu reconstruirait
+> *sous le tag déjà inscrit dans `.env`*, c'est-à-dire sous le SHA du déploiement précédent.
+> Le tag ne désignerait alors plus le code du commit qu'il nomme, et le point de retour
+> correspondant serait silencieusement perdu. `deploy-frontend.sh build` relit le SHA de
+> `HEAD`, construit sous ce tag, l'écrit dans `.env` puis démarre — les trois opérations ne
+> peuvent pas diverger. La promotion en `stable` reste l'affaire de la CI, après
+> healthcheck externe (`bash scripts/deploy-frontend.sh "$PWD" promote`).
 
 ### Appwrite
 
@@ -657,7 +665,9 @@ LOG_INTERNAL_SECRET=<openssl rand -hex 32>
 DÉMARRER               → docker compose -f docker-compose.yml up -d
 ARRÊTER                → docker compose down
 LOGS                   → docker compose logs -f [service]
-REBUILD FRONTEND       → docker compose -f docker-compose.yml up -d --build frontend
+REBUILD FRONTEND       → bash scripts/deploy-frontend.sh "$PWD" build   (tague au SHA de HEAD)
+ROLLBACK FRONTEND      → éditer FRONTEND_TAG dans .env, puis docker compose -f docker-compose.yml up -d frontend
+POINTS DE RETOUR       → docker images konfitur-frontend
 BACKUP                 → ./scripts/backup.sh
 RESTORE                → ./scripts/restore.sh ./backups/<date>
 SEED (données de test) → ./scripts/seed-data.sh

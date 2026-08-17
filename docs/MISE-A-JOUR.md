@@ -651,30 +651,67 @@ docker compose down
 docker compose -f docker-compose.yml up -d
 ```
 
-### Rollback frontend (via git)
+### Rollback frontend (par image)
+
+Chaque déploiement construit `konfitur-frontend:<sha>` et l'alias `stable` désigne la
+dernière image ayant répondu 200 depuis l'extérieur. Revenir en arrière ne touche donc
+jamais à l'historique git : le `git pull --ff-only` du déploiement suivant continue de
+passer.
 
 ```bash
 # Sur le VPS
-cd /opt/konfiturgame
-git log --oneline -5
-git reset --hard <commit-avant-mise-a-jour>
-docker compose -f docker-compose.yml build frontend
+cd /opt/KonfiturGameFullInfra
+docker images konfitur-frontend --format '{{.Tag}}\t{{.CreatedAt}}'
+
+# Éditer FRONTEND_TAG dans .env : un SHA, `stable`, ou un alias de version
+# (`v1.1.0`). Puis :
 docker compose -f docker-compose.yml up -d frontend
 ```
 
-Après un rollback git, le prochain `git pull --ff-only` de la CI échouera. Une fois le fix mergé sur `main` :
+L'image existant déjà localement, `up -d` ne reconstruit rien : la bascule prend quelques
+secondes, pas les minutes d'un build Next.js en pleine panne.
+
+Le déploiement suivant réécrit `FRONTEND_TAG` au nouveau SHA — il n'y a aucune étape de
+rattrapage à ne pas oublier.
+
+**Ce que ce rollback ne couvre pas.** L'image ne contient que le frontend. Un commit qui
+touche `traefik/`, `docker-compose.yml` ou `monitoring/` n'est pas annulé : ces
+configurations viennent du dépôt. Utiliser alors `git revert` sur `main`, qui *avance*
+l'historique au lieu de le réécrire et reste donc compatible `--ff-only`. Et si le schéma
+Appwrite a migré entre-temps, voir « Rollback avec restauration de données » ci-dessus :
+revenir à l'ancienne image ne défait aucune migration.
+
+**Alias de version au moment d'une release.** Le tag git étant posé après le déploiement,
+le serveur ne le connaît pas encore. Une fois la release publiée :
+
 ```bash
-git reset --hard origin/main
+cd /opt/KonfiturGameFullInfra
+git fetch --tags
+docker tag konfitur-frontend:$(git rev-parse --short v1.1.0^{}) konfitur-frontend:v1.1.0
 ```
 
+Tag git et tag d'image portent alors le même nom.
+
+**Si l'image visée a disparu** (purge manuelle, `docker system prune -a`), `up -d` la
+reconstruit depuis les sources : c'est lent, mais ce n'est pas une panne.
+
 ### Rollback d'une mise à jour de dépendance npm
+
+Le plus rapide est de basculer sur l'image d'avant la mise à jour (ci-dessus) : elle
+embarque déjà l'ancienne dépendance. Pour repartir des sources en revanche :
 
 ```bash
 # Remettre l'ancienne version dans frontend/package.json
 # Regénérer le lockfile (voir §2)
-# Rebuild le container
-docker compose -f docker-compose.yml up -d --build frontend
+# Reconstruire — en prod, via le script : il tague au SHA de HEAD
+bash scripts/deploy-frontend.sh "$PWD" build
 ```
+
+> ⚠️ Pas de `docker compose -f docker-compose.yml up -d --build frontend` en production :
+> l'image s'appelle `konfitur-frontend:${FRONTEND_TAG:-latest}`, donc un `--build` nu
+> reconstruit *sous le tag déjà inscrit dans `.env`* — celui du déploiement précédent. Le
+> tag cesse alors de désigner le code du commit qu'il nomme, et ce point de retour est
+> perdu sans le moindre message.
 
 ---
 

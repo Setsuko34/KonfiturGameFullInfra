@@ -111,6 +111,37 @@ if [ -f "$STATIC" ]; then
   fi
 fi
 
+# 6. Le service frontend doit porter une image nommée ET versionnée.
+#    Sans clé `image:`, Compose fabrique un nom implicite, écrasé à chaque
+#    `build` : il ne reste aucun artefact vers lequel revenir, et le rollback
+#    redevient le `git reset --hard` de MISE-A-JOUR.md — qui casse le
+#    `git pull --ff-only` du déploiement suivant. Ce contrôle empêche la
+#    disparition silencieuse du seul point de retour du frontend.
+if grep -qE '^[[:space:]]+image:[[:space:]]+konfitur-frontend:\$\{FRONTEND_TAG' "$COMPOSE"; then
+  ok "Image frontend : nommée et versionnée par \${FRONTEND_TAG}"
+else
+  fail "Le service frontend n'a pas d'image 'konfitur-frontend:\${FRONTEND_TAG...}' : plus aucun rollback par image possible (voir docs/MISE-A-JOUR.md §9 et scripts/deploy-frontend.sh)"
+fi
+
+# 7. Le nettoyage Docker hebdomadaire ne doit jamais purger les images taguées.
+#    `docker system prune -f` ne supprime que les images DANGLING : les
+#    `konfitur-frontend:<sha>`, `:stable` et `:vX.Y.Z` lui survivent, et c'est
+#    précisément ce qui rend le rollback par image possible une semaine après
+#    le déploiement. Avec `-a`, toute image sans conteneur en cours
+#    disparaîtrait — donc TOUS les points de retour d'un coup, y compris le
+#    dernier connu sain, un lundi à 5 h et sans le moindre message. Le crontab
+#    porte l'avertissement en prose ; ce contrôle le rend opposable.
+if [ -f "$CRONTAB" ]; then
+  PRUNE=$(tr -d '\r' < "$CRONTAB" | grep -vE '^[[:space:]]*#' | grep 'docker system prune' || true)
+  if [ -z "$PRUNE" ]; then
+    ok "Nettoyage Docker : aucune tâche de prune planifiée"
+  elif printf '%s\n' "$PRUNE" | grep -qE '(^|[[:space:]])(-[a-zA-Z]*a[a-zA-Z]*|--all)([[:space:]]|$)'; then
+    fail "Le crontab lance 'docker system prune' avec -a/--all : les images konfitur-frontend taguées (<sha>, stable, vX.Y.Z) seraient détruites et il ne resterait plus aucun point de retour pour le frontend (voir docs/MISE-A-JOUR.md §9)"
+  else
+    ok "Nettoyage Docker : prune limité aux images dangling, les points de retour survivent"
+  fi
+fi
+
 echo
 if [ "$ERRORS" -gt 0 ]; then
   echo "Config de production : ÉCHEC ($ERRORS erreur(s))"

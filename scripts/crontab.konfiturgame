@@ -34,6 +34,12 @@ APP_DIR=/opt/KonfiturGameFullInfra
 # ── Nettoyage Docker — lundi 5 h 00 ─────────────────────────────────────────
 # Les images intermédiaires des rebuilds du frontend s'accumulent à chaque
 # déploiement. `-f` sans `--volumes` : jamais toucher aux volumes de données.
+#
+# NE JAMAIS AJOUTER `-a`. Sans lui, prune ne supprime que les images DANGLING :
+# les `konfitur-frontend:<sha>`, `:stable` et `:vX.Y.Z` étant taguées, elles
+# survivent — c'est ce qui rend le rollback par image possible une semaine
+# après le déploiement (docs/MISE-A-JOUR.md §9). Avec `-a`, toute image sans
+# conteneur en cours disparaîtrait, y compris le dernier point de retour connu.
 0 5 * * 1 root docker system prune -f >> /var/log/konfiturgame-maintenance.log 2>&1
 
 # ── Rotation des journaux de supervision — 1er du mois ──────────────────────

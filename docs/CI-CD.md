@@ -114,8 +114,10 @@ Tous les jobs de déploiement attendent les 4 contrôles bloquants. La détectio
 
 **`Déploiement frontend`** — déclenché si `frontend/**` est modifié.
 - Attend aussi `Déploiement infra` (`success` ou `skipped`).
-- Séquence : `git pull --ff-only origin main` → `docker compose … build frontend` → `docker compose … up -d frontend`.
+- Séquence : `git pull --ff-only origin main` → `bash scripts/deploy-frontend.sh "$APP_DIR" build`.
 - Healthcheck frontend identique.
+- **Puis, et seulement si le healthcheck a réussi**, une étape SSH distincte appelle `bash "$APP_DIR/scripts/deploy-frontend.sh" "$APP_DIR" promote` : elle pose l'alias `konfitur-frontend:stable` et purge les tags de SHA au-delà des 5 derniers. La séparation est le cœur du dispositif — `stable` ne désigne qu'une image dont on a la **preuve** qu'elle a servi un 200 depuis l'extérieur. Si la CI meurt entre les deux, `stable` reste sur l'image précédente : le comportement dégradé est le comportement sûr.
+- Le healthcheck reste sur le runner GitHub et non dans le script : depuis le VPS, un `curl` vers le domaine public ne prouverait ni la résolution DNS publique ni l'ouverture du pare-feu.
 
 **`Déploiement Appwrite functions`** — déclenché si `appwrite.json` ou `functions/**` est modifié.
 - S'exécute sur le runner CI (pas SSH) : installe `appwrite-cli@17.3.1` (npm global, exception à pnpm — runner éphémère).
@@ -149,21 +151,31 @@ Tous les jobs de déploiement attendent les 4 contrôles bloquants. La détectio
 
 ## Rollback manuel
 
+### Frontend — bascule d'image, jamais de `git reset`
+
+Chaque déploiement construit `konfitur-frontend:<sha>` et `stable` désigne la dernière image ayant répondu 200 depuis l'extérieur. Le retour arrière est un changement de variable dans `.env`, non versionné : **l'historique git du serveur n'est pas touché et le `git pull --ff-only` du déploiement suivant continue de passer.**
+
 ```bash
 ssh <user>@<vps>
 cd <VPS_APP_DIR>
-git log --oneline -5                       # repérer le commit sain
-git reset --hard <commit-sain>
-docker compose -f docker-compose.yml build frontend
-docker compose -f docker-compose.yml up -d
-curl -s -o /dev/null -w '%{http_code}\n' https://konfiturgame.fr   # attendu: 200
+docker images konfitur-frontend --format '{{.Tag}}\t{{.CreatedAt}}'   # points de retour disponibles
+# Éditer FRONTEND_TAG dans .env : un SHA, `stable`, ou un alias de version (`v1.1.0`)
+docker compose -f docker-compose.yml up -d frontend
+UA="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0 Safari/537.36"
+curl -s -o /dev/null -w '%{http_code}\n' -A "$UA" https://konfiturgame.fr   # attendu: 200
 ```
 
-Après un rollback, le prochain `git pull --ff-only` de la CI échouera (historique divergent). Une fois le correctif mergé sur `main` :
+L'image existant déjà localement, `up -d` ne reconstruit rien. Le déploiement suivant réécrit `FRONTEND_TAG` au nouveau SHA : aucune étape de rattrapage à ne pas oublier.
 
-```bash
-git reset --hard origin/main
-```
+> L'UA de navigateur est obligatoire : `proxy.ts` répond 403 à `curl/` et bannit l'IP appelante.
+
+Procédure détaillée, limites et aliasage de version : **`docs/MISE-A-JOUR.md §9`**.
+
+### Configuration d'infrastructure — `git revert`, jamais `git reset`
+
+L'image ne contient que le frontend. Un commit qui touche `docker-compose.yml`, `traefik/`, `monitoring/` ou `scripts/` n'est pas annulé par une bascule d'image : ces fichiers viennent du dépôt. Utiliser `git revert` sur `main`, qui **avance** l'historique au lieu de le réécrire et reste donc compatible `--ff-only` — puis laisser la CI redéployer.
+
+Un `git reset --hard` sur le dépôt du VPS fait échouer le `git pull --ff-only` de tous les déploiements suivants et laisse le serveur dans un état à réparer à la main : ne pas le faire.
 
 ---
 

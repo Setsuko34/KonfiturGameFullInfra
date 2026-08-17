@@ -21,6 +21,76 @@ dossier Bloc 2), `R-xx` pour les constats de campagne de recette.
 
 ---
 
+## v1.1.1 — non publiée (2026-08-15) — Rollback frontend par image
+
+> **Pourquoi un incrément CORRECTIF et non MINEUR :** le produit livré à l'utilisateur est
+> strictement inchangé — aucune fonctionnalité ajoutée, aucun écran, aucun comportement
+> applicatif modifié ; seule une procédure d'exploitation défectueuse, qui laissait le
+> serveur dans un état à réparer à la main, est réparée.
+
+### Correctifs
+
+- **Le rollback frontend n'impose plus de réécrire l'historique du serveur.** Le service
+  `frontend` n'avait pas de clé `image:` : Compose lui donnait un nom implicite, écrasé à
+  chaque build, et la seule procédure de retour arrière documentée était un
+  `git reset --hard` sur le dépôt du VPS — qui faisait échouer le `git pull --ff-only` du
+  déploiement suivant. Chaque build produit désormais `konfitur-frontend:<sha>` ; revenir en
+  arrière est une bascule de `FRONTEND_TAG` dans `.env`, sans rebuild
+- **`stable` ne désigne qu'une image vérifiée.** La promotion est une étape distincte,
+  postérieure au healthcheck externe : si celui-ci échoue, l'alias reste sur l'image
+  précédente
+- **La sonde de dernier recours respecte le rollback.** `health-check.sh` relance les
+  conteneurs tombés avec le même fichier compose, donc le même `.env` : elle ne peut pas
+  ramener silencieusement la version qu'on vient d'écarter. Le tag n'est écrit qu'à un seul
+  endroit, `scripts/deploy-frontend.sh`
+- Rétention de 5 tags de SHA, plus `stable` et les alias `vX.Y.Z`. Le
+  `docker system prune -f` hebdomadaire ne touche que les images *dangling* — l'interdiction
+  d'y ajouter `-a` est désormais écrite dans le crontab, à l'endroit où l'on serait tenté
+  de le faire
+- **Image de développement isolée** (`konfitur-frontend-dev:latest` dans
+  `docker-compose.override.yml`) : sans nom distinct, un build local avec `Dockerfile.dev`
+  et `NODE_ENV=development` écraserait `konfitur-frontend:latest` sur la machine du
+  développeur
+
+### Tests et intégration continue
+
+- Contrôle #6 de `scripts/ci/prod-config-check.sh` : le service `frontend` doit porter une
+  image nommée et versionnée. Sans ce garde-fou, la suppression de la clé `image:` ferait
+  disparaître le seul point de retour du frontend sans qu'aucun test ne s'en aperçoive.
+  Écrit avant le changement qu'il garde, et vérifié rouge d'abord
+- `scripts/deploy-frontend.sh` ajouté au périmètre shellcheck (liste explicite et manuelle
+  par choix documenté : un script d'exploitation absent de cette liste n'est jamais vérifié)
+- Job `deploy-frontend` : le bloc SSH se réduit à `bash scripts/deploy-frontend.sh
+  "$APP_DIR" build`, et une étape SSH distincte `Promotion de l'image en 'stable'` est
+  ajoutée **après** le healthcheck. Une commande par ligne, zéro contrôle de flux —
+  `script_stop: true` n'est pas un `set -e`
+- `FRONTEND_TAG` documenté dans `.env.example`, sans quoi le contrôle #3 fait échouer le job
+  bloquant `Lint + type-check`
+
+### Documentation
+
+- `docs/MISE-A-JOUR.md` §9 : procédure de rollback réécrite, limites explicitées
+  (l'image ne couvre pas la configuration d'infrastructure, ni les migrations de schéma) ;
+  le rollback d'une mise à jour de dépendance npm renvoie d'abord à la bascule d'image
+- `docs/CI-CD.md` : séquence du job `deploy-frontend` corrigée, étape de promotion
+  décrite, et section « Rollback manuel » réécrite — c'est la page vers laquelle pointe
+  l'issue `deploy-failure`, donc celle qu'on lit un jour de panne. Le retour arrière de la
+  configuration d'infrastructure y est distingué : `git revert` (qui avance l'historique),
+  jamais `git reset`
+- `docs/DEPLOIEMENT.md` : mise à jour manuelle du frontend et aide-mémoire alignés sur
+  `deploy-frontend.sh`
+- `CLAUDE.md` : nouveau piège connu — un `docker compose build frontend` lancé à la main en
+  production reconstruit sous le tag déjà inscrit dans `.env`, celui du déploiement
+  précédent, et fait perdre ce point de retour sans un message
+
+### Reste à faire
+
+- Répétition du rollback sur le VPS après deux déploiements successifs, relevés à consigner
+  dans `docs/CAHIER-DE-RECETTES.md` (tâche 5 du plan). Un mécanisme de retour arrière jamais
+  éprouvé n'est pas un mécanisme de retour arrière
+
+---
+
 ## v1.1.0 — 2026-08-01 — Supervision et maintien en condition opérationnelle
 
 ### Nouveautés
