@@ -21,7 +21,7 @@ dossier Bloc 2), `R-xx` pour les constats de campagne de recette.
 
 ---
 
-## v1.1.1 — non publiée (2026-08-15) — Rollback frontend par image
+## v1.1.1 — 2026-08-17 — Rollback frontend par image
 
 > **Pourquoi un incrément CORRECTIF et non MINEUR :** le produit livré à l'utilisateur est
 > strictement inchangé — aucune fonctionnalité ajoutée, aucun écran, aucun comportement
@@ -52,6 +52,23 @@ dossier Bloc 2), `R-xx` pour les constats de campagne de recette.
   et `NODE_ENV=development` écraserait `konfitur-frontend:latest` sur la machine du
   développeur
 
+### Sécurité
+
+- **Quatre avis Dependabot corrigés par override** (`frontend/pnpm-workspace.yaml`) :
+  `nanoid` 3.3.17 → 3.3.18 (boucle infinie de `customAlphabet`/`customRandom` appelés avec
+  une taille 0), `brace-expansion` 1.1.15 → 1.1.18 et 5.0.6 → 5.0.9 (expansion en O(2ⁿ) sur
+  des groupes `{}` consécutifs : 90 octets bloquent un thread plusieurs minutes),
+  `js-yaml` 4.3.0 → 4.3.1 (CVE-2026-59870, résolution `!!omap` en O(n²), jamais rétroportée
+  sur la ligne 4.x). Tous transitifs et cantonnés au build ou à l'outillage — `nanoid`
+  arrive par postcss, `brace-expansion` et `js-yaml` par eslint : aucun n'est présent dans
+  le bundle `.next/standalone` livré en production
+- **L'override précédent épinglait `brace-expansion` à 1.1.15, devenue vulnérable à son
+  tour.** Une version figée n'est un correctif que jusqu'à l'avis suivant ; les bornes sont
+  désormais des intervalles. Borne haute obligatoire dans les deux cas : un override
+  s'applique sans contrôle de compatibilité, et un `">=3.3.18"` sur `nanoid` aurait pu
+  livrer la 5.x, ESM pur, à un postcss qui l'attend en CJS — le correctif de sécurité
+  aurait cassé le build sans que rien ne relie les deux
+
 ### Tests et intégration continue
 
 - Contrôle #6 de `scripts/ci/prod-config-check.sh` : le service `frontend` doit porter une
@@ -72,6 +89,13 @@ dossier Bloc 2), `R-xx` pour les constats de campagne de recette.
 - `docs/MISE-A-JOUR.md` §9 : procédure de rollback réécrite, limites explicitées
   (l'image ne couvre pas la configuration d'infrastructure, ni les migrations de schéma) ;
   le rollback d'une mise à jour de dépendance npm renvoie d'abord à la bascule d'image
+- `docs/MISE-A-JOUR.md` §9, alias de version : la procédure ne déduit plus le nom de
+  l'image du commit que le tag désigne. Un tag de release est posé sur un commit
+  postérieur au déploiement — au minimum celui du CHANGELOG, qui ne déclenche aucun
+  déploiement puisque `docs/**` n'est dans aucun filtre de chemins. L'alias porte
+  désormais sur l'image réellement déployée (`FRONTEND_TAG`), sous garde d'un
+  `git diff -- frontend/` entre les deux commits : une sortie non vide signifie que la
+  release contient du frontend non déployé, et que l'alias serait un faux point de retour
 - `docs/CI-CD.md` : séquence du job `deploy-frontend` corrigée, étape de promotion
   décrite, et section « Rollback manuel » réécrite — c'est la page vers laquelle pointe
   l'issue `deploy-failure`, donc celle qu'on lit un jour de panne. Le retour arrière de la

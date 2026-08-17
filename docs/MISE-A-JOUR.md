@@ -682,15 +682,42 @@ Appwrite a migré entre-temps, voir « Rollback avec restauration de données »
 revenir à l'ancienne image ne défait aucune migration.
 
 **Alias de version au moment d'une release.** Le tag git étant posé après le déploiement,
-le serveur ne le connaît pas encore. Une fois la release publiée :
+le serveur ne le connaît pas encore. L'étape est donc manuelle, et elle demande une
+précaution : **ne jamais déduire le nom de l'image du commit que le tag désigne.**
+
+Un tag de release est presque toujours posé sur un commit *postérieur* à celui qui a été
+déployé — au minimum le commit qui met à jour `docs/CHANGELOG.md`, lequel ne déclenche
+aucun déploiement (`docs/**` n'est dans aucun filtre de chemins de la CI). Le
+`konfitur-frontend:$(git rev-parse --short vX.Y.Z^{})` naïf cherche alors une image qui
+n'a jamais été construite et échoue sur un `No such image`. Pire, s'il aboutissait après
+un déploiement intermédiaire, il aliaserait une image qui n'est pas celle de la release.
+
+La procédure correcte alias l'image **réellement déployée**, après avoir vérifié qu'elle
+contient bien le frontend de la version :
 
 ```bash
 cd /opt/KonfiturGameFullInfra
-git fetch --tags
-docker tag konfitur-frontend:$(git rev-parse --short v1.1.0^{}) konfitur-frontend:v1.1.0
+sudo -u deploy git fetch --tags          # sous le compte propriétaire du dépôt :
+                                         # git refuse d'opérer dans un dépôt d'autrui
+                                         # (« dubious ownership »), et un fetch lancé
+                                         # sous un autre compte y laisserait des fichiers
+                                         # que le déploiement suivant ne pourrait plus écrire
+TAG=$(sudo -u deploy grep '^FRONTEND_TAG=' .env | cut -d= -f2 | tr -d ' \r')
+
+# GARDE — doit ne RIEN afficher. Toute ligne ici signifie que le frontend a changé entre
+# l'image déployée et le commit taggué : l'alias serait un faux point de retour.
+sudo -u deploy git -C /opt/KonfiturGameFullInfra diff --stat "$TAG" 'v1.1.0^{}' -- frontend/
+
+docker tag "konfitur-frontend:$TAG" konfitur-frontend:v1.1.0
+docker images konfitur-frontend --format '{{.Tag}}\t{{.ID}}'   # <sha>, stable et v1.1.0
+                                                               # doivent afficher le même ID
 ```
 
-Tag git et tag d'image portent alors le même nom.
+Si la garde affiche quelque chose, c'est que la release contient des changements frontend
+non déployés : il faut déployer avant d'aliaser, pas aliaser quand même.
+
+Une fois posé, l'alias est permanent : `prune_old_tags` ne purge que les tags de SHA, et le
+`docker system prune -f` hebdomadaire ignore les images taguées.
 
 **Si l'image visée a disparu** (purge manuelle, `docker system prune -a`), `up -d` la
 reconstruit depuis les sources : c'est lent, mais ce n'est pas une panne.
