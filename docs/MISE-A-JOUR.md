@@ -117,25 +117,31 @@ docker exec konfitur-frontend sh -c "cd /app && pnpm build"
 
 ### Cas particulier : overrides pnpm (sécurité)
 
-Si un audit signale une CVE dans une dépendance transitive (non directe), utiliser les overrides dans `frontend/package.json` :
+Si un audit signale une CVE dans une dépendance **transitive**, l'override est le levier.
+Depuis pnpm 10, il ne vit **plus** dans `package.json` : c'est `frontend/pnpm-workspace.yaml`
+qui est lu, et un bloc `pnpm.overrides` laissé dans `package.json` serait ignoré en silence.
 
-```json
-{
-  "pnpm": {
-    "overrides": {
-      "vulnerable-package": ">=fixed-version"
-    }
-  }
-}
+```yaml
+# frontend/pnpm-workspace.yaml
+overrides:
+  "paquet-vulnerable@<version-corrigee": ">=version-corrigee"
 ```
 
-Les overrides actuels sont dans `frontend/package.json` → section `pnpm.overrides`.
+Borner l'override **à la version corrigée par l'avis**, pas au-dessus : un `>=` posé plus
+haut fait diverger l'arbre de ce que le paquet parent a testé. Et vérifier si le correctif
+vit dans une ligne majeure antérieure : `js-yaml` est corrigé en 4.3.2 alors que sa
+dernière version est une 5.x, donc `^4.3.2` et non `>=4.3.2`, qui basculerait sur un
+majeur qu'aucun consommateur de l'arbre n'a validé.
+
+Avant d'ajouter un override, vérifier qu'il est encore nécessaire : si le parent a relâché
+sa contrainte (`next` demande désormais `sharp@^0.35.4` au lieu de l'épingler), monter le
+parent suffit et l'override ne sert plus que de plancher anti-régression.
 
 ---
 
 ## 3. Mise à jour Next.js
 
-**Version actuelle :** 16.2.12
+**Version actuelle :** 16.3.5
 
 ### Mise à jour mineure ou patch (16.x.y → 16.x.z)
 
@@ -144,11 +150,20 @@ Risque faible — comportement stable.
 ```bash
 # 1. Éditer frontend/package.json → "next": "16.x.z"
 
-# 2. Regénérer le lockfile
-mkdir -p /tmp/pnpm-gen && cp frontend/package.json /tmp/pnpm-gen/
-docker run --rm -v /tmp/pnpm-gen:/app -w /app node:20-alpine \
-  sh -c "corepack enable pnpm && pnpm install --no-frozen-lockfile"
+# 2. Regénérer le lockfile, hors du FS Windows (EACCES sur /mnt/…)
+#    Copier pnpm-workspace.yaml AVEC le reste : il porte les overrides de
+#    sécurité. Sans lui, pnpm résout un arbre sans aucun override et
+#    réintroduit les versions vulnérables, sans le moindre avertissement.
+mkdir -p /tmp/pnpm-gen
+cp frontend/package.json frontend/pnpm-workspace.yaml frontend/pnpm-lock.yaml /tmp/pnpm-gen/
+docker run --rm -v /tmp/pnpm-gen:/app -w /app node:22-alpine \
+  sh -c "corepack enable pnpm && pnpm install --lockfile-only --no-frozen-lockfile"
 cp /tmp/pnpm-gen/pnpm-lock.yaml frontend/
+
+# 2 bis. Si un `pnpm update` a été lancé dans le conteneur, il a pu réécrire les
+#    specifiers de package.json : les rapatrier aussi, sinon le
+#    `pnpm install --frozen-lockfile` du Dockerfile refuse de démarrer
+#    (« specifiers in the lockfile don't match specifiers in package.json »).
 
 # 3. Rebuild du container
 docker compose up -d --build frontend
@@ -748,7 +763,7 @@ bash scripts/deploy-frontend.sh "$PWD" build
 
 | Composant | Version actuelle | Fichier de référence |
 |-----------|-----------------|---------------------|
-| Next.js | 16.2.12 | `frontend/package.json` |
+| Next.js | 16.3.5 | `frontend/package.json` |
 | SDK `appwrite` (npm) | 23.0.0 | `frontend/package.json` |
 | SDK `node-appwrite` (npm) | 22.1.3 | `frontend/package.json` |
 | Playwright (`@playwright/test`) | 1.50.x | `frontend/package.json` |
