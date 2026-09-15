@@ -227,6 +227,8 @@ Depuis Appwrite 1.9.0, plusieurs workers supplémentaires sont nécessaires. San
 | `appwrite-worker-mails` | `worker-mails` | Envoi SMTP |
 | `appwrite-worker-builds` | `worker-builds` | **Compilation des fonctions** (nouveau en 1.9) |
 | `appwrite-worker-functions` | `worker-functions` | **Exécution des fonctions** (cron, triggers) |
+| `appwrite-task-scheduler-functions` | `schedule-functions` | **Planificateur des crons** — enfile les exécutions à l'heure dite |
+| `appwrite-worker-executions` | `worker-executions` | **Persistance des exécutions** (statut, code HTTP, logs) |
 | `appwrite-executor` | *(openruntimes)* | **Sandbox d'exécution** (image séparée) |
 
 Variables obligatoires à ajouter dans tous les services qui touchent aux fonctions :
