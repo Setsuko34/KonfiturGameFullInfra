@@ -224,6 +224,21 @@ Settings → Platforms → Add Platform → **Web** → Hostname : `konfiturgame
 | Section | État actuel | Déploiement |
 |---------|-------------|-------------|
 | `functions` | `update-jam-status` (cron toutes les 5 min, node-20) | CI auto sur push `main` |
+
+> **Variables de la fonction — étape manuelle, une fois par environnement.**
+> `appwrite push functions` ne pousse pas les variables (elles vivent en base Appwrite,
+> pas dans `appwrite.json`). Sans elles la fonction renvoie 500 « Configuration incomplète »
+> et les statuts des jams se figent. À créer dans Console → Functions → `update-jam-status`
+> → Settings → Environment variables :
+>
+> | Clé | Valeur | Secret |
+> |-----|--------|--------|
+> | `APPWRITE_ENDPOINT` | `http://appwrite/v1` (réseau Docker interne) | non |
+> | `APPWRITE_API_KEY` | la clé API du projet (`APPWRITE_API_KEY` du `.env`) | oui |
+>
+> `APPWRITE_FUNCTION_PROJECT_ID` est injectée automatiquement par Appwrite.
+> Le cron dépend aussi du conteneur `appwrite-task-scheduler-functions` (docker-compose.yml) :
+> c'est lui qui met les exécutions planifiées en file. Sans lui, rien ne se déclenche jamais.
 | `tables` | Capturé — 10 collections dans `appwrite.json` | CI auto sur push `main` si `appwrite.json` modifié (job `deploy-schema`, voir `CI-CD.md`) |
 | `buckets` | Capturé — 4 buckets dans `appwrite.json` | `appwrite push buckets` manuel |
 | `teams` | Capturé — team `admins` | `appwrite push teams` manuel |
