@@ -43,7 +43,7 @@ KonfiturGame est une **plateforme web de game jams** (compétitions de création
 
 | Composant | Technologie | Version |
 |-----------|-------------|---------|
-| Frontend | Next.js (App Router) | 16.2.12 |
+| Frontend | Next.js (App Router) | 16.3.5 |
 | Backend | Appwrite self-hosted | 1.9.0 |
 | Console Appwrite | appwrite/console (image séparée depuis 1.9) | 7.5.7 |
 | Exécution des fonctions | openruntimes/executor | 0.11.4 |
@@ -124,6 +124,8 @@ Depuis la 1.9, plusieurs workers dédiés sont requis (sans eux, certaines featu
 | `appwrite-worker-mails` | Envoi SMTP (vérification email, récupération mdp) |
 | `appwrite-worker-builds` | Compilation des fonctions |
 | `appwrite-worker-functions` | Exécution des fonctions (cron, triggers) |
+| `appwrite-task-scheduler-functions` | Met en file les exécutions planifiées (crons). Absent = aucun cron ne part |
+| `appwrite-worker-executions` | Écrit en base le résultat des exécutions async (statut, code, logs) |
 | `appwrite-executor` | Sandbox d'exécution des fonctions (image `openruntimes/executor`) |
 
 ### ClamAV
@@ -852,6 +854,9 @@ docker compose up -d
 | Appwrite → 500 "Unknown attribute: xyz" après montée de version | Migration incomplète : `docker exec konfitur-appwrite php /usr/src/code/app/cli.php migrate`, flush Redis, redémarrer. Si l'attribut manque encore : correction manuelle des métadonnées (voir `MISE-A-JOUR.md §4`) |
 | SSR renvoie 401 "router" après migration 1.9 | Ajouter `_APP_MIGRATION_HOST=appwrite` dans l'environnement du service `appwrite` (le hostname interne Docker doit être connu du routeur Appwrite) |
 | Les fonctions Appwrite ne se déploient/exécutent pas | Vérifier que `appwrite-worker-builds`, `appwrite-worker-functions` et `appwrite-executor` sont "Up" (`docker compose ps`) |
+| Une fonction **cron** ne part jamais (statuts de jams figés) | `appwrite-task-scheduler-functions` doit être "Up" : c'est lui qui enfile les exécutions planifiées. Vérifier ensuite les variables de la fonction (voir `DEPLOIEMENT.md §4.4`) |
+| Exécution manuelle → `No host part in the URL` | `_APP_EXECUTOR_HOST=http://exc1/v1` manque sur le service `appwrite` (le worker l'avait, pas l'API) |
+| Exécutions bloquées à `waiting` dans la console, sans logs | `appwrite-worker-executions` absent : la fonction s'exécute réellement, mais personne n'écrit le résultat en base (`LLEN utopia-queue.queue.v1-executions` grimpe) |
 | `node_modules` Docker corrompu (fichier texte) | `rm frontend/node_modules && git rm --cached frontend/node_modules` |
 | Tests `vitest` Permission denied sur host | `docker exec konfitur-frontend sh -c "cd /app && npx vitest run"` |
 | `pnpm-lock.yaml` EACCES sur WSL2 | Générer dans /tmp (voir section 16) |
@@ -887,4 +892,4 @@ SITE (prod)             → https://konfiturgame.fr
 
 ---
 
-*KonfiturGame · Next.js 16.2.12 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-14*
+*KonfiturGame · Next.js 16.3.5 · Appwrite 1.9.0 · Traefik v3.6.7 · Docker Compose v2 · Mis à jour : 2026-07-14*
