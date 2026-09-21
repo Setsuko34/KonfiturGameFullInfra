@@ -21,6 +21,127 @@ dossier Bloc 2), `R-xx` pour les constats de campagne de recette.
 
 ---
 
+## Non publié
+
+> Section de travail : ces changements sont sur la branche courante et ne sont pas encore
+> déployés. À fusionner dans l'entrée de version au moment de la livraison.
+
+_Aucun changement en attente._
+
+---
+
+## v1.2.0 — 2026-09-21 — Chaîne d'exécution des fonctions Appwrite
+
+> **Pourquoi un incrément MINEUR et non CORRECTIF :** la fonction `update-jam-status`
+> est présente dans le dépôt depuis la v1.0.0, mais sa chaîne d'exécution n'a jamais
+> abouti et aucune entrée de ce journal ne l'a jamais annoncée. Ce n'est donc pas la
+> réparation d'un comportement promis : c'est sa première livraison effective. Le
+> comportement observable change, les statuts des jams transitionnent désormais sans
+> intervention humaine, ce qui écarte le critère retenu en v1.1.1 (« le produit livré à
+> l'utilisateur est strictement inchangé »).
+
+### Exécution des fonctions Appwrite
+
+Trois pièces manquaient à la chaîne d'exécution des fonctions depuis la montée en 1.9.0.
+Chacune tombait en panne **sans rien signaler**, et les trois convergeaient vers le même
+symptôme trompeur : `update-jam-status` semblait n'avoir jamais tourné, et les statuts des
+jams restaient figés au dernier passage manuel.
+
+- **Planificateur des crons ajouté** (`appwrite-task-scheduler-functions`, entrypoint
+  `schedule-functions`). C'est lui qui lit les tâches planifiées en base et pousse une
+  exécution dans la queue Redis à l'heure dite. Sans lui, `worker-functions` n'a jamais
+  rien à consommer : la fonction reste `active` en base, la console n'affiche aucune
+  erreur, et le cron ne part **jamais**
+- **Persistance des exécutions ajoutée** (`appwrite-worker-executions`, entrypoint
+  `worker-executions`). `worker-functions` exécute la fonction, puis délègue l'écriture du
+  résultat à ce worker via la queue `v1-executions`. Absent, la fonction s'exécute
+  réellement mais personne n'écrit son statut : l'exécution reste affichée `waiting` à vie,
+  sans logs, pendant que `LLEN utopia-queue.queue.v1-executions` grimpe. Le diagnostic
+  naturel (« le cron n'a pas tourné ») est l'inverse de la réalité
+- **`_APP_EXECUTOR_HOST=http://exc1/v1` sur le service `appwrite`.** Seul le worker savait
+  joindre l'executor : toute exécution lancée depuis la console ou l'API échouait sur
+  `No host part in the URL`
+- **Le service `appwrite` rejoint le réseau `runtimes`.** Les conteneurs de runtime des
+  fonctions ne vivent que sur ce réseau : sans cette adhésion, le
+  `APPWRITE_ENDPOINT=http://appwrite/v1` passé à la fonction ne résout pas
+
+### Correctifs
+
+- **Doublon de la fonction supprimé.** `functions/Update Jam Status/`, dossier nommé
+  d'après le libellé d'affichage (tel qu'un `appwrite pull functions` le crée), faisait
+  doublon avec `functions/update-jam-status/`, seul chemin que `appwrite.json` déclare
+  (`path`). Les deux copies étaient identiques aux fins de ligne près : c'est bien la
+  copie inerte qui part, et le code déployé qui reste
+- **Podium seedé sur les 40 jams terminées** et non plus sur les 5 dernières
+  (`scripts/seed-big-demo.sh`). Le Hall of Fame n'affiche que les cinq fins les plus
+  récentes, mais un jeu de démonstration vieillit : une jam « à venir » au moment du seed
+  devient terminée un mois plus tard et se retrouve exposée sans podium. Volume attendu
+  porté de 791 à 896 documents
+
+### Sécurité des dépendances
+
+Onze alertes Dependabot ouvertes, portant sur six paquets. Aucune n'était exploitable en
+l'état sur ce déploiement, pour les raisons détaillées ci-dessous ; toutes sont corrigées.
+
+- **Next.js 16.2.12 → 16.3.5** (GHSA-p293-qw3h-jr36 et GHSA-2xp9-vwfh-vxw4, deux avis
+  CRITICAL, corrigés dès 16.3.3). La RCE dite « Windows » suppose un serveur dont le
+  système de fichiers est celui de Windows : la production tourne dans `node:22-alpine`
+  sur un VPS Linux, et en développement le conteneur est Linux lui aussi, y compris quand
+  les sources sont montées depuis un disque Windows. La RCE AVIF passe par l'API
+  d'optimisation d'images, que `images.remotePatterns: []` prive de toute source distante
+  depuis le durcissement de la v1.1.0 ; ne restent que les chemins locaux, `/public`
+  (versionné) et `/og` (qui ne produit que du PNG), donc aucun octet AVIF choisi par un
+  tiers n'atteint libheif
+- **sharp 0.35.3 → 0.35.4** (GHSA-rgj7-g3m4-5g8c, HIGH) : même libheif, même raisonnement,
+  l'avis ne concernant que le traitement d'entrées non fiables. Changement de statut de
+  l'override : la 16.3.5 demandant désormais `sharp@^0.35.4`, monter Next suffit à
+  corriger, et l'override de `pnpm-workspace.yaml` n'est plus qu'un plancher
+  anti-régression, resserré de `<0.35.0` à `<0.35.4` pour rester aligné sur l'avis
+- **browserslist 4.28.4 → 4.28.9** (GHSA-73wf-gq98-2v4g, GHSA-c83g-rgw3-j3cx) et
+  **baseline-browser-mapping 2.10.40 → 2.11.23** (GHSA-w5vr-8v7q-w6rv) : transitives de la
+  chaîne Babel, remontées **sans** nouvel override, leurs parents les demandant déjà en
+  `^` ; seul le lockfile les retenait à une version antérieure aux avis. Les trois
+  supposent une entrée hostile (`browserslist-stats.json` fourni par l'attaquant, requêtes
+  distinctes en boucle) qui n'apparaît qu'au build, sur nos propres sources
+- **js-yaml 4.3.1 → 4.3.2** (GHSA-2883-xcg3-v3hh) et **vitest / @vitest/mocker
+  4.1.9 → 4.1.11** (GHSA-82fw-gwwq-j7x9) : dépendances de développement, absentes de
+  l'image de production. L'avis vitest vise le WebSocket HMR, non authentifié, d'un
+  serveur de développement tiers qui exposerait `mockerPlugin` ; le mode navigateur de
+  vitest, seul utilisé ici, passe par un RPC authentifié par jeton et ne s'exécute qu'en
+  CI
+- **Plancher de sécurité inscrit dans le manifeste, pas seulement dans le lockfile.**
+  `vitest` et `@vitest/coverage-v8` passent de `^4.1.0` à `^4.1.11` dans `package.json` :
+  avec l'ancien intervalle, une simple régénération du lockfile pouvait redescendre sous
+  le correctif sans que rien ne le signale
+- `pnpm audit` ne rapporte plus aucune vulnérabilité sur les 571 dépendances de l'arbre
+
+### Documentation
+
+- **Chaîne d'exécution des fonctions documentée de bout en bout.** Les deux nouveaux
+  workers rejoignent les tableaux de services de `DOCUMENTATION.md` et `MISE-A-JOUR.md`,
+  et trois entrées de dépannage couvrent les trois pannes muettes ci-dessus (cron qui ne
+  part jamais, `No host part in the URL`, exécutions bloquées à `waiting`)
+- **Variables de la fonction : étape manuelle désormais écrite** (`DEPLOIEMENT.md §4.4`).
+  `appwrite push functions` ne pousse **pas** les variables, qui vivent en base Appwrite et
+  non dans `appwrite.json` ; sans elles la fonction renvoie 500 « Configuration
+  incomplète ». `APPWRITE_ENDPOINT` et `APPWRITE_API_KEY` sont à créer une fois par
+  environnement depuis la console
+- **Chiffre du cahier de recettes daté plutôt que corrigé.** Les 791 documents ont été
+  mesurés le 21/07/2026 et sont conservés tels quels, avec une note indiquant que le
+  script a changé depuis et qu'un prochain run en produira 896 : un relevé de recette se
+  date, il ne se réécrit pas
+- **`docs/MISE-A-JOUR.md` : la procédure d'override était fausse sur deux points, et les
+  deux se payaient en silence.** Elle désignait `package.json → pnpm.overrides`, que pnpm
+  ignore depuis sa version 10 (les overrides vivent dans `pnpm-workspace.yaml`), et sa
+  recette de régénération du lockfile ne copiait pas ce fichier dans le conteneur : elle
+  résolvait donc un arbre dépourvu de tout override, réintroduisant sans un mot les
+  versions vulnérables que ceux-ci retenaient. La procédure précise aussi qu'un
+  `pnpm update` lancé dans le conteneur réécrit les specifiers de `package.json`, qu'il
+  faut alors rapatrier : sans quoi le `pnpm install --frozen-lockfile` du Dockerfile
+  refuse de construire
+
+---
+
 ## v1.1.1 — 2026-08-17 — Rollback frontend par image
 
 > **Pourquoi un incrément CORRECTIF et non MINEUR :** le produit livré à l'utilisateur est
