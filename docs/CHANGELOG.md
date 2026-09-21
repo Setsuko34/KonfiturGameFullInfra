@@ -26,6 +26,20 @@ dossier Bloc 2), `R-xx` pour les constats de campagne de recette.
 > Section de travail : ces changements sont sur la branche courante et ne sont pas encore
 > déployés. À fusionner dans l'entrée de version au moment de la livraison.
 
+_Aucun changement en attente._
+
+---
+
+## v1.2.0 — 2026-09-21 — Chaîne d'exécution des fonctions Appwrite
+
+> **Pourquoi un incrément MINEUR et non CORRECTIF :** la fonction `update-jam-status`
+> est présente dans le dépôt depuis la v1.0.0, mais sa chaîne d'exécution n'a jamais
+> abouti et aucune entrée de ce journal ne l'a jamais annoncée. Ce n'est donc pas la
+> réparation d'un comportement promis : c'est sa première livraison effective. Le
+> comportement observable change, les statuts des jams transitionnent désormais sans
+> intervention humaine, ce qui écarte le critère retenu en v1.1.1 (« le produit livré à
+> l'utilisateur est strictement inchangé »).
+
 ### Exécution des fonctions Appwrite
 
 Trois pièces manquaient à la chaîne d'exécution des fonctions depuis la montée en 1.9.0.
