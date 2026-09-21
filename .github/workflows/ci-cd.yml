@@ -5,6 +5,17 @@ on:
     branches: [main, develop]
   push:
     branches: [main, develop]
+  # Déclenchement manuel : sans lui, un job de déploiement ne part que si le
+  # filtre de chemins veut bien s'activer. `deploy-functions` a ainsi porté un
+  # défaut depuis la création du pipeline sans jamais s'exécuter une seule
+  # fois. Un job qu'on ne peut pas lancer à la demande n'est pas testable.
+  workflow_dispatch:
+    inputs:
+      cible:
+        description: "Quoi redéployer (main uniquement)"
+        type: choice
+        default: functions
+        options: [functions, schema, frontend, infra, tout]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -287,7 +298,9 @@ jobs:
   changes:
     name: Détection des changements
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     timeout-minutes: 5
     outputs:
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -298,8 +311,13 @@ jobs:
       - uses: actions/checkout@v4
       # Limitation connue : sur un force-push sans ancêtre commun, paths-filter
       # considère tous les fichiers comme modifiés → redéploiement complet.
+      # Sur un déclenchement manuel il n'existe aucun commit de référence :
+      # l'étape est sautée et les sorties restent vides, ce qui est faux pour
+      # un `== 'true'`. C'est la branche workflow_dispatch des conditions
+      # ci-dessous qui prend alors le relais.
       - uses: dorny/paths-filter@v3
         id: filter
+        if: github.event_name == 'push'
         with:
           filters: |
             frontend:
@@ -338,7 +356,11 @@ jobs:
     # une coquille dans alerts.yml ne doit pas bloquer un déploiement de
     # frontend, qui n'y touche pas.
     needs: [changes, quality, tests, secrets, rgpd, monitoring]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.infra == 'true'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.infra == 'true' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.cible == 'infra' || inputs.cible == 'tout')))
     timeout-minutes: 20
     steps:
       - name: Pull + up sur le VPS
@@ -470,9 +492,10 @@ jobs:
     needs: [changes, quality, tests, secrets, rgpd, deploy-infra]
     if: >-
       always() &&
-      github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      needs.changes.outputs.frontend == 'true' &&
+      (needs.changes.outputs.frontend == 'true' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.cible == 'frontend' || inputs.cible == 'tout'))) &&
       needs.quality.result == 'success' &&
       needs.tests.result == 'success' &&
       needs.secrets.result == 'success' &&
@@ -537,7 +560,11 @@ jobs:
     name: Déploiement Appwrite functions
     runs-on: ubuntu-latest
     needs: [changes, quality, tests, secrets, rgpd]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.functions == 'true'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.functions == 'true' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.cible == 'functions' || inputs.cible == 'tout')))
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -555,7 +582,7 @@ jobs:
             --endpoint https://api.konfiturgame.fr/v1 \
             --project-id 69b1a2b500083affc894 \
             --key "$APPWRITE_API_KEY"
-          appwrite push functions --force
+          appwrite push functions --all --force
 
   # Phase 2 — le schéma (tables) est capturé dans appwrite.json (source de
   # vérité, voir docs/MISE-A-JOUR.md §7). `push tables` remplace l'ancien
@@ -564,7 +591,11 @@ jobs:
     name: Déploiement schéma Appwrite
     runs-on: ubuntu-latest
     needs: [changes, quality, tests, secrets, rgpd]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.schema == 'true'
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      (needs.changes.outputs.schema == 'true' ||
+       (github.event_name == 'workflow_dispatch' &&
+        (inputs.cible == 'schema' || inputs.cible == 'tout')))
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -582,7 +613,7 @@ jobs:
             --endpoint https://api.konfiturgame.fr/v1 \
             --project-id 69b1a2b500083affc894 \
             --key "$APPWRITE_API_KEY"
-          appwrite push tables --force
+          appwrite push tables --all --force
 
   # ──────────────── Issues automatiques ────────────────
 
@@ -592,8 +623,8 @@ jobs:
     needs: [deploy-infra, deploy-frontend, deploy-functions, deploy-schema]
     if: >-
       always() &&
-      github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
       (needs.deploy-infra.result == 'failure' ||
        needs.deploy-frontend.result == 'failure' ||
        needs.deploy-functions.result == 'failure' ||
