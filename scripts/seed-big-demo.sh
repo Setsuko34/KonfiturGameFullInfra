@@ -144,8 +144,12 @@ for i in $(seq 1 40); do
     technologies:["Godot 4"], submitted:true, submission_date:$sub, likes_count:$lk, placement:$pl}')"
 done
 
-echo "── podiums des 5 jams terminées les plus récentes (Hall of Fame) ──"
-for j in 001 002 003 004 005; do
+# Toutes les jams terminées, pas seulement les 5 dernières : le Hall of Fame ne
+# montre que les 5 fins les plus récentes, mais un jeu de démo qui vieillit finit
+# par exposer les autres (une jam "à venir" du seed est terminée un mois plus tard).
+echo "── podiums des 40 jams terminées (Hall of Fame) ──"
+for i in $(seq 1 40); do
+  j=$(printf '%03d' "$i")
   for p in 1 2 3; do
     ti=$(( (10#$j * 3 + p + 40) % 120 + 1 ))   # équipes variées 41..120
     tn=$(printf '%03d' "$ti")

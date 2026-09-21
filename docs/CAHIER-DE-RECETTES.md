@@ -36,6 +36,10 @@
 | Smoke test PROD (après stabilisation) | `curl` frontend + `/v1/health/version` + routing `/v1` | **frontend 200**, HTTP→HTTPS **308**, Appwrite **`{"version":"1.9.0"}`**, routing same-origin `/v1/account` **401** (atteint Appwrite), dashboard Traefik **401** sans auth — **prod jointe et validée le 21/07** après correction des bogues B-11 à B-15 (voir dossier § VII) |
 | Jeu de données de volume | `bash ./scripts/seed-big-demo.sh` | **791 documents créés, 0 échec** — 60 jams, 120 équipes, 40 projets sur `demo-jam-big` avec `likes_count` variés (0/3/6/9) et podium 1-2-3, 150 commentaires, 120 messages de chat |
 
+> Chiffre mesuré le 21/07/2026 et conservé tel quel. Le script a été modifié depuis
+> (09/09/2026) : le podium est désormais seedé sur les 40 jams terminées et non plus
+> sur les 5 dernières, soit **896 documents** attendus sur un prochain run.
+
 **Vérifications manuelles consignées (21/07/2026) :**
 
 | Critère | Observation |
