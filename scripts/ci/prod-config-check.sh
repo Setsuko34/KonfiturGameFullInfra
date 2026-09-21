@@ -71,6 +71,7 @@ done <<< "$VARS"
 # 4. Les scripts invoqués par le crontab de production portent le bit
 #    d'exécution DANS L'INDEX GIT.
 CRONTAB="$ROOT/scripts/crontab.konfiturgame"
+WORKFLOW="$ROOT/.github/workflows/ci-cd.yml"
 if [ -f "$CRONTAB" ]; then
   if ! git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     fail "Modes des tâches cron non vérifiables : '$ROOT' n'est pas un dépôt git lisible (droits d'accès ? mauvais répertoire ?)"
@@ -139,6 +140,32 @@ if [ -f "$CRONTAB" ]; then
     fail "Le crontab lance 'docker system prune' avec -a/--all : les images konfitur-frontend taguées (<sha>, stable, vX.Y.Z) seraient détruites et il ne resterait plus aucun point de retour pour le frontend (voir docs/MISE-A-JOUR.md §9)"
   else
     ok "Nettoyage Docker : prune limité aux images dangling, les points de retour survivent"
+  fi
+fi
+
+# 8. Tout `appwrite push` de la CI doit désigner explicitement ce qu'il pousse.
+#    `--force` ne répond qu'aux AVERTISSEMENTS ; c'est `--all` (ou
+#    `--function-id`) qui répond à la question « lesquelles ? ». Sans lui la CLI
+#    ouvre un prompt de sélection, que le runner — dépourvu de TTY — tue sur EOF :
+#    sortie 130, aucune ressource poussée, et un journal qui ne parle que de
+#    sélection. Ces jobs ne tournent que sur `main` et seulement si leurs chemins
+#    changent : `deploy-functions` a porté le défaut depuis la création du
+#    pipeline sans jamais s'exécuter une seule fois, jusqu'à tomber le jour de la
+#    livraison. Ce contrôle relit la commande à chaque PR, faute de pouvoir
+#    l'exercer ailleurs que sur main.
+if [ -f "$WORKFLOW" ]; then
+  PUSH_LINES=$(tr -d '\r' < "$WORKFLOW" \
+    | grep -nE '(^|[[:space:]])appwrite[[:space:]]+push[[:space:]]+[a-z]' \
+    | grep -vE '^[0-9]+:[[:space:]]*#' || true)
+  if [ -z "$PUSH_LINES" ]; then
+    ok "appwrite push : aucune invocation dans le workflow"
+  else
+    PUSH_KO=$(printf '%s\n' "$PUSH_LINES" | grep -vE '[[:space:]](--all|--function-id|--id)([[:space:]]|$)' || true)
+    if [ -n "$PUSH_KO" ]; then
+      fail "appwrite push sans --all ni --function-id (prompt interactif en CI : sortie 130, rien n'est poussé) : $(printf '%s' "$PUSH_KO" | tr '\n' ' ')"
+    else
+      ok "appwrite push : chaque invocation désigne explicitement les ressources à pousser"
+    fi
   fi
 fi
 
