@@ -26,7 +26,22 @@ dossier Bloc 2), `R-xx` pour les constats de campagne de recette.
 > Section de travail : ces changements sont sur la branche courante et ne sont pas encore
 > déployés. À fusionner dans l'entrée de version au moment de la livraison.
 
-_Aucun changement en attente._
+### Nouveautés
+
+- **Encart partenaire FRVtubers sur la page d'accueil** (issue #40). La plateforme est
+  imaginée par la communauté des VTubers francophones de FRVtubers : l'accueil le dit
+  désormais, juste avant l'appel à l'action, avec un lien sécurisé (`noopener noreferrer`,
+  nouvel onglet) vers https://frvtubers.com. L'encart réserve un emplacement à la mascotte
+  Kokori, affichée à partir du prochain build du frontend une fois `kokori.png` en place.
+  **À faire côté contenu : déposer `kokori.png` dans `frontend/public/` (le cadre en
+  pointillés disparaît au prochain build du frontend, `public/` étant intégré à l'image Docker).**
+- **Lien FRVtubers dans le pied de page**, colonne « Communauté », pour que le partenariat
+  reste visible sur toutes les pages et pas seulement à l'accueil.
+- **Bloc « PRÊT ? » réservé aux visiteurs non connectés.** Proposer « Créer mon compte » à
+  quelqu'un qui en a déjà un n'avait pas de sens. Un utilisateur connecté voit à la place
+  une incitation à lancer sa propre jam (« Créer une jam », vers
+  `/dashboard/my-jams/new`). Rien n'est affiché pendant le chargement de la session, pour
+  éviter qu'un bloc ne soit remplacé par l'autre en cours de route.
 
 ---
 

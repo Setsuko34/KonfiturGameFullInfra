@@ -9,6 +9,8 @@ import MarqueeStats from '@/components/MarqueeStats'
 import WinnerCard from '@/components/WinnerCard'
 import StatBlock from '@/components/StatBlock'
 import CountdownTimer from '@/components/CountdownTimer'
+import FrvtubersBanner from '@/components/FrvtubersBanner'
+import HomeCTA from '@/components/client/HomeCTA'
 import { getHomePageData } from '@/lib/actions/home'
 import { storageFileUrl } from '@/lib/appwrite/file-url'
 import { BUCKETS } from '@/lib/appwrite/config'
@@ -318,39 +320,11 @@ export default async function HomePage() {
           </div>
         </section>
 
+        {/* ═══ PARTENARIAT FRVTUBERS ═══ */}
+        <FrvtubersBanner />
+
         {/* ═══ CTA FINAL ═══ */}
-        <section
-          className="px-4 sm:px-6 lg:px-8 py-24 text-center"
-          aria-labelledby="cta-heading"
-        >
-          <div className="max-w-2xl mx-auto">
-            <p className="label-tech mb-4" style={{ color: 'var(--primary)' }}>
-              PRÊT ?
-            </p>
-            <h2
-              id="cta-heading"
-              className="text-4xl sm:text-5xl font-bold mb-6"
-              style={{ fontFamily: 'var(--font-sans)' }}
-            >
-              Ta prochaine création<br />commence ici.
-            </h2>
-            <p className="text-lg mb-10" style={{ color: 'var(--muted-foreground)' }}>
-              Inscris-toi gratuitement et rejoins la prochaine game jam.
-              Aucune expérience préalable requise.
-            </p>
-            <Link
-              href="/auth/register"
-              className="inline-flex items-center gap-2 px-10 py-5 font-bold text-lg transition-opacity hover:opacity-90"
-              style={{
-                background: 'var(--primary)',
-                color: 'var(--primary-foreground)',
-              }}
-            >
-              <Zap size={20} aria-hidden="true" />
-              Créer mon compte
-            </Link>
-          </div>
-        </section>
+        <HomeCTA />
       </main>
       <Footer />
     </>

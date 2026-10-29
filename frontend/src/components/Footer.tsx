@@ -1,14 +1,18 @@
 import Link from 'next/link'
 import { Gamepad2, CheckCircle } from 'lucide-react'
 import FooterCTA from "@/components/client/FooterCTA";
+import { FRVTUBERS_URL } from '@/lib/frvtubers'
 
-const footerLinks = {
+type FooterLink = { label: string; href: string; external?: boolean }
+
+const footerLinks: Record<string, FooterLink[]> = {
   Plateforme: [
     { label: 'Explorer les jams', href: '/explore' },
     { label: 'Créer une jam', href: '/dashboard' },
     { label: 'Classements', href: '/#winners-heading' },
   ],
   Communauté: [
+    { label: 'FRVtubers', href: FRVTUBERS_URL, external: true },
     { label: 'Discord', href: '#' },
     { label: 'Twitter / X', href: '#' },
     { label: 'GitHub', href: '#' },
@@ -77,6 +81,7 @@ export default function Footer() {
                       href={link.href}
                       className="text-sm transition-colors hover:underline"
                       style={{ color: 'var(--foreground)' }}
+                      {...(link.external && { target: '_blank', rel: 'noopener noreferrer' })}
                     >
                       {link.label}
                     </Link>
