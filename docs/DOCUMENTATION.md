@@ -43,7 +43,7 @@ KonfiturGame est une **plateforme web de game jams** (compétitions de création
 
 | Composant | Technologie | Version |
 |-----------|-------------|---------|
-| Frontend | Next.js (App Router) | 16.3.5 |
+| Frontend | Next.js (App Router) | 16.4.3 |
 | Backend | Appwrite self-hosted | 1.9.0 |
 | Console Appwrite | appwrite/console (image séparée depuis 1.9) | 7.5.7 |
 | Exécution des fonctions | openruntimes/executor | 0.11.4 |

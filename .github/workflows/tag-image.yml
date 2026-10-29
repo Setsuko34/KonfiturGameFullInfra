@@ -1,0 +1,54 @@
+name: Alias image frontend
+
+# Pose `konfitur-frontend:vX.Y.Z` sur le VPS quand un tag de version est poussé.
+# Fichier séparé de ci-cd.yml : ce dernier ne se déclenche que sur des branches,
+# et lui ajouter `tags:` ferait traverser tout le pipeline à chaque release.
+#
+# Toute la logique (et ses refus) vit dans scripts/deploy-frontend.sh, action
+# `alias` : on alias l'image RÉELLEMENT déployée, pas celle que le SHA du tag
+# laisserait deviner. Procédure manuelle équivalente : docs/MISE-A-JOUR.md §9.
+
+on:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+  # Relance après un refus (déploiement du commit de release encore en cours) :
+  # le tag existe déjà, un nouveau `push` n'aurait pas lieu.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag de version existant (vX.Y.Z)"
+        type: string
+        required: true
+
+# Jamais deux alias en parallèle sur le même serveur.
+concurrency:
+  group: tag-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  alias:
+    name: Alias de version de l'image
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Alias sur le VPS
+        env:
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          # Passé par l'environnement, jamais interpolé dans le script : le nom
+          # d'un tag est une entrée externe. Le script le revalide de toute façon.
+          VTAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script_stop: true
+          envs: APP_DIR,VTAG
+          command_timeout: 8m
+          # Une seule ligne d'appel : voir l'en-tête de deploy-frontend.sh
+          # (drone-ssh insère un test de code retour après chaque ligne).
+          script: |
+            bash "$APP_DIR/scripts/deploy-frontend.sh" "$APP_DIR" alias "$VTAG"
