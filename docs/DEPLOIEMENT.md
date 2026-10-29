@@ -29,7 +29,7 @@ Internet
    │
    ▼
 Traefik v3.6.7 (ports 80 / 443)
-   ├── konfiturgame.fr          → Frontend Next.js 16.3.5 :3000
+   ├── konfiturgame.fr          → Frontend Next.js 16.4.3 :3000
    ├── api.konfiturgame.fr      → Appwrite 1.9.0 (API + Realtime)
    │      └── /console          → appwrite-console 7.5.7 (image séparée depuis 1.9)
    └── traefik.konfiturgame.fr  → Dashboard Traefik (Basic Auth)

@@ -141,7 +141,7 @@ parent suffit et l'override ne sert plus que de plancher anti-régression.
 
 ## 3. Mise à jour Next.js
 
-**Version actuelle :** 16.3.5
+**Version actuelle :** 16.4.3
 
 ### Mise à jour mineure ou patch (16.x.y → 16.x.z)
 
@@ -698,9 +698,24 @@ l'historique au lieu de le réécrire et reste donc compatible `--ff-only`. Et s
 Appwrite a migré entre-temps, voir « Rollback avec restauration de données » ci-dessus :
 revenir à l'ancienne image ne défait aucune migration.
 
-**Alias de version au moment d'une release.** Le tag git étant posé après le déploiement,
-le serveur ne le connaît pas encore. L'étape est donc manuelle, et elle demande une
-précaution : **ne jamais déduire le nom de l'image du commit que le tag désigne.**
+**Alias de version au moment d'une release.** Pousser un tag `vX.Y.Z` sur GitHub lance le
+workflow `.github/workflows/tag-image.yml`, qui exécute `scripts/deploy-frontend.sh <APP_DIR>
+alias vX.Y.Z` sur le VPS : l'alias est posé tout seul, avec les mêmes gardes que la
+procédure manuelle ci-dessous. Le script refuse, sans rien modifier, si :
+
+- le tag n'a pas la forme `vX.Y.Z`, ou n'est pas sur `main` ;
+- `FRONTEND_TAG` n'est pas un SHA (rollback en cours : `stable` ou un autre alias) ;
+- `frontend/` diffère entre l'image déployée et le tag (release non déployée, ou
+  déploiement encore en cours) ;
+- l'alias existe déjà sur une autre image (un alias de release ne se déplace jamais).
+
+Après un refus, déployer puis relancer le workflow à la main (onglet Actions →
+« Alias image frontend » → *Run workflow*, en saisissant le tag). Relancé sur un alias déjà
+posé, il ne fait rien. La procédure manuelle ci-dessous reste le recours si la CI est
+indisponible.
+
+*Pourquoi la précaution ci-dessous* : le tag git est posé après le déploiement, donc
+**ne jamais déduire le nom de l'image du commit que le tag désigne.**
 
 Un tag de release est presque toujours posé sur un commit *postérieur* à celui qui a été
 déployé — au minimum le commit qui met à jour `docs/CHANGELOG.md`, lequel ne déclenche
@@ -763,7 +778,7 @@ bash scripts/deploy-frontend.sh "$PWD" build
 
 | Composant | Version actuelle | Fichier de référence |
 |-----------|-----------------|---------------------|
-| Next.js | 16.3.5 | `frontend/package.json` |
+| Next.js | 16.4.3 | `frontend/package.json` |
 | SDK `appwrite` (npm) | 23.0.0 | `frontend/package.json` |
 | SDK `node-appwrite` (npm) | 22.1.3 | `frontend/package.json` |
 | Playwright (`@playwright/test`) | 1.50.x | `frontend/package.json` |

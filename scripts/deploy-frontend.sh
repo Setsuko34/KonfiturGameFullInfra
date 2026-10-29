@@ -30,13 +30,25 @@
 # sans un mot (voir l'en-tête de deploy-cron.sh, panne du 2026-08-08). Un appel
 # sur UNE SEULE ligne depuis le workflow est la seule forme immunisée.
 #
-# Usage : deploy-frontend.sh <APP_DIR> build|promote
+# ── Alias de version (action `alias`) ───────────────────────────────────────
+# Lancée par .github/workflows/tag-image.yml quand un tag vX.Y.Z est poussé.
+# Le tag est presque toujours posé sur un commit POSTÉRIEUR à celui qui a été
+# déployé (au minimum le commit de docs/CHANGELOG.md, qui ne déclenche aucun
+# déploiement). Déduire l'image du SHA du tag viserait donc une image jamais
+# construite, ou pire, une autre que celle de la release. On alias l'image
+# RÉELLEMENT déployée (FRONTEND_TAG), à condition que `frontend/` n'ait pas
+# bougé entre elle et le tag : sinon la release contient du frontend non
+# déployé et l'alias serait un faux point de retour. Refus, jamais de bricolage.
+# Procédure manuelle équivalente : docs/MISE-A-JOUR.md §9.
+#
+# Usage : deploy-frontend.sh <APP_DIR> build|promote|alias [vX.Y.Z]
 # Sortie: 0 si l'action a réussi, 1 sinon
 # =============================================================================
 set -euo pipefail
 
-APP_DIR="${1:?usage: deploy-frontend.sh <APP_DIR> build|promote}"
-ACTION="${2:?usage: deploy-frontend.sh <APP_DIR> build|promote}"
+APP_DIR="${1:?usage: deploy-frontend.sh <APP_DIR> build|promote|alias [vX.Y.Z]}"
+ACTION="${2:?usage: deploy-frontend.sh <APP_DIR> build|promote|alias [vX.Y.Z]}"
+VTAG_ARG="${3:-}"
 
 IMAGE_NAME=konfitur-frontend
 ENV_FILE="$APP_DIR/.env"
@@ -151,8 +163,75 @@ case "$ACTION" in
     prune_old_tags
     ;;
 
+  alias)
+    # Le nom du tag vient d'un événement GitHub : on ne le laisse atteindre ni
+    # une commande ni un nom d'image sans l'avoir contraint à la forme exacte.
+    if ! [[ "$VTAG_ARG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "❌ Alias refusé : '$VTAG_ARG' n'est pas un tag de version vX.Y.Z." >&2
+      exit 1
+    fi
+
+    git fetch --tags --force origin main
+    if ! git rev-parse -q --verify "refs/tags/$VTAG_ARG^{commit}" >/dev/null; then
+      echo "❌ Tag $VTAG_ARG introuvable sur le serveur après fetch." >&2
+      exit 1
+    fi
+    # Une release vit sur main. Un tag posé sur une branche de travail ne doit
+    # pas fabriquer de point de retour nommé.
+    if ! git merge-base --is-ancestor "$VTAG_ARG^{commit}" origin/main; then
+      echo "❌ $VTAG_ARG n'est pas sur main : alias refusé." >&2
+      exit 1
+    fi
+
+    TAG="$(read_env_tag)"
+    # `stable`, un alias de version ou une valeur vide signifient qu'un rollback
+    # est en cours ou que rien n'a été déployé : aliaser « ce qui tourne »
+    # donnerait à la release une image qui n'est pas la sienne.
+    if ! [[ "$TAG" =~ ^[0-9a-f]{7,12}$ ]]; then
+      echo "❌ FRONTEND_TAG='$TAG' n'est pas un SHA : rollback en cours ou rien de déployé." >&2
+      echo "   Alias refusé, rien n'est modifié." >&2
+      exit 1
+    fi
+    if ! docker image inspect "$IMAGE_NAME:$TAG" >/dev/null 2>&1; then
+      echo "❌ Image $IMAGE_NAME:$TAG introuvable : alias refusé." >&2
+      exit 1
+    fi
+    if ! git cat-file -e "$TAG^{commit}" 2>/dev/null; then
+      echo "❌ Commit $TAG inconnu du dépôt du serveur : impossible de comparer au tag." >&2
+      exit 1
+    fi
+
+    # GARDE : le frontend ne doit pas avoir changé entre l'image déployée et le
+    # tag. Si le déploiement du commit de release est encore en cours, c'est ici
+    # que ça se voit : relancer le workflow une fois le déploiement terminé.
+    if ! git diff --quiet "$TAG" "$VTAG_ARG^{commit}" -- frontend/; then
+      echo "❌ frontend/ diffère entre l'image déployée ($TAG) et $VTAG_ARG :" >&2
+      git diff --stat "$TAG" "$VTAG_ARG^{commit}" -- frontend/ >&2
+      echo "   La release contient du frontend non déployé (ou son déploiement est" >&2
+      echo "   en cours). Déployer d'abord, puis relancer le workflow « Alias image" >&2
+      echo "   frontend » avec ce tag. Rien n'est modifié." >&2
+      exit 1
+    fi
+
+    # Un alias de release est permanent : on ne le déplace jamais. Idempotent
+    # si le tag désigne déjà la même image (workflow relancé).
+    if docker image inspect "$IMAGE_NAME:$VTAG_ARG" >/dev/null 2>&1; then
+      want="$(docker image inspect --format '{{.Id}}' "$IMAGE_NAME:$TAG")"
+      have="$(docker image inspect --format '{{.Id}}' "$IMAGE_NAME:$VTAG_ARG")"
+      if [ "$want" = "$have" ]; then
+        echo "ℹ️  $IMAGE_NAME:$VTAG_ARG désigne déjà $TAG : rien à faire."
+        exit 0
+      fi
+      echo "❌ $IMAGE_NAME:$VTAG_ARG existe déjà sur une AUTRE image : un alias de release ne se déplace pas." >&2
+      exit 1
+    fi
+
+    docker tag "$IMAGE_NAME:$TAG" "$IMAGE_NAME:$VTAG_ARG"
+    echo "✅ Alias de version posé : $IMAGE_NAME:$VTAG_ARG → $TAG"
+    ;;
+
   *)
-    echo "❌ Action inconnue : '$ACTION' (attendu : build ou promote)" >&2
+    echo "❌ Action inconnue : '$ACTION' (attendu : build, promote ou alias)" >&2
     exit 1
     ;;
 esac
