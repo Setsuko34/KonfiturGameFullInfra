@@ -30,6 +30,56 @@ _Aucun changement en attente._
 
 ---
 
+## v1.2.1 — 2026-10-29 — Sécurité des dépendances et alias d'image automatique
+
+> **Pourquoi un incrément CORRECTIF :** même critère que la v1.1.1 : aucune fonctionnalité
+> nouvelle n'est livrée à l'utilisateur. Les dépendances sont mises à jour pour des avis de
+> sécurité, et l'outillage de déploiement (alias de version de l'image) ne change rien au
+> comportement de la plateforme. La montée de Next.js 16.3 → 16.4 est une montée mineure
+> de l'amont, validée par le type-check, le lint, les tests et le build de l'image de
+> production avant livraison.
+
+### Sécurité des dépendances
+
+Seize alertes Dependabot ouvertes (dont deux CRITICAL sur Next.js), plus les avis que
+`pnpm audit` remonte et que Dependabot n'avait pas encore signalés. Toutes sont corrigées ;
+`pnpm audit` ne rapporte plus aucune vulnérabilité.
+
+- **Next.js 16.3.5 → 16.4.3** (et `eslint-config-next` aligné). Couvre les alertes
+  Dependabot #80 à #89, #95 et #96 (corrigées dès 16.3.6 / 16.3.8, dont deux CRITICAL), ainsi
+  que les avis publiés depuis, corrigés en 16.4.1 : RCE non authentifiée dans l'optimiseur
+  d'images et dans `use cache` (CRITICAL), déni de service sur les Server Actions du
+  App Router (HIGH)
+- **sharp 0.35.4 → 0.35.5** (CVE librsvg, HIGH) : plancher de l'override relevé
+- **vitest / @vitest/coverage-v8 / @vitest/mocker 4.1.11 → 4.1.12** (alertes #93 et #94) :
+  dépendances de développement, absentes de l'image de production. Plancher relevé dans
+  `package.json`
+- **vite 6.4.3 → 6.4.5** (launch-editor, `server.fs.allow`, HIGH) : transitive de vitest et
+  de `@vitejs/plugin-react`, forcée par override ; développement uniquement
+- **source-map-js 1.2.2** (alerte #90, HIGH), **brace-expansion 1.1.21 et 5.0.12**
+  (alerte #91 et avis plus récents) et **zod 4.6.6** : transitives, verrouillées par
+  override dans `pnpm-workspace.yaml`, au niveau de la version corrigée par l'avis
+
+**À vérifier au déploiement :** montée mineure de Next (16.3 → 16.4). Le type-check, le
+lint, les tests et le build sont passés avant livraison ; contrôler la santé du frontend
+après `scripts/deploy-frontend.sh`, le rollback restant une bascule de `FRONTEND_TAG`.
+
+### Déploiement
+
+- **Alias de version de l'image frontend posé automatiquement.** Pousser un tag `vX.Y.Z`
+  lance `.github/workflows/tag-image.yml`, qui appelle la nouvelle action `alias` de
+  `scripts/deploy-frontend.sh` sur le VPS (`konfitur-frontend:vX.Y.Z`). Jusqu'ici l'étape
+  était manuelle (`MISE-A-JOUR.md §9`). Le script alias l'image **réellement déployée**
+  (`FRONTEND_TAG`) et non celle que le SHA du tag laisserait deviner : le tag de release
+  est presque toujours posé sur un commit postérieur au déploiement (le commit du
+  changelog, qui ne déploie rien). Il refuse, sans rien modifier, si le tag n'est pas sur
+  `main`, si un rollback est en cours, si `frontend/` diffère entre l'image et le tag, ou
+  si l'alias existe déjà sur une autre image. Relançable à la main (`workflow_dispatch`)
+  après un refus. **À savoir :** le VPS doit avoir reçu ce script (déploiement du frontend
+  de cette version) avant que le premier tag ne déclenche le workflow
+
+---
+
 ## v1.2.0 — 2026-09-21 — Chaîne d'exécution des fonctions Appwrite
 
 > **Pourquoi un incrément MINEUR et non CORRECTIF :** la fonction `update-jam-status`
